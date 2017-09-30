@@ -36,6 +36,7 @@ func (e *Emulator) Run() {
 			switch t := event.(type) {
 			case *sdl.KeyDownEvent:
 				if t.Keysym.Sym == sdl.K_ESCAPE {
+					defer e.screen.Destroy()
 					defer sdl.Quit()
 					return
 				}

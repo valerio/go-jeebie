@@ -31,15 +31,11 @@ func NewScreen() *Screen {
 		height*renderScale,
 		sdl.WINDOW_SHOWN|sdl.WINDOW_RESIZABLE)
 
-	// window.Destroy()
-
 	if err != nil {
 		panic(err)
 	}
 
 	s.renderer, err = sdl.CreateRenderer(s.window, -1, sdl.RENDERER_ACCELERATED)
-
-	// renderer.Destroy()
 
 	if err != nil {
 		panic(err)
@@ -84,4 +80,10 @@ func (s *Screen) Draw() {
 
 	s.renderer.Copy(tex, nil, nil)
 	s.renderer.Present()
+}
+
+// Destroy cleans up resources used by the screen
+func (s *Screen) Destroy() {
+	s.window.Destroy()
+	s.renderer.Destroy()
 }
