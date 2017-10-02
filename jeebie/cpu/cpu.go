@@ -1,6 +1,7 @@
 package cpu
 
 import "github.com/valep27/go-jeebie/jeebie/memory"
+import "github.com/valep27/go-jeebie/jeebie/bit"
 
 // Flag is one of the 4 possible flags used in the flag register (high part of AF)
 type Flag uint8
@@ -40,13 +41,10 @@ func (c *CPU) getImmediate() uint8 {
 }
 
 func (c *CPU) getImmediateWord() uint16 {
-	low := uint16(c.memory.ReadByte(c.pc.get()))
-	c.pc.incr()
+	low := c.getImmediate()
+	high := c.getImmediate()
 
-	high := uint16(c.memory.ReadByte(c.pc.get()))
-	c.pc.incr()
-
-	return high << 8 | low 
+	return bit.CombineBytes(low, high)
 }
 
 func (c *CPU) getImmediateSigned() int8 {
