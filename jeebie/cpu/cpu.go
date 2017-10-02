@@ -33,6 +33,26 @@ func (c *CPU) Tick() {
 
 }
 
+func (c *CPU) getImmediate() uint8 {
+	n := c.memory.ReadByte(c.pc.get())
+	c.pc.incr()
+	return n
+}
+
+func (c *CPU) getImmediateWord() uint16 {
+	low := uint16(c.memory.ReadByte(c.pc.get()))
+	c.pc.incr()
+
+	high := uint16(c.memory.ReadByte(c.pc.get()))
+	c.pc.incr()
+
+	return high << 8 | low 
+}
+
+func (c *CPU) getImmediateSigned() int8 {
+	return int8(c.getImmediate())
+}
+
 func (c *CPU) setFlag(flag Flag) {
 	c.af.setLow(uint8(flag))
 }
