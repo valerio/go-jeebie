@@ -34,11 +34,11 @@ func (c *CPU) Tick() {
 }
 
 func (c *CPU) setFlag(flag Flag) {
-	c.af.setHigh(uint8(flag))
+	c.af.setLow(uint8(flag))
 }
 
 func (c *CPU) resetFlag(flag Flag) {
-	c.af.setHigh(uint8(flag) ^ 0xFF)
+	c.af.setLow(uint8(flag) ^ 0xFF)
 }
 
 func (c CPU) isSetFlag(flag Flag) bool {
