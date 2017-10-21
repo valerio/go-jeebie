@@ -15,3 +15,6 @@
 
 # Prefer not to include vendor dir
 vendor/
+
+# local IDE settings
+.idea
