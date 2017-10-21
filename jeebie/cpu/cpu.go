@@ -60,5 +60,31 @@ func (c *CPU) resetFlag(flag Flag) {
 }
 
 func (c CPU) isSetFlag(flag Flag) bool {
-	return c.af.getHigh() & uint8(flag) != 0
+	return c.af.getHigh()&uint8(flag) != 0
+}
+
+func (c *CPU) setFlagToCondition(flag Flag, condition bool) {
+	if condition {
+		c.setFlag(flag)
+	} else {
+		c.resetFlag(flag)
+	}
+}
+
+func (c *CPU) inc(r *Register8) {
+	r.incr()
+	value := r.get()
+
+	c.setFlagToCondition(zeroFlag, value == 0)
+	c.setFlagToCondition(halfCarryFlag, (value&0xF) == 0xF)
+	c.resetFlag(subFlag)
+}
+
+func (c *CPU) dec(r *Register8) {
+	r.decr()
+	value := r.get()
+
+	c.setFlagToCondition(zeroFlag, value == 0)
+	c.setFlagToCondition(halfCarryFlag, (value&0xF) == 0xF)
+	c.setFlag(subFlag)
 }
