@@ -69,6 +69,8 @@ func (s *Screen) Draw() {
 		panic(err)
 	}
 
+	defer surface.Free()
+
 	surface.Lock()
 	s.renderer.Clear()
 	tex, err := s.renderer.CreateTextureFromSurface(surface)
@@ -77,6 +79,8 @@ func (s *Screen) Draw() {
 	if err != nil {
 		panic(err)
 	}
+
+	defer tex.Destroy()
 
 	s.renderer.Copy(tex, nil, nil)
 	s.renderer.Present()
