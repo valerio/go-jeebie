@@ -48,15 +48,15 @@ func opcode0x05(cpu *CPU) int {
 //LD B, n
 //#0x06:
 func opcode0x06(cpu *CPU) int {
-
+	cpu.bc.setHigh(cpu.getImmediate())
 	return 0
 }
 
 //RLCA
 //#0x07:
 func opcode0x07(cpu *CPU) int {
-
-	return 0
+	cpu.rlc(&cpu.af.high)
+	return 4
 }
 
 //LD (nn), SP
@@ -111,8 +111,8 @@ func opcode0x0E(cpu *CPU) int {
 //RRCA
 //#0x0F:
 func opcode0x0F(cpu *CPU) int {
-
-	return 0
+	cpu.rrc(&cpu.af.high)
+	return 4
 }
 
 //STOP
@@ -167,8 +167,8 @@ func opcode0x16(cpu *CPU) int {
 //RLA
 //#0x17:
 func opcode0x17(cpu *CPU) int {
-
-	return 0
+	cpu.rl(&cpu.af.high)
+	return 4
 }
 
 //JR n
@@ -223,8 +223,8 @@ func opcode0x1E(cpu *CPU) int {
 //RRA
 //#0x1F:
 func opcode0x1F(cpu *CPU) int {
-
-	return 0
+	cpu.rr(&cpu.af.high)
+	return 4
 }
 
 //JR NZ, n

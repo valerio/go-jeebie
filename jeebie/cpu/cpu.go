@@ -63,6 +63,15 @@ func (c CPU) isSetFlag(flag Flag) bool {
 	return c.af.getHigh()&uint8(flag) != 0
 }
 
+// flagToBit will return 1 if the passed flag is set, 0 otherwise
+func (c CPU) flagToBit(flag Flag) uint8 {
+	if c.isSetFlag(flag) {
+		return 1
+	}
+
+	return 0
+}
+
 func (c *CPU) setFlagToCondition(flag Flag, condition bool) {
 	if condition {
 		c.setFlag(flag)
@@ -87,4 +96,54 @@ func (c *CPU) dec(r *Register8) {
 	c.setFlagToCondition(zeroFlag, value == 0)
 	c.setFlagToCondition(halfCarryFlag, (value&0xF) == 0xF)
 	c.setFlag(subFlag)
+}
+
+func (c *CPU) rlc(r *Register8) {
+	value := r.get()
+
+	c.setFlagToCondition(carryFlag, value > 0x7F)
+	c.resetFlag(zeroFlag)
+	c.resetFlag(subFlag)
+	c.resetFlag(halfCarryFlag)
+
+	value = (value << 1) | (value >> 7)
+	r.set(value)
+}
+
+func (c *CPU) rl(r *Register8) {
+	value := r.get()
+	carry := c.flagToBit(carryFlag)
+
+	c.setFlagToCondition(carryFlag, value > 0x7F)
+	c.resetFlag(zeroFlag)
+	c.resetFlag(subFlag)
+	c.resetFlag(halfCarryFlag)
+
+	value = (value << 1) | carry
+	r.set(value)
+}
+
+func (c *CPU) rrc(r *Register8) {
+	value := r.get()
+
+	c.setFlagToCondition(carryFlag, value > 0x7F)
+	c.resetFlag(zeroFlag)
+	c.resetFlag(subFlag)
+	c.resetFlag(halfCarryFlag)
+
+	value = (value >> 1) | ((value & 1) << 7)
+	r.set(value)
+}
+
+func (c *CPU) rr(r *Register8) {
+	value := r.get()
+	carry := c.flagToBit(carryFlag) << 7
+
+	c.setFlagToCondition(carryFlag, value > 0x7F)
+	c.resetFlag(zeroFlag)
+	c.resetFlag(subFlag)
+	c.resetFlag(halfCarryFlag)
+
+	value = (value >> 1) | carry
+	r.set(value)
 }
