@@ -10,11 +10,11 @@ func TestRegister16_low(t *testing.T) {
 		r    Register16
 		want Register8
 	}{
-		{"Returns low value", Register16(0xABCD), Register8(0xCD)},
+		{"Returns low value", newRegister16(0xABCD), Register8(0xCD)},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := tt.r.low(); got != tt.want {
+			if got := tt.r.low; got != tt.want {
 				t.Errorf("Register16.low() = %v, want %v", got, tt.want)
 			}
 		})
@@ -27,40 +27,40 @@ func TestRegister16_high(t *testing.T) {
 		r    Register16
 		want Register8
 	}{
-		{"Returns high value", Register16(0xABCD), Register8(0xAB)},
+		{"Returns high value", newRegister16(0xABCD), Register8(0xAB)},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := tt.r.high(); got != tt.want {
-				t.Errorf("Register16.high() = %v, want %v", got, tt.want)
+			if got := tt.r.high; got != tt.want {
+				t.Errorf("Register16.high = %v, want %v", got, tt.want)
 			}
 		})
 	}
 }
 
 func TestRegister16_set(t *testing.T) {
-	r := Register16(0xFFFF)
+	r := newRegister16(0xFFFF)
 	r.set(0)
 
-	if r != 0 {
+	if r.get() != 0 {
 		t.Fail()
 	}
 }
 
 func TestRegister16_setHigh(t *testing.T) {
-	r := Register16(0xFFFF)
+	r := newRegister16(0xFFFF)
 	r.setHigh(1)
 
-	if r != 0x01FF {
+	if r.get() != 0x01FF {
 		t.Fail()
 	}
 }
 
 func TestRegister16_setLow(t *testing.T) {
-	r := Register16(0xFFFF)
+	r := newRegister16(0xFFFF)
 	r.setLow(1)
 
-	if r != 0xFF01 {
+	if r.get() != 0xFF01 {
 		t.Fail()
 	}
 }
@@ -71,7 +71,7 @@ func TestRegister16_get(t *testing.T) {
 		r    Register16
 		want uint16
 	}{
-		{"Gets the internal value", Register16(0xBEEF), 0xBEEF},
+		{"Gets the internal value", newRegister16(0xBEEF), 0xBEEF},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -83,33 +83,33 @@ func TestRegister16_get(t *testing.T) {
 }
 
 func TestRegister16_incr(t *testing.T) {
-	r := Register16(0)
+	r := newRegister16(0)
 	r.incr()
 
-	if r != 1 {
+	if r.get() != 1 {
 		t.Fail()
 	}
 
-	r = Register16(0xFFFF)
+	r = newRegister16(0xFFFF)
 	r.incr()
 
-	if r != 0 {
+	if r.get() != 0 {
 		t.Fail()
 	}
 }
 
 func TestRegister16_decr(t *testing.T) {
-	r := Register16(0xFFFF)
+	r := newRegister16(0xFFFF)
 	r.decr()
 
-	if r != 0xFFFE {
+	if r.get() != 0xFFFE {
 		t.Fail()
 	}
 
-	r = Register16(0)
+	r = newRegister16(0)
 	r.decr()
 
-	if r != 0xFFFF {
+	if r.get() != 0xFFFF {
 		t.Fail()
 	}
 }
@@ -178,7 +178,7 @@ func TestRegister16_getLow(t *testing.T) {
 		r    Register16
 		want uint8
 	}{
-		{"Gets the low value as uint8", Register16(0xCAFE), 0xFE},
+		{"Gets the low value as uint8", newRegister16(0xCAFE), 0xFE},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -195,12 +195,12 @@ func TestRegister16_getHigh(t *testing.T) {
 		r    Register16
 		want uint8
 	}{
-		{"Gets the high value as uint8", Register16(0xCAFE), 0xCA},
+		{"Gets the high value as uint8", newRegister16(0xCAFE), 0xCA},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			if got := tt.r.getHigh(); got != tt.want {
-				t.Errorf("Register16.getHigh() = %v, want %v", got, tt.want)
+				t.Errorf("Register16.getHigh = %v, want %v", got, tt.want)
 			}
 		})
 	}
