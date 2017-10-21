@@ -29,26 +29,52 @@ func New() CPU {
 	return CPU{}
 }
 
-//Tick emulates a single step during the main loop for the cpu.
+// Tick emulates a single step during the main loop for the cpu.
 func (c *CPU) Tick() {
 
 }
 
-func (c *CPU) getImmediate() uint8 {
+// peekImmediate returns the byte at the memory address pointed by the PC
+// this value is known as immediate ('n' in mnemonics), some opcodes use it as a parameter
+func (c CPU) peekImmediate() uint8 {
 	n := c.memory.ReadByte(c.pc.get())
-	c.pc.incr()
 	return n
 }
 
-func (c *CPU) getImmediateWord() uint16 {
-	low := c.getImmediate()
-	high := c.getImmediate()
+// peekImmediateWord returns the two bytes at the memory address pointed by PC and PC+1
+// this value is known as immediate ('nn' in mnemonics), some opcodes use it as a parameter
+func (c CPU) peekImmediateWord() uint16 {
+	low := c.memory.ReadByte(c.pc.get())
+	high := c.memory.ReadByte(c.pc.get() + 1)
 
 	return bit.CombineBytes(low, high)
 }
 
-func (c *CPU) getImmediateSigned() int8 {
-	return int8(c.getImmediate())
+// peekSignedImmediate returns signed byte value at the memory address pointed by PC
+// this value is known as immediate ('*' in mnemonics), some opcodes use it as a parameter
+func (c CPU) peekSignedImmediate() int8 {
+	return int8(c.peekImmediate())
+}
+
+// readImmediate acts similarly as its peek counterpart, but increments the PC once after reading
+func (c *CPU) readImmediate() uint8 {
+	n := c.peekImmediate()
+	c.pc.incr()
+	return n
+}
+
+// readImmediateWord acts similarly as its peek counterpart, but increments the PC twice after reading
+func (c *CPU) readImmediateWord() uint16 {
+	nn := c.peekImmediateWord()
+	c.pc.incr()
+	return nn
+}
+
+// readSignedImmediate acts similarly as its peek counterpart, but increments the PC once after reading
+func (c *CPU) readSignedImmediate() int8 {
+	n := c.peekSignedImmediate()
+	c.pc.incr()
+	return n
 }
 
 func (c *CPU) setFlag(flag Flag) {

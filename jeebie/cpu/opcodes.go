@@ -13,7 +13,7 @@ func opcode0x00(cpu *CPU) int {
 //LD BC, nn
 //#0x01:
 func opcode0x01(cpu *CPU) int {
-	cpu.bc.set(cpu.getImmediateWord())
+	cpu.bc.set(cpu.readImmediateWord())
 	return 12
 }
 
@@ -48,7 +48,7 @@ func opcode0x05(cpu *CPU) int {
 //LD B, n
 //#0x06:
 func opcode0x06(cpu *CPU) int {
-	cpu.bc.setHigh(cpu.getImmediate())
+	cpu.bc.setHigh(cpu.readImmediate())
 	return 0
 }
 
