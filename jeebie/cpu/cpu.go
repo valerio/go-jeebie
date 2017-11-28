@@ -173,3 +173,34 @@ func (c *CPU) rr(r *Register8) {
 	value = (value >> 1) | carry
 	r.set(value)
 }
+
+// add sets the result of adding an 8 bit register to A, while setting all relevant flags.
+func (c *CPU) addToA(value uint8) {
+	dst := c.af.low
+	result := dst.get() + value
+
+	carry := (uint16(dst.get()) + uint16(value)) > 0xFF
+	halfCarry := (dst.get()&0xF)+(value&0xF) > 0xF
+
+	c.setFlagToCondition(zeroFlag, result == 0)
+	c.resetFlag(subFlag)
+	c.setFlagToCondition(carryFlag, carry)
+	c.setFlagToCondition(halfCarryFlag, halfCarry)
+
+	c.af.setLow(result)
+}
+
+// addToHL sets the result of adding a 16 bit register to HL, while setting relevant flags.
+func (c *CPU) addToHL(reg Register16) {
+	dst := c.hl
+	result := dst.get() + reg.get()
+
+	carry := (uint32(dst.get()) + uint32(reg.get())) > 0xFFFF
+	halfCarry := (dst.get()&0xFFF)+(reg.get()&0xFFF) > 0xFFF
+
+	c.resetFlag(subFlag)
+	c.setFlagToCondition(carryFlag, carry)
+	c.setFlagToCondition(halfCarryFlag, halfCarry)
+
+	c.hl.set(result)
+}
