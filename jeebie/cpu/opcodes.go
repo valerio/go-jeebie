@@ -246,8 +246,9 @@ func opcode0x21(cpu *CPU) int {
 //LDI (HL), A
 //#0x22:
 func opcode0x22(cpu *CPU) int {
-
-	return 0
+	cpu.memory.WriteByte(cpu.hl.get(), cpu.af.getLow())
+	cpu.hl.incr()
+	return 8
 }
 
 //INC HL
@@ -302,8 +303,9 @@ func opcode0x29(cpu *CPU) int {
 //LDI A, (HL)
 //#0x2A:
 func opcode0x2A(cpu *CPU) int {
-
-	return 0
+	cpu.af.setLow(cpu.memory.ReadByte(cpu.hl.get()))
+	cpu.hl.incr()
+	return 8
 }
 
 //DEC HL
@@ -416,8 +418,9 @@ func opcode0x39(cpu *CPU) int {
 //LDD A, (HL)
 //#0x3A:
 func opcode0x3A(cpu *CPU) int {
-
-	return 0
+	cpu.af.setLow(cpu.memory.ReadByte(cpu.hl.get()))
+	cpu.hl.decr()
+	return 8
 }
 
 //DEC SP
@@ -713,7 +716,7 @@ func opcode0x64(cpu *CPU) int {
 //#0x65:
 func opcode0x65(cpu *CPU) int {
 	cpu.hl.setLow(cpu.hl.getHigh())
-	return 0
+	return 4
 }
 
 //LD H, (HL)
@@ -810,7 +813,7 @@ func opcode0x72(cpu *CPU) int {
 //#0x73:
 func opcode0x73(cpu *CPU) int {
 	cpu.memory.WriteByte(cpu.hl.get(), cpu.de.getHigh())
-	return 0
+	return 8
 }
 
 //LD (HL), H
