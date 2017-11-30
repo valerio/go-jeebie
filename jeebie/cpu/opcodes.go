@@ -1014,57 +1014,57 @@ func opcode0x8F(cpu *CPU) int {
 //SUB A, B
 //#0x90:
 func opcode0x90(cpu *CPU) int {
-
-	return 0
+	cpu.sub(cpu.bc.getLow())
+	return 4
 }
 
 //SUB A, C
 //#0x91:
 func opcode0x91(cpu *CPU) int {
-
-	return 0
+	cpu.sub(cpu.bc.getHigh())
+	return 4
 }
 
 //SUB A, D
 //#0x92:
 func opcode0x92(cpu *CPU) int {
-
-	return 0
+	cpu.sub(cpu.de.getLow())
+	return 4
 }
 
 //SUB A, E
 //#0x93:
 func opcode0x93(cpu *CPU) int {
-
-	return 0
+	cpu.sub(cpu.de.getHigh())
+	return 4
 }
 
 //SUB A, H
 //#0x94:
 func opcode0x94(cpu *CPU) int {
-
-	return 0
+	cpu.sub(cpu.hl.getLow())
+	return 4
 }
 
 //SUB A, L
 //#0x95:
 func opcode0x95(cpu *CPU) int {
-
-	return 0
+	cpu.sub(cpu.hl.getHigh())
+	return 4
 }
 
 //SUB A, (HL)
 //#0x96:
 func opcode0x96(cpu *CPU) int {
-
-	return 0
+	cpu.sub(cpu.memory.ReadByte(cpu.hl.get()))
+	return 8
 }
 
 //SUB A, A
 //#0x97:
 func opcode0x97(cpu *CPU) int {
-
-	return 0
+	cpu.sub(cpu.af.getLow())
+	return 4
 }
 
 //SBC A, B

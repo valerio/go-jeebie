@@ -204,3 +204,16 @@ func (c *CPU) addToHL(reg Register16) {
 
 	c.hl.set(result)
 }
+
+// sub will subtract the value from register A and set all relevant flags.
+func (c *CPU) sub(value uint8) {
+	a := c.af.getLow()
+	result := a - value
+
+	c.af.setLow(result)
+
+	c.setFlagToCondition(zeroFlag, result == 0)
+	c.setFlag(subFlag)
+	c.setFlagToCondition(carryFlag, a < value)
+	c.setFlagToCondition(halfCarryFlag, (a&0xF)-(value&0xF) < 0)
+}
