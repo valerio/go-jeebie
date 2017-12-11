@@ -1,7 +1,10 @@
 package cpu
 
 import "github.com/valep27/go-jeebie/jeebie/memory"
-import "github.com/valep27/go-jeebie/jeebie/bit"
+import (
+	"github.com/valep27/GChip8/src/util"
+	"github.com/valep27/go-jeebie/jeebie/bit"
+)
 
 // Flag is one of the 4 possible flags used in the flag register (high part of AF)
 type Flag uint8
@@ -25,8 +28,8 @@ type CPU struct {
 }
 
 // New returns an uninitialized CPU instance
-func New() CPU {
-	return CPU{}
+func New() *CPU {
+	return &CPU{}
 }
 
 // Tick emulates a single step during the main loop for the cpu.
@@ -104,6 +107,22 @@ func (c *CPU) setFlagToCondition(flag Flag, condition bool) {
 	} else {
 		c.resetFlag(flag)
 	}
+}
+
+func (c *CPU) pushStack(r Register16) {
+	c.sp.decr()
+	c.memory.WriteByte(c.sp.get(), r.getHigh())
+	c.sp.decr()
+	c.memory.WriteByte(c.sp.get(), r.getLow())
+}
+
+func (c *CPU) popStack() uint16 {
+	low := c.memory.ReadByte(c.sp.get())
+	c.sp.incr()
+	high := c.memory.ReadByte(c.sp.get())
+	c.sp.incr()
+
+	return util.CombineBytes(low, high)
 }
 
 func (c *CPU) inc(r *Register8) {
