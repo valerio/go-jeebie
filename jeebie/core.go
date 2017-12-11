@@ -10,12 +10,16 @@ import (
 // Emulator represents the root struct and entry point for running the emulation
 type Emulator struct {
 	cpu    *cpu.CPU
+	gpu    *video.GPU
 	mem    *memory.MMU
 	screen *video.Screen
 }
 
 func (e *Emulator) init() {
+	e.mem = memory.New()
+	e.cpu = cpu.New()
 	e.screen = video.NewScreen()
+	e.gpu = video.NewGpu()
 }
 
 // New creates a new emulator instance

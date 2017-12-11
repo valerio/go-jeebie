@@ -4,6 +4,10 @@ package memory
 type MMU struct {
 }
 
+func New() *MMU {
+	return &MMU{}
+}
+
 // TODO: implement stubbed methods
 func (m *MMU) ReadByte(addr uint16) byte {
 	return 0
