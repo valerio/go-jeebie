@@ -16,6 +16,24 @@ const (
 	carryFlag          = 0x10
 )
 
+// Interrupt is the value of one of the 5 possible interrupts for the Z80.
+type Interrupt uint8
+
+const (
+	vBlankInterrupt     Interrupt = 0x40
+	lcdcStatusInterrupt           = 0x48
+	timerInterrupt                = 0x50
+	serialInterrupt               = 0x58
+	joypadInterrupt               = 0x60
+)
+
+const BaseInterruptAddress uint16 = 0x40
+
+const (
+	InterruptEnableAddress uint16 = 0xFFFF
+	InterruptFlagAddress   uint16 = 0xFF0F
+)
+
 // CPU is the main struct holding Z80 state
 type CPU struct {
 	memory *memory.MMU
@@ -25,6 +43,8 @@ type CPU struct {
 	hl     Register16
 	sp     Register16
 	pc     Register16
+
+	interruptsEnabled bool
 }
 
 // New returns an uninitialized CPU instance
@@ -35,6 +55,41 @@ func New() *CPU {
 // Tick emulates a single step during the main loop for the cpu.
 func (c *CPU) Tick() {
 
+}
+
+// handleInterrupts checks for an interrupt and handles it if necessary.
+func (c *CPU) handleInterrupts() {
+	if c.interruptsEnabled == false {
+		return
+	}
+
+	// retrieve the two masks
+	enabledInterruptsMask := c.memory.ReadByte(InterruptEnableAddress)
+	firedInterrupts := c.memory.ReadByte(InterruptFlagAddress)
+
+	// if zero, no interrupts that are enabled were fired
+	if (enabledInterruptsMask & firedInterrupts) == 0 {
+		return
+	}
+
+	c.pushStack(c.pc)
+
+	for i := uint8(0); i < 5; i++ {
+
+		if bit.IsBitSet(i, firedInterrupts) {
+			// interrupt handlers are offset by 8
+			address := uint16(i)*8 + BaseInterruptAddress
+
+			// mark as handled by clearing the bit at i
+			c.memory.WriteByte(InterruptFlagAddress, bit.ClearBit(i, firedInterrupts))
+
+			c.pc.set(address)
+			c.interruptsEnabled = false
+
+			// only handle one interrupt at a time
+			return
+		}
+	}
 }
 
 // peekImmediate returns the byte at the memory address pointed by the PC

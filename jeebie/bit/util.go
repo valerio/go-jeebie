@@ -32,6 +32,12 @@ func CheckedSub(a, b uint8) (result uint8, borrow bool) {
 	return
 }
 
+// IsBitSet will check if the bit at the specified index is set to 1 or not.
 func IsBitSet(index, byte uint8) bool {
 	return ((byte >> index) & 1) == 1
+}
+
+// ClearBit will return the passed byte with the bit at the specified index set to 0.
+func ClearBit(index, byte uint8) uint8 {
+	return byte & ^(1 << index)
 }
