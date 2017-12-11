@@ -31,3 +31,7 @@ func CheckedSub(a, b uint8) (result uint8, borrow bool) {
 	result = a - b
 	return
 }
+
+func IsBitSet(index, byte uint8) bool {
+	return ((byte >> index) & 1) == 1
+}
