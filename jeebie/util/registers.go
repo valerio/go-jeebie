@@ -23,8 +23,8 @@ func (r *Register8) Decr() {
 
 // Register16 represents a 16-util register in the CPU
 type Register16 struct {
-	high Register8
-	low  Register8
+	High Register8
+	Low  Register8
 }
 
 func newRegister16(value uint16) Register16 {
@@ -34,28 +34,28 @@ func newRegister16(value uint16) Register16 {
 }
 
 func (r Register16) GetLow() uint8 {
-	return uint8(r.low)
+	return uint8(r.Low)
 }
 
 func (r Register16) GetHigh() uint8 {
-	return uint8(r.high)
+	return uint8(r.High)
 }
 
 func (r *Register16) Set(value uint16) {
-	r.low = Register8(value)
-	r.high = Register8(value >> 8)
+	r.Low = Register8(value)
+	r.High = Register8(value >> 8)
 }
 
 func (r *Register16) SetHigh(high uint8) {
-	r.high = Register8(high)
+	r.High = Register8(high)
 }
 
 func (r *Register16) SetLow(low uint8) {
-	r.low = Register8(low)
+	r.Low = Register8(low)
 }
 
 func (r Register16) Get() uint16 {
-	return (uint16(r.high) << 8) | uint16(r.low)
+	return (uint16(r.High) << 8) | uint16(r.Low)
 }
 
 func (r *Register16) Incr() {

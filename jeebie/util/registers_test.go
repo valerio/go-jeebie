@@ -10,12 +10,12 @@ func TestRegister16_low(t *testing.T) {
 		r    Register16
 		want Register8
 	}{
-		{"Returns low value", newRegister16(0xABCD), Register8(0xCD)},
+		{"Returns Low value", newRegister16(0xABCD), Register8(0xCD)},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := tt.r.low; got != tt.want {
-				t.Errorf("Register16.low() = %v, want %v", got, tt.want)
+			if got := tt.r.Low; got != tt.want {
+				t.Errorf("Register16.Low() = %v, want %v", got, tt.want)
 			}
 		})
 	}
@@ -27,12 +27,12 @@ func TestRegister16_high(t *testing.T) {
 		r    Register16
 		want Register8
 	}{
-		{"Returns high value", newRegister16(0xABCD), Register8(0xAB)},
+		{"Returns High value", newRegister16(0xABCD), Register8(0xAB)},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := tt.r.high; got != tt.want {
-				t.Errorf("Register16.high = %v, want %v", got, tt.want)
+			if got := tt.r.High; got != tt.want {
+				t.Errorf("Register16.High = %v, want %v", got, tt.want)
 			}
 		})
 	}
@@ -178,7 +178,7 @@ func TestRegister16_getLow(t *testing.T) {
 		r    Register16
 		want uint8
 	}{
-		{"Gets the low value as uint8", newRegister16(0xCAFE), 0xFE},
+		{"Gets the Low value as uint8", newRegister16(0xCAFE), 0xFE},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -195,7 +195,7 @@ func TestRegister16_getHigh(t *testing.T) {
 		r    Register16
 		want uint8
 	}{
-		{"Gets the high value as uint8", newRegister16(0xCAFE), 0xCA},
+		{"Gets the High value as uint8", newRegister16(0xCAFE), 0xCA},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
