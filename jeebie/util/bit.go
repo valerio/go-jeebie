@@ -37,7 +37,12 @@ func IsBitSet(index, byte uint8) bool {
 	return ((byte >> index) & 1) == 1
 }
 
-// ClearBit will return the passed byte with the util at the specified index Set to 0.
+// ClearBit will return the passed byte with the bit at the specified index Set to 0.
 func ClearBit(index, byte uint8) uint8 {
 	return byte & ^(1 << index)
+}
+
+// SetBit will return the passed byte with the bit at the specified index Set to 1.
+func SetBit(index, byte uint8) uint8 {
+	return byte | (1 << index)
 }
