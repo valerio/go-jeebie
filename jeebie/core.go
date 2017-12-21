@@ -17,9 +17,10 @@ type Emulator struct {
 
 func (e *Emulator) init() {
 	e.mem = memory.New()
-	e.cpu = cpu.New()
 	e.screen = video.NewScreen()
-	e.gpu = video.NewGpu()
+
+	e.cpu = cpu.New(e.mem)
+	e.gpu = video.NewGpu(e.screen, e.mem)
 }
 
 // New creates a new emulator instance
@@ -30,10 +31,15 @@ func New() *Emulator {
 	return e
 }
 
+func (e *Emulator) Tick() {
+	cycles := e.cpu.Tick()
+	e.gpu.Tick(cycles)
+}
+
 // Run executes the main loop of the emulator
 func (e *Emulator) Run() {
 	for {
-		e.screen.Draw()
+		e.Tick()
 
 		for event := sdl.PollEvent(); event != nil; event = sdl.PollEvent() {
 

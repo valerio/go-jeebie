@@ -35,13 +35,15 @@ type CPU struct {
 }
 
 // New returns an uninitialized CPU instance
-func New() *CPU {
-	return &CPU{}
+func New(memory *memory.MMU) *CPU {
+	return &CPU{memory: memory}
 }
 
 // Tick emulates a single step during the main loop for the cpu.
-func (c *CPU) Tick() {
+// Returns the amount of cycles that execution has taken.
+func (c *CPU) Tick() uint {
 	c.handleInterrupts()
+	return 4
 }
 
 // handleInterrupts checks for an interrupt and handles it if necessary.

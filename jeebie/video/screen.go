@@ -1,7 +1,6 @@
 package video
 
 import (
-	"math/rand"
 	"unsafe"
 
 	"github.com/veandco/go-sdl2/sdl"
@@ -17,7 +16,6 @@ const (
 type Screen struct {
 	window   *sdl.Window
 	renderer *sdl.Renderer
-	fb       []uint32
 }
 
 // NewScreen initializes and returns a screen
@@ -41,21 +39,15 @@ func NewScreen() *Screen {
 		panic(err)
 	}
 
-	s.fb = make([]uint32, width*height)
-
 	return s
 }
 
 // Draw presents a new frame to the screen
-func (s *Screen) Draw() {
+func (s *Screen) Draw(buffer []uint32) {
 	var err error
 
-	for i := 0; i < len(s.fb); i++ {
-		s.fb[i] = rand.Uint32()
-	}
-
 	surface, err := sdl.CreateRGBSurfaceFrom(
-		unsafe.Pointer(&s.fb[0]),
+		unsafe.Pointer(&buffer[0]),
 		width,
 		height,
 		32,
