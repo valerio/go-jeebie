@@ -41,9 +41,13 @@ func New(memory *memory.MMU) *CPU {
 
 // Tick emulates a single step during the main loop for the cpu.
 // Returns the amount of cycles that execution has taken.
-func (c *CPU) Tick() uint {
+func (c *CPU) Tick() int {
 	c.handleInterrupts()
-	return 4
+
+	instruction := Decode(c)
+	cycles := instruction(c)
+
+	return cycles
 }
 
 // handleInterrupts checks for an interrupt and handles it if necessary.

@@ -3,13 +3,17 @@ package cpu
 // Opcode represents a function that executes an opcode
 type Opcode func(*CPU) int
 
-// Decode takes a byte and retrieves the corresponding instruction
-func decode(opcode uint16) Opcode {
-	if (opcode & 0xCB00) == 0xCB00 {
-		return opcodeCBMap[uint8(opcode&0xFF)]
+// Decode retrieves the instruction identified by the value pointed at by the PC.
+func Decode(c *CPU) Opcode {
+	code := c.readImmediate()
+
+	// 0xCB is only ever used as a prefix for the next byte.
+	if code == 0xCB {
+		code = c.readImmediate()
+		return opcodeCBMap[uint8(code)]
 	}
 
-	return opcodeMap[uint8(opcode&0xFF)]
+	return opcodeMap[uint8(code)]
 }
 
 var opcodeMap = map[uint8]Opcode{

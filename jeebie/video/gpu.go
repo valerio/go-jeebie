@@ -30,7 +30,7 @@ type GPU struct {
 
 	line   uint8
 	mode   GpuMode
-	cycles uint
+	cycles int
 }
 
 func NewGpu(screen *Screen, memory *memory.MMU) *GPU {
@@ -46,7 +46,7 @@ func NewGpu(screen *Screen, memory *memory.MMU) *GPU {
 }
 
 // Tick simulates gpu behaviour for a certain amount of clock cycles.
-func (g *GPU) Tick(cycles uint) {
+func (g *GPU) Tick(cycles int) {
 	g.cycles += cycles
 
 	switch g.mode {
