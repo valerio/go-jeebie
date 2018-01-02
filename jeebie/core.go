@@ -6,6 +6,7 @@ import (
 	"github.com/valep27/go-jeebie/jeebie/video"
 	"github.com/veandco/go-sdl2/sdl"
 	"io/ioutil"
+	"log"
 )
 
 // Emulator represents the root struct and entry point for running the emulation
@@ -13,6 +14,7 @@ type Emulator struct {
 	cpu    *cpu.CPU
 	gpu    *video.GPU
 	mem    *memory.MMU
+	cart   *Cartridge
 	screen *video.Screen
 }
 
@@ -22,6 +24,7 @@ func (e *Emulator) init() {
 
 	e.cpu = cpu.New(e.mem)
 	e.gpu = video.NewGpu(e.screen, e.mem)
+	e.cart = nil
 }
 
 // New creates a new emulator instance
@@ -34,15 +37,16 @@ func New() *Emulator {
 
 // NewWithFile creates a new emulator instance and loads the file specified into it.
 func NewWithFile(path string) (*Emulator, error) {
-	_, err := ioutil.ReadFile(path)
+	data, err := ioutil.ReadFile(path)
 	if err != nil {
 		return nil, err
 	}
 
-	// TODO: detect cartridge type and map to memory
+	log.Printf("Loaded %f bytes of ROM data\n", len(data))
 
 	e := &Emulator{}
 	e.init()
+	e.cart = NewCartridgeWithData(data)
 
 	return e, nil
 }
