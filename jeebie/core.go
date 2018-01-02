@@ -5,6 +5,7 @@ import (
 	"github.com/valep27/go-jeebie/jeebie/memory"
 	"github.com/valep27/go-jeebie/jeebie/video"
 	"github.com/veandco/go-sdl2/sdl"
+	"io/ioutil"
 )
 
 // Emulator represents the root struct and entry point for running the emulation
@@ -29,6 +30,21 @@ func New() *Emulator {
 	e.init()
 
 	return e
+}
+
+// NewWithFile creates a new emulator instance and loads the file specified into it.
+func NewWithFile(path string) (*Emulator, error) {
+	_, err := ioutil.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+
+	// TODO: detect cartridge type and map to memory
+
+	e := &Emulator{}
+	e.init()
+
+	return e, nil
 }
 
 func (e *Emulator) Tick() {
