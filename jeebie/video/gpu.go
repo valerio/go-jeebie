@@ -10,7 +10,7 @@ import (
 type GpuMode int
 
 const (
-	oamRead GpuMode = iota
+	oamRead  GpuMode = iota
 	vramRead
 	hblank
 	vblank

@@ -36,7 +36,10 @@ type CPU struct {
 
 // New returns an uninitialized CPU instance
 func New(memory *memory.MMU) *CPU {
-	return &CPU{memory: memory}
+	return &CPU{
+		memory: memory,
+		pc:     util.Register16{High: 0x01},
+	}
 }
 
 // Tick emulates a single step during the main loop for the cpu.
@@ -178,7 +181,7 @@ func (c *CPU) inc(r *util.Register8) {
 	value := r.Get()
 
 	c.setFlagToCondition(zeroFlag, value == 0)
-	c.setFlagToCondition(halfCarryFlag, (value&0xF) == 0xF)
+	c.setFlagToCondition(halfCarryFlag, (value & 0xF) == 0xF)
 	c.resetFlag(subFlag)
 }
 
@@ -187,7 +190,7 @@ func (c *CPU) dec(r *util.Register8) {
 	value := r.Get()
 
 	c.setFlagToCondition(zeroFlag, value == 0)
-	c.setFlagToCondition(halfCarryFlag, (value&0xF) == 0xF)
+	c.setFlagToCondition(halfCarryFlag, (value & 0xF) == 0xF)
 	c.setFlag(subFlag)
 }
 

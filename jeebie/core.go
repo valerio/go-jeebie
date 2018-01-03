@@ -14,17 +14,15 @@ type Emulator struct {
 	cpu    *cpu.CPU
 	gpu    *video.GPU
 	mem    *memory.MMU
-	cart   *Cartridge
 	screen *video.Screen
 }
 
 func (e *Emulator) init() {
-	e.mem = memory.New()
+	e.mem = memory.NewWithCartridge(memory.NewCartridge())
 	e.screen = video.NewScreen()
 
 	e.cpu = cpu.New(e.mem)
 	e.gpu = video.NewGpu(e.screen, e.mem)
-	e.cart = nil
 }
 
 // New creates a new emulator instance
@@ -46,8 +44,7 @@ func NewWithFile(path string) (*Emulator, error) {
 
 	e := &Emulator{}
 	e.init()
-	e.cart = NewCartridgeWithData(data)
-	e.mem = memory.NewWithCartridge(e.cart)
+	e.mem = memory.NewWithCartridge(memory.NewCartridgeWithData(data))
 
 	return e, nil
 }

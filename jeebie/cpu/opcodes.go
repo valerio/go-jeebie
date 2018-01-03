@@ -1638,8 +1638,8 @@ func opcode0xE8(cpu *CPU) int {
 
 	cpu.resetFlag(zeroFlag)
 	cpu.resetFlag(subFlag)
-	cpu.setFlagToCondition(halfCarryFlag, ((value^n^(result&0xFFFF))&0x10) == 0x10)
-	cpu.setFlagToCondition(carryFlag, ((value^n^(result&0xFFFF))&0x100) == 0x100)
+	cpu.setFlagToCondition(halfCarryFlag, ((value ^ n ^ (result & 0xFFFF)) & 0x10) == 0x10)
+	cpu.setFlagToCondition(carryFlag, ((value ^ n ^ (result & 0xFFFF)) & 0x100) == 0x100)
 
 	cpu.sp.Set(uint16(result))
 
