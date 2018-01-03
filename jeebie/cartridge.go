@@ -2,7 +2,7 @@ package jeebie
 
 import "github.com/valep27/go-jeebie/jeebie/util"
 
-const titleLenght = 11
+const titleLength = 11
 
 const (
 	entryPointAddress       = 0x100
@@ -38,7 +38,7 @@ type Cartridge struct {
 func NewCartridgeWithData(bytes []byte) *Cartridge {
 	// TODO: process metadata into actual types instead of just reading it (cart type, rom/ram size, etc.)
 
-	titleBytes := bytes[titleAddress:titleAddress+titleLenght]
+	titleBytes := bytes[titleAddress:titleAddress+titleLength]
 
 	cart := &Cartridge{
 		data:           make([]byte, len(bytes)),
