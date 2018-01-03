@@ -1,4 +1,4 @@
-package jeebie
+package memory
 
 import "github.com/valep27/go-jeebie/jeebie/util"
 
@@ -33,6 +33,12 @@ type Cartridge struct {
 	ramSize        uint8
 }
 
+// NewCartridge creates an empty cartridge, useful only for debugging purposes.
+func NewCartridge() *Cartridge {
+	return &Cartridge{
+		data: make([]byte, 0x10000),
+	}
+}
 
 // NewCartridgeWithData initializes a new Cartridge from a slice of bytes.
 func NewCartridgeWithData(bytes []byte) *Cartridge {
@@ -55,7 +61,6 @@ func NewCartridgeWithData(bytes []byte) *Cartridge {
 
 	return cart
 }
-
 
 // ReadByte reads a byte at the specified address. Does not check bounds, so the caller must make sure the
 // address is valid for the cartridge.

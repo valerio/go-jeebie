@@ -1,13 +1,12 @@
 package memory
 
 import (
-	"github.com/valep27/go-jeebie/jeebie"
 	"fmt"
 )
 
 // MMU allows access to all memory mapped I/O and data/registers
 type MMU struct {
-	cart   *jeebie.Cartridge
+	cart   *Cartridge
 	memory []byte
 }
 
@@ -17,7 +16,7 @@ func New() *MMU {
 	}
 }
 
-func NewWithCartridge(cart *jeebie.Cartridge) *MMU {
+func NewWithCartridge(cart *Cartridge) *MMU {
 	mmu := New()
 	mmu.cart = cart
 	return mmu
@@ -41,7 +40,7 @@ func (m *MMU) ReadByte(addr uint16) byte {
 
 	// external RAM
 	if isBetween(addr, 0xA000, 0xBFFF) {
-		panic(fmt.Sprintf("Attempted read at unused/unmapped address: %v", addr))
+		panic(fmt.Sprintf("Attempted read at unused/unmapped address: 0x%X", addr))
 	}
 
 	// RAM
@@ -62,7 +61,7 @@ func (m *MMU) ReadByte(addr uint16) byte {
 
 	// Unused
 	if isBetween(addr, 0xFEA0, 0xFEFF) {
-		panic(fmt.Sprintf("Attempted read at unused/unmapped address: %v", addr))
+		panic(fmt.Sprintf("Attempted read at unused/unmapped address: 0x%X", addr))
 	}
 
 	// IO registers
@@ -80,7 +79,7 @@ func (m *MMU) ReadByte(addr uint16) byte {
 		return m.memory[addr]
 	}
 
-	panic(fmt.Sprintf("Attempted read at unused/unmapped address: %v", addr))
+	panic(fmt.Sprintf("Attempted read at unused/unmapped address: 0x%X", addr))
 }
 
 func (m *MMU) WriteByte(addr uint16, value byte) {
@@ -99,7 +98,7 @@ func (m *MMU) WriteByte(addr uint16, value byte) {
 
 	// external RAM
 	if isBetween(addr, 0xA000, 0xBFFF) {
-		panic(fmt.Sprintf("Attempted write at unused/unmapped address: %v", addr))
+		panic(fmt.Sprintf("Attempted write at unused/unmapped address: 0x%X", addr))
 	}
 
 	// RAM
@@ -123,7 +122,7 @@ func (m *MMU) WriteByte(addr uint16, value byte) {
 
 	// Unused
 	if isBetween(addr, 0xFEA0, 0xFEFF) {
-		panic(fmt.Sprintf("Attempted write at unused/unmapped address: %v", addr))
+		panic(fmt.Sprintf("Attempted write at unused/unmapped address: 0x%X", addr))
 	}
 
 	// IO registers
@@ -144,5 +143,5 @@ func (m *MMU) WriteByte(addr uint16, value byte) {
 		return
 	}
 
-	panic(fmt.Sprintf("Attempted write at unused/unmapped address: %v", addr))
+	panic(fmt.Sprintf("Attempted write at unused/unmapped address: 0x%X", addr))
 }
