@@ -47,6 +47,7 @@ func NewWithFile(path string) (*Emulator, error) {
 	e := &Emulator{}
 	e.init()
 	e.cart = NewCartridgeWithData(data)
+	e.mem = memory.NewWithCartridge(e.cart)
 
 	return e, nil
 }
