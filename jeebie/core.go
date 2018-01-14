@@ -41,7 +41,7 @@ func NewWithFile(path string) (*Emulator, error) {
 		return nil, err
 	}
 
-	log.Printf("Loaded %f bytes of ROM data\n", len(data))
+	log.Printf("Loaded %v bytes of ROM data\n", len(data))
 
 	e := &Emulator{}
 	e.init()

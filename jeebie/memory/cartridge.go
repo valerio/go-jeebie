@@ -1,6 +1,10 @@
 package memory
 
-import "github.com/valep27/go-jeebie/jeebie/util"
+import (
+	"fmt"
+
+	"github.com/valep27/go-jeebie/jeebie/util"
+)
 
 const titleLength = 11
 
@@ -44,7 +48,7 @@ func NewCartridge() *Cartridge {
 func NewCartridgeWithData(bytes []byte) *Cartridge {
 	// TODO: process metadata into actual types instead of just reading it (cart type, rom/ram size, etc.)
 
-	titleBytes := bytes[titleAddress:titleAddress+titleLength]
+	titleBytes := bytes[titleAddress : titleAddress+titleLength]
 
 	cart := &Cartridge{
 		data:           make([]byte, len(bytes)),
@@ -58,6 +62,10 @@ func NewCartridgeWithData(bytes []byte) *Cartridge {
 	}
 
 	copy(cart.data, bytes)
+
+	fmt.Printf("Bytes %v\n", bytes)
+
+	fmt.Printf("title %v\n", cart.title)
 
 	return cart
 }
