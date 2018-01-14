@@ -46,7 +46,7 @@ func (m *MMU) ReadByte(addr uint16) byte {
 
 	// external RAM
 	if isBetween(addr, 0xA000, 0xBFFF) {
-		panic(fmt.Sprintf("Attempted read at unused/unmapped address: 0x%X", addr))
+		return m.cart.ReadByte(addr)
 	}
 
 	// RAM
@@ -67,7 +67,8 @@ func (m *MMU) ReadByte(addr uint16) byte {
 
 	// Unused
 	if isBetween(addr, 0xFEA0, 0xFEFF) {
-		 panic(fmt.Sprintf("Attempted read at unused/unmapped address: 0x%X", addr))
+//		panic(fmt.Sprintf("Attempted read at unused/unmapped address: 0x%X", addr))
+		return 0
 	}
 
 	// IO registers
