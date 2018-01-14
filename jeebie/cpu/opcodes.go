@@ -1,7 +1,10 @@
 package cpu
 
+import "fmt"
+
 func unimplemented(cpu *CPU) int {
-	panic("unimplemented opcode was called")
+	msg := fmt.Sprintf("Unimplemented opcode 0x%X was called.", cpu.currentOpcode)
+	panic(msg)
 }
 
 //NOP

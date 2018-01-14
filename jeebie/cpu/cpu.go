@@ -32,6 +32,7 @@ type CPU struct {
 	pc     util.Register16
 
 	interruptsEnabled bool
+	currentOpcode     uint16
 }
 
 // New returns an uninitialized CPU instance
