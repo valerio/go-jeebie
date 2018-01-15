@@ -10,7 +10,7 @@ import (
 type GpuMode int
 
 const (
-	oamRead  GpuMode = iota
+	oamRead GpuMode = iota
 	vramRead
 	hblank
 	vblank
@@ -22,6 +22,9 @@ const (
 	vramScanlineCycles = 172
 	scanlineCycles     = oamScanlineCycles + vramScanlineCycles + hblankCycles
 )
+
+// addresses for gpu registers
+const lcdcAddress = 0xFF40
 
 type GPU struct {
 	memory      *memory.MMU
@@ -116,5 +119,46 @@ func (g *GPU) drawScanLine() {
 		}
 
 		g.framebuffer.buffer[i] = uint32(color)
+	}
+}
+
+// LCDC (LCD Control) Register bit values
+// Bit 7 - LCD Display Enable (0=Off, 1=On)
+// Bit 6 - Window Tile Map Display Select (0=9800-9BFF, 1=9C00-9FFF)
+// Bit 5 - Window Display Enable (0=Off, 1=On)
+// Bit 4 - BG & Window Tile Data Select (0=8800-97FF, 1=8000-8FFF)
+// Bit 3 - BG Tile Map Display Select (0=9800-9BFF, 1=9C00-9FFF)
+// Bit 2 - OBJ (Sprite) Size (0=8x8, 1=8x16)
+// Bit 1 - OBJ (Sprite) Display Enable (0=Off, 1=On)
+// Bit 0 - BG Display (0=Off, 1=On)
+
+type lcdcBit uint8
+
+const (
+	lcdDisplayEnable lcdcBit = iota
+	windowTileMapSelect
+	windowDisplayEnable
+	bgWindowTileDataSelect
+	bgTileMapDisplaySelect
+	spriteSize
+	spriteDisplayEnable
+	bgDisplay
+)
+
+func (g *GPU) readLCDCVariable(bit lcdcBit) byte {
+	if util.IsBitSet(uint8(bit), g.memory.ReadByte(lcdcAddress)) {
+		return 1
+	}
+
+	return 0
+}
+
+func (g *GPU) setLCDCVariable(bit lcdcBit, shouldSet bool) {
+	lcdcRegister := g.memory.ReadByte(lcdcAddress)
+
+	if shouldSet {
+		lcdcRegister = util.SetBit(uint8(bit), lcdcRegister)
+	} else {
+		lcdcRegister = util.ClearBit(uint8(bit), lcdcRegister)
 	}
 }
