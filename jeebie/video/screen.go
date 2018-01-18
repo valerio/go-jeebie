@@ -28,13 +28,11 @@ func NewScreen() *Screen {
 		width*renderScale,
 		height*renderScale,
 		sdl.WINDOW_SHOWN|sdl.WINDOW_RESIZABLE)
-
 	if err != nil {
 		panic(err)
 	}
 
 	s.renderer, err = sdl.CreateRenderer(s.window, -1, sdl.RENDERER_ACCELERATED)
-
 	if err != nil {
 		panic(err)
 	}
@@ -56,24 +54,21 @@ func (s *Screen) Draw(buffer []uint32) {
 		0x0000FF00,
 		0x00FF0000,
 		0xFF000000)
-
 	if err != nil {
 		panic(err)
 	}
-
 	defer surface.Free()
 
 	surface.Lock()
 	s.renderer.Clear()
-	tex, err := s.renderer.CreateTextureFromSurface(surface)
-	surface.Unlock()
 
+	tex, err := s.renderer.CreateTextureFromSurface(surface)
 	if err != nil {
 		panic(err)
 	}
-
 	defer tex.Destroy()
 
+	surface.Unlock()
 	s.renderer.Copy(tex, nil, nil)
 	s.renderer.Present()
 }
