@@ -122,6 +122,7 @@ func (c *CPU) readImmediate() uint8 {
 func (c *CPU) readImmediateWord() uint16 {
 	nn := c.peekImmediateWord()
 	c.pc.Incr()
+	c.pc.Incr()
 	return nn
 }
 
