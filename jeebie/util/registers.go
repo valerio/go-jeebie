@@ -1,6 +1,6 @@
 package util
 
-// Register8 represents an 8-util register in the CPU
+// Register8 represents an 8-bit register in the CPU
 type Register8 uint8
 
 func (r Register8) Get() uint8 {
@@ -21,7 +21,7 @@ func (r *Register8) Decr() {
 	*r = Register8(value)
 }
 
-// Register16 represents a 16-util register in the CPU
+// Register16 represents a 16-bit register in the CPU
 type Register16 struct {
 	High Register8
 	Low  Register8

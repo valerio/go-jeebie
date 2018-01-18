@@ -77,7 +77,7 @@ func (c *CPU) handleInterrupts() {
 			// interrupt handlers are offset by 8
 			address := uint16(i)*8 + baseInterruptAddress
 
-			// mark as handled by clearing the util at i
+			// mark as handled by clearing the bit at i
 			c.memory.WriteByte(interruptFlagAddress, util.ClearBit(i, firedInterrupts))
 
 			c.pc.Set(address)
