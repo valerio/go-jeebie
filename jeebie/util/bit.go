@@ -46,3 +46,12 @@ func ClearBit(index, byte uint8) uint8 {
 func SetBit(index, byte uint8) uint8 {
 	return byte | (1 << index)
 }
+
+// GetBitValue returns a byte set to the value of the bit at the specified index.
+func GetBitValue(index, byte uint8) uint8 {
+	if IsBitSet(index, byte) {
+		return 1
+	}
+
+	return 0
+}

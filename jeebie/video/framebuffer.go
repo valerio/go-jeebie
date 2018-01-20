@@ -9,6 +9,21 @@ const (
 	BlackColor             = 0xFF000000
 )
 
+func ByteToColor(value byte) GBColor {
+	switch value {
+	case 0:
+		return BlackColor
+	case 1:
+		return DarkGreyColor
+	case 2:
+		return LightGreyColor
+	case 3:
+		return WhiteColor
+	}
+
+	return 0
+}
+
 type FrameBuffer struct {
 	width  uint
 	height uint
