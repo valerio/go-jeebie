@@ -52,7 +52,7 @@ func opcode0x05(cpu *CPU) int {
 //#0x06:
 func opcode0x06(cpu *CPU) int {
 	cpu.bc.SetHigh(cpu.readImmediate())
-	return 0
+	return 8
 }
 
 //RLCA
@@ -96,7 +96,7 @@ func opcode0x0B(cpu *CPU) int {
 //#0x0C:
 func opcode0x0C(cpu *CPU) int {
 	cpu.inc(&cpu.bc.Low)
-	return 0
+	return 4
 }
 
 //DEC C
@@ -124,7 +124,7 @@ func opcode0x0F(cpu *CPU) int {
 //#0x10:
 func opcode0x10(cpu *CPU) int {
 
-	return 0
+	return 4
 }
 
 //LD DE, nn
@@ -180,7 +180,7 @@ func opcode0x17(cpu *CPU) int {
 //#0x18:
 func opcode0x18(cpu *CPU) int {
 
-	return 0
+	return 12
 }
 
 //ADD HL, DE
@@ -236,7 +236,7 @@ func opcode0x1F(cpu *CPU) int {
 //#0x20:
 func opcode0x20(cpu *CPU) int {
 
-	return 0
+	return 8
 }
 
 //LD HL, nn
@@ -286,14 +286,14 @@ func opcode0x26(cpu *CPU) int {
 //#0x27:
 func opcode0x27(cpu *CPU) int {
 
-	return 0
+	return 4
 }
 
 //JR Z, n
 //#0x28:
 func opcode0x28(cpu *CPU) int {
 
-	return 0
+	return 8
 }
 
 //ADD HL, HL
@@ -343,14 +343,14 @@ func opcode0x2E(cpu *CPU) int {
 //#0x2F:
 func opcode0x2F(cpu *CPU) int {
 
-	return 0
+	return 4
 }
 
 //JR NC, n
 //#0x30:
 func opcode0x30(cpu *CPU) int {
 
-	return 0
+	return 8
 }
 
 //LD SP, nn
@@ -364,7 +364,7 @@ func opcode0x31(cpu *CPU) int {
 //#0x32:
 func opcode0x32(cpu *CPU) int {
 
-	return 0
+	return 8
 }
 
 //INC SP
@@ -401,14 +401,14 @@ func opcode0x36(cpu *CPU) int {
 //#0x37:
 func opcode0x37(cpu *CPU) int {
 
-	return 0
+	return 4
 }
 
 //JR C, n
 //#0x38:
 func opcode0x38(cpu *CPU) int {
 
-	return 0
+	return 8
 }
 
 //ADD HL, SP
@@ -458,7 +458,7 @@ func opcode0x3E(cpu *CPU) int {
 //#0x3F:
 func opcode0x3F(cpu *CPU) int {
 
-	return 0
+	return 4
 }
 
 //LD B, B
@@ -837,7 +837,7 @@ func opcode0x75(cpu *CPU) int {
 //#0x76:
 func opcode0x76(cpu *CPU) int {
 
-	return 0
+	return 4
 }
 
 //LD (HL), A
@@ -962,56 +962,56 @@ func opcode0x87(cpu *CPU) int {
 //#0x88:
 func opcode0x88(cpu *CPU) int {
 
-	return 0
+	return 4
 }
 
 //ADC A, C
 //#0x89:
 func opcode0x89(cpu *CPU) int {
 
-	return 0
+	return 4
 }
 
 //ADC A, D
 //#0x8A:
 func opcode0x8A(cpu *CPU) int {
 
-	return 0
+	return 4
 }
 
 //ADC A, E
 //#0x8B:
 func opcode0x8B(cpu *CPU) int {
 
-	return 0
+	return 4
 }
 
 //ADC A, H
 //#0x8C:
 func opcode0x8C(cpu *CPU) int {
 
-	return 0
+	return 4
 }
 
 //ADC A, L
 //#0x8D:
 func opcode0x8D(cpu *CPU) int {
 
-	return 0
+	return 4
 }
 
 //ADC A, (HL)
 //#0x8E:
 func opcode0x8E(cpu *CPU) int {
 
-	return 0
+	return 8
 }
 
 //ADC A, A
 //#0x8F:
 func opcode0x8F(cpu *CPU) int {
 
-	return 0
+	return 4
 }
 
 //SUB A, B
@@ -1074,357 +1074,357 @@ func opcode0x97(cpu *CPU) int {
 //#0x98:
 func opcode0x98(cpu *CPU) int {
 
-	return 0
+	return 4
 }
 
 //SBC A, C
 //#0x99:
 func opcode0x99(cpu *CPU) int {
 
-	return 0
+	return 4
 }
 
 //SBC A, D
 //#0x9A:
 func opcode0x9A(cpu *CPU) int {
 
-	return 0
+	return 4
 }
 
 //SBC A, E
 //#0x9B:
 func opcode0x9B(cpu *CPU) int {
 
-	return 0
+	return 4
 }
 
 //SBC A, H
 //#0x9C:
 func opcode0x9C(cpu *CPU) int {
 
-	return 0
+	return 4
 }
 
 //SBC A, L
 //#0x9D:
 func opcode0x9D(cpu *CPU) int {
 
-	return 0
+	return 4
 }
 
 //SBC A, (HL)
 //#0x9E:
 func opcode0x9E(cpu *CPU) int {
 
-	return 0
+	return 8
 }
 
 //SBC A, A
 //#0x9F:
 func opcode0x9F(cpu *CPU) int {
 
-	return 0
+	return 4
 }
 
 //AND B
 //#0xA0:
 func opcode0xA0(cpu *CPU) int {
 
-	return 0
+	return 4
 }
 
 //AND C
 //#0xA1:
 func opcode0xA1(cpu *CPU) int {
 
-	return 0
+	return 4
 }
 
 //AND D
 //#0xA2:
 func opcode0xA2(cpu *CPU) int {
 
-	return 0
+	return 4
 }
 
 //AND E
 //#0xA3:
 func opcode0xA3(cpu *CPU) int {
 
-	return 0
+	return 4
 }
 
 //AND H
 //#0xA4:
 func opcode0xA4(cpu *CPU) int {
 
-	return 0
+	return 4
 }
 
 //AND L
 //#0xA5:
 func opcode0xA5(cpu *CPU) int {
 
-	return 0
+	return 4
 }
 
 //AND (HL)
 //#0xA6:
 func opcode0xA6(cpu *CPU) int {
 
-	return 0
+	return 8
 }
 
 //AND A
 //#0xA7:
 func opcode0xA7(cpu *CPU) int {
 
-	return 0
+	return 4
 }
 
 //XOR B
 //#0xA8:
 func opcode0xA8(cpu *CPU) int {
 
-	return 0
+	return 4
 }
 
 //XOR C
 //#0xA9:
 func opcode0xA9(cpu *CPU) int {
 
-	return 0
+	return 4
 }
 
 //XOR D
 //#0xAA:
 func opcode0xAA(cpu *CPU) int {
 
-	return 0
+	return 4
 }
 
 //XOR E
 //#0xAB:
 func opcode0xAB(cpu *CPU) int {
 
-	return 0
+	return 4
 }
 
 //XOR H
 //#0xAC:
 func opcode0xAC(cpu *CPU) int {
 
-	return 0
+	return 4
 }
 
 //XOR L
 //#0xAD:
 func opcode0xAD(cpu *CPU) int {
 
-	return 0
+	return 4
 }
 
 //XOR (HL)
 //#0xAE:
 func opcode0xAE(cpu *CPU) int {
 
-	return 0
+	return 8
 }
 
 //XOR A
 //#0xAF:
 func opcode0xAF(cpu *CPU) int {
 
-	return 0
+	return 4
 }
 
 //OR B
 //#0xB0:
 func opcode0xB0(cpu *CPU) int {
 
-	return 0
+	return 4
 }
 
 //OR C
 //#0xB1:
 func opcode0xB1(cpu *CPU) int {
 
-	return 0
+	return 4
 }
 
 //OR D
 //#0xB2:
 func opcode0xB2(cpu *CPU) int {
 
-	return 0
+	return 4
 }
 
 //OR E
 //#0xB3:
 func opcode0xB3(cpu *CPU) int {
 
-	return 0
+	return 4
 }
 
 //OR H
 //#0xB4:
 func opcode0xB4(cpu *CPU) int {
 
-	return 0
+	return 4
 }
 
 //OR L
 //#0xB5:
 func opcode0xB5(cpu *CPU) int {
 
-	return 0
+	return 4
 }
 
 //OR (HL)
 //#0xB6:
 func opcode0xB6(cpu *CPU) int {
 
-	return 0
+	return 8
 }
 
 //OR A
 //#0xB7:
 func opcode0xB7(cpu *CPU) int {
 
-	return 0
+	return 4
 }
 
 //CP B
 //#0xB8:
 func opcode0xB8(cpu *CPU) int {
 
-	return 0
+	return 4
 }
 
 //CP C
 //#0xB9:
 func opcode0xB9(cpu *CPU) int {
 
-	return 0
+	return 4
 }
 
 //CP D
 //#0xBA:
 func opcode0xBA(cpu *CPU) int {
 
-	return 0
+	return 4
 }
 
 //CP E
 //#0xBB:
 func opcode0xBB(cpu *CPU) int {
 
-	return 0
+	return 4
 }
 
 //CP H
 //#0xBC:
 func opcode0xBC(cpu *CPU) int {
 
-	return 0
+	return 4
 }
 
 //CP L
 //#0xBD:
 func opcode0xBD(cpu *CPU) int {
 
-	return 0
+	return 4
 }
 
 //CP (HL)
 //#0xBE:
 func opcode0xBE(cpu *CPU) int {
 
-	return 0
+	return 8
 }
 
 //CP A
 //#0xBF:
 func opcode0xBF(cpu *CPU) int {
 
-	return 0
+	return 4
 }
 
 //RET !FZ
 //#0xC0:
 func opcode0xC0(cpu *CPU) int {
 
-	return 0
+	return 8
 }
 
 //POP BC
 //#0xC1:
 func opcode0xC1(cpu *CPU) int {
 
-	return 0
+	return 12
 }
 
 //JP !FZ, nn
 //#0xC2:
 func opcode0xC2(cpu *CPU) int {
 
-	return 0
+	return 12
 }
 
 //JP nn
 //#0xC3:
 func opcode0xC3(cpu *CPU) int {
 
-	return 0
+	return 16
 }
 
 //CALL !FZ, nn
 //#0xC4:
 func opcode0xC4(cpu *CPU) int {
 
-	return 0
+	return 12
 }
 
 //PUSH BC
 //#0xC5:
 func opcode0xC5(cpu *CPU) int {
 
-	return 0
+	return 16
 }
 
 //ADD, n
 //#0xC6:
 func opcode0xC6(cpu *CPU) int {
 
-	return 0
+	return 8
 }
 
 //RST 0
 //#0xC7:
 func opcode0xC7(cpu *CPU) int {
 
-	return 0
+	return 16
 }
 
 //RET FZ
 //#0xC8:
 func opcode0xC8(cpu *CPU) int {
 
-	return 0
+	return 8
 }
 
 //RET
 //#0xC9:
 func opcode0xC9(cpu *CPU) int {
 
-	return 0
+	return 16
 }
 
 //JP FZ, nn
 //#0xCA:
 func opcode0xCA(cpu *CPU) int {
 
-	return 0
+	return 12
 }
 
 //Secondary OP Code Set:
@@ -1438,55 +1438,54 @@ func opcode0xCB(cpu *CPU) int {
 //#0xCC:
 func opcode0xCC(cpu *CPU) int {
 
-	return 0
+	return 12
 }
 
 //CALL nn
 //#0xCD:
 func opcode0xCD(cpu *CPU) int {
 
-	return 0
+	return 24
 }
 
 //ADC A, n
 //#0xCE:
 func opcode0xCE(cpu *CPU) int {
 
-	return 0
+	return 8
 }
 
 //RST 0x8
 //#0xCF:
 func opcode0xCF(cpu *CPU) int {
 
-	return 0
+	return 16
 }
 
 //RET !FC
 //#0xD0:
 func opcode0xD0(cpu *CPU) int {
 
-	return 0
+	return 8
 }
 
 //POP DE
 //#0xD1:
 func opcode0xD1(cpu *CPU) int {
 
-	return 0
+	return 12
 }
 
 //JP !FC, nn
 //#0xD2:
 func opcode0xD2(cpu *CPU) int {
 
-	return 0
+	return 12
 }
 
 //0xD3 - Illegal
 //#0xD3:
 func opcode0xD3(cpu *CPU) int {
-
 	return 0
 }
 
@@ -1494,55 +1493,54 @@ func opcode0xD3(cpu *CPU) int {
 //#0xD4:
 func opcode0xD4(cpu *CPU) int {
 
-	return 0
+	return 12
 }
 
 //PUSH DE
 //#0xD5:
 func opcode0xD5(cpu *CPU) int {
 
-	return 0
+	return 16
 }
 
 //SUB A, n
 //#0xD6:
 func opcode0xD6(cpu *CPU) int {
 
-	return 0
+	return 8
 }
 
 //RST 0x10
 //#0xD7:
 func opcode0xD7(cpu *CPU) int {
 
-	return 0
+	return 16
 }
 
 //RET FC
 //#0xD8:
 func opcode0xD8(cpu *CPU) int {
 
-	return 0
+	return 8
 }
 
 //RETI
 //#0xD9:
 func opcode0xD9(cpu *CPU) int {
 
-	return 0
+	return 16
 }
 
 //JP FC, nn
 //#0xDA:
 func opcode0xDA(cpu *CPU) int {
 
-	return 0
+	return 12
 }
 
 //0xDB - Illegal
 //#0xDB:
 func opcode0xDB(cpu *CPU) int {
-
 	return 0
 }
 
@@ -1550,42 +1548,39 @@ func opcode0xDB(cpu *CPU) int {
 //#0xDC:
 func opcode0xDC(cpu *CPU) int {
 
-	return 0
+	return 12
 }
 
 //0xDD - Illegal
 //#0xDD:
 func opcode0xDD(cpu *CPU) int {
-
 	return 0
 }
 
 //SBC A, n
 //#0xDE:
 func opcode0xDE(cpu *CPU) int {
-
-	return 0
+	return 8
 }
 
 //RST 0x18
 //#0xDF:
 func opcode0xDF(cpu *CPU) int {
-
-	return 0
+	return 16
 }
 
 //LDH (n), A
 //#0xE0:
 func opcode0xE0(cpu *CPU) int {
 
-	return 0
+	return 12
 }
 
 //POP HL
 //#0xE1:
 func opcode0xE1(cpu *CPU) int {
 
-	return 0
+	return 12
 }
 
 //LD (0xFF00 + C), A
@@ -1599,14 +1594,12 @@ func opcode0xE2(cpu *CPU) int {
 //0xE3 - Illegal
 //#0xE3:
 func opcode0xE3(cpu *CPU) int {
-
 	return 0
 }
 
 //0xE4 - Illegal
 //#0xE4:
 func opcode0xE4(cpu *CPU) int {
-
 	return 0
 }
 
@@ -1614,21 +1607,21 @@ func opcode0xE4(cpu *CPU) int {
 //#0xE5:
 func opcode0xE5(cpu *CPU) int {
 
-	return 0
+	return 16
 }
 
 //AND n
 //#0xE6:
 func opcode0xE6(cpu *CPU) int {
 
-	return 0
+	return 8
 }
 
 //RST 0x20
 //#0xE7:
 func opcode0xE7(cpu *CPU) int {
 
-	return 0
+	return 16
 }
 
 //ADD SP, n
@@ -1653,7 +1646,7 @@ func opcode0xE8(cpu *CPU) int {
 //#0xE9:
 func opcode0xE9(cpu *CPU) int {
 
-	return 0
+	return 4
 }
 
 //LD (nn), A
@@ -1666,21 +1659,18 @@ func opcode0xEA(cpu *CPU) int {
 //0xEB - Illegal
 //#0xEB:
 func opcode0xEB(cpu *CPU) int {
-
 	return 0
 }
 
 //0xEC - Illegal
 //#0xEC:
 func opcode0xEC(cpu *CPU) int {
-
 	return 0
 }
 
 //0xED - Illegal
 //#0xED:
 func opcode0xED(cpu *CPU) int {
-
 	return 0
 }
 
@@ -1688,28 +1678,28 @@ func opcode0xED(cpu *CPU) int {
 //#0xEE:
 func opcode0xEE(cpu *CPU) int {
 
-	return 0
+	return 4
 }
 
 //RST 0x28
 //#0xEF:
 func opcode0xEF(cpu *CPU) int {
 
-	return 0
+	return 16
 }
 
 //LDH A, (n)
 //#0xF0:
 func opcode0xF0(cpu *CPU) int {
 
-	return 0
+	return 12
 }
 
 //POP AF
 //#0xF1:
 func opcode0xF1(cpu *CPU) int {
 
-	return 0
+	return 12
 }
 
 //LD A, (0xFF00 + C)
@@ -1723,13 +1713,12 @@ func opcode0xF2(cpu *CPU) int {
 //#0xF3:
 func opcode0xF3(cpu *CPU) int {
 
-	return 0
+	return 4
 }
 
 //0xF4 - Illegal
 //#0xF4:
 func opcode0xF4(cpu *CPU) int {
-
 	return 0
 }
 
@@ -1737,28 +1726,28 @@ func opcode0xF4(cpu *CPU) int {
 //#0xF5:
 func opcode0xF5(cpu *CPU) int {
 
-	return 0
+	return 16
 }
 
 //OR n
 //#0xF6:
 func opcode0xF6(cpu *CPU) int {
 
-	return 0
+	return 8
 }
 
 //RST 0x30
 //#0xF7:
 func opcode0xF7(cpu *CPU) int {
 
-	return 0
+	return 16
 }
 
 //LDHL SP, n
 //#0xF8:
 func opcode0xF8(cpu *CPU) int {
 
-	return 0
+	return 12
 }
 
 //LD SP, HL
@@ -1779,20 +1768,18 @@ func opcode0xFA(cpu *CPU) int {
 //#0xFB:
 func opcode0xFB(cpu *CPU) int {
 
-	return 0
+	return 4
 }
 
 //0xFC - Illegal
 //#0xFC:
 func opcode0xFC(cpu *CPU) int {
-
 	return 0
 }
 
 //0xFD - Illegal
 //#0xFD:
 func opcode0xFD(cpu *CPU) int {
-
 	return 0
 }
 
@@ -1800,12 +1787,12 @@ func opcode0xFD(cpu *CPU) int {
 //#0xFE:
 func opcode0xFE(cpu *CPU) int {
 
-	return 0
+	return 8
 }
 
 //RST 0x38
 //#0xFF:
 func opcode0xFF(cpu *CPU) int {
 
-	return 0
+	return 16
 }
