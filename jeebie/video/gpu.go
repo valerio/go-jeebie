@@ -25,6 +25,16 @@ const (
 
 // addresses for gpu registers
 const lcdcAddress = 0xFF40
+const statAddress = 0xFF41
+const scyAddress = 0xFF42
+const scxAddress = 0xFF43
+const lyAddress = 0xFF44
+const lycAddress = 0xFF45
+const bgpAddress = 0xFF47
+const obp0Address = 0xFF48
+const obp1Address = 0xFF49
+const wyAddress = 0xFF4A
+const wxAddress = 0xFF4B
 
 type GPU struct {
 	memory      *memory.MMU
@@ -75,6 +85,7 @@ func (g *GPU) Tick(cycles int) {
 				// set vblank interrupt (bit 0)
 				interruptFlags := g.memory.ReadByte(0xFFFF)
 				g.memory.WriteByte(0xFFFF, util.SetBit(0, interruptFlags))
+				g.drawFrame()
 			} else {
 				g.mode = oamRead
 			}
