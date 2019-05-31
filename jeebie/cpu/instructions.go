@@ -1,6 +1,6 @@
 package cpu
 
-import "github.com/valep27/go-jeebie/jeebie/util"
+import "github.com/valerio/go-jeebie/jeebie/util"
 
 func (c *CPU) pushStack(r util.Register16) {
 	c.sp.Decr()

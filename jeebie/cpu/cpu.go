@@ -1,8 +1,8 @@
 package cpu
 
 import (
-	"github.com/valep27/go-jeebie/jeebie/memory"
-	"github.com/valep27/go-jeebie/jeebie/util"
+	"github.com/valerio/go-jeebie/jeebie/memory"
+	"github.com/valerio/go-jeebie/jeebie/util"
 )
 
 // Flag is one of the 4 possible flags used in the flag register (high part of AF)

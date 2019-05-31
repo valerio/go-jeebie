@@ -3,7 +3,7 @@ package memory
 import (
 	"fmt"
 
-	"github.com/valep27/go-jeebie/jeebie/util"
+	"github.com/valerio/go-jeebie/jeebie/util"
 )
 
 const titleLength = 11

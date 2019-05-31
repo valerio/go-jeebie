@@ -3,8 +3,8 @@ package video
 import (
 	"math/rand"
 
-	"github.com/valep27/go-jeebie/jeebie/memory"
-	"github.com/valep27/go-jeebie/jeebie/util"
+	"github.com/valerio/go-jeebie/jeebie/memory"
+	"github.com/valerio/go-jeebie/jeebie/util"
 )
 
 type GpuMode int
@@ -85,7 +85,7 @@ func (g *GPU) Tick(cycles int) {
 				// set vblank interrupt (bit 0)
 				interruptFlags := g.memory.ReadByte(0xFFFF)
 				g.memory.WriteByte(0xFFFF, util.SetBit(0, interruptFlags))
-				g.drawFrame()
+				// g.drawFrame()
 			} else {
 				g.mode = oamRead
 			}

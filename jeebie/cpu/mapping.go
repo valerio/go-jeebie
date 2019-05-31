@@ -1,6 +1,6 @@
 package cpu
 
-import "github.com/valep27/go-jeebie/jeebie/util"
+import "github.com/valerio/go-jeebie/jeebie/util"
 
 // Opcode represents a function that executes an opcode
 type Opcode func(*CPU) int

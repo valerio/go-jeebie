@@ -4,9 +4,9 @@ import (
 	"io/ioutil"
 	"log"
 
-	"github.com/valep27/go-jeebie/jeebie/cpu"
-	"github.com/valep27/go-jeebie/jeebie/memory"
-	"github.com/valep27/go-jeebie/jeebie/video"
+	"github.com/valerio/go-jeebie/jeebie/cpu"
+	"github.com/valerio/go-jeebie/jeebie/memory"
+	"github.com/valerio/go-jeebie/jeebie/video"
 	"github.com/veandco/go-sdl2/sdl"
 )
 

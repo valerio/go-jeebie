@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/valep27/go-jeebie/jeebie"
+	"github.com/valerio/go-jeebie/jeebie"
 	"github.com/urfave/cli"
 	"os"
 )
