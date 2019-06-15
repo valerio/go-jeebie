@@ -130,7 +130,14 @@ func (c *CPU) sub(value uint8) {
 	c.setFlagToCondition(halfCarryFlag, (a&0xF)-(value&0xF) < 0)
 }
 
+// jr performs a jump using the immediate value (byte)
 func (c *CPU) jr() {
 	n := uint16(c.peekImmediate())
-	c.pc.Set(c.pc.Get() + n + 1)
+	c.pc.Set(c.pc.Get() + n)
+}
+
+// jp performs a jump using the immediate value (16 bit word)
+func (c *CPU) jp() {
+	nn := c.peekImmediateWord()
+	c.pc.Set(c.pc.Get() + nn)
 }

@@ -97,8 +97,8 @@ func (g *GPU) Tick(cycles int) {
 			g.cycles %= scanlineCycles
 
 			if g.line == 154 {
-				//g.drawNoise()
-				g.drawScanline()
+				g.drawNoise()
+				// g.drawScanline()
 				g.screen.Draw(g.framebuffer.ToSlice())
 				g.line = 0
 				g.mode = oamRead
