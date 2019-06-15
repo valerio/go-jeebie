@@ -123,7 +123,7 @@ func opcode0x0F(cpu *CPU) int {
 //STOP
 //#0x10:
 func opcode0x10(cpu *CPU) int {
-
+	cpu.stopped = true
 	return 4
 }
 

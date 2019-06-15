@@ -33,6 +33,7 @@ type CPU struct {
 
 	interruptsEnabled bool
 	currentOpcode     uint16
+	stopped           bool
 }
 
 // New returns an uninitialized CPU instance
