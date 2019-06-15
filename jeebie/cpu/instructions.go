@@ -129,3 +129,8 @@ func (c *CPU) sub(value uint8) {
 	c.setFlagToCondition(carryFlag, a < value)
 	c.setFlagToCondition(halfCarryFlag, (a&0xF)-(value&0xF) < 0)
 }
+
+func (c *CPU) jr() {
+	n := uint16(c.peekImmediate())
+	c.pc.Set(c.pc.Get() + n + 1)
+}
