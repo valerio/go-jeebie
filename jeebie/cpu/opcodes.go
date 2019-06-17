@@ -352,6 +352,8 @@ func opcode0x2E(cpu *CPU) int {
 func opcode0x2F(cpu *CPU) int {
 	value := cpu.af.GetHigh()
 	cpu.af.SetHigh(value ^ 0xFF)
+	cpu.setFlag(halfCarryFlag)
+	cpu.setFlag(subFlag)
 	return 4
 }
 
