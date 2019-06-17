@@ -378,7 +378,8 @@ func opcode0x31(cpu *CPU) int {
 //LDD (HL), A
 //#0x32:
 func opcode0x32(cpu *CPU) int {
-
+	cpu.memory.WriteByte(cpu.hl.Get(), cpu.af.GetHigh())
+	cpu.hl.Decr()
 	return 8
 }
 
