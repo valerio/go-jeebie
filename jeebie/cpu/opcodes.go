@@ -350,7 +350,8 @@ func opcode0x2E(cpu *CPU) int {
 //CPL
 //#0x2F:
 func opcode0x2F(cpu *CPU) int {
-
+	value := cpu.af.GetHigh()
+	cpu.af.SetHigh(value ^ 0xFF)
 	return 4
 }
 
@@ -1665,8 +1666,8 @@ func opcode0xE8(cpu *CPU) int {
 
 	cpu.resetFlag(zeroFlag)
 	cpu.resetFlag(subFlag)
-	cpu.setFlagToCondition(halfCarryFlag, ((value ^ n ^ (result & 0xFFFF)) & 0x10) == 0x10)
-	cpu.setFlagToCondition(carryFlag, ((value ^ n ^ (result & 0xFFFF)) & 0x100) == 0x100)
+	cpu.setFlagToCondition(halfCarryFlag, ((value^n^(result&0xFFFF))&0x10) == 0x10)
+	cpu.setFlagToCondition(carryFlag, ((value^n^(result&0xFFFF))&0x100) == 0x100)
 
 	cpu.sp.Set(uint16(result))
 
