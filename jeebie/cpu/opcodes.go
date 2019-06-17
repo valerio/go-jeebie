@@ -235,7 +235,7 @@ func opcode0x1F(cpu *CPU) int {
 //JR NZ, n
 //#0x20:
 func opcode0x20(cpu *CPU) int {
-	if (!cpu.isSetFlag(zeroFlag)) {
+	if !cpu.isSetFlag(zeroFlag) {
 		cpu.jr()
 		return 12
 	}
@@ -296,7 +296,7 @@ func opcode0x27(cpu *CPU) int {
 //JR Z, n
 //#0x28:
 func opcode0x28(cpu *CPU) int {
-	if (cpu.isSetFlag(zeroFlag)) {
+	if cpu.isSetFlag(zeroFlag) {
 		cpu.jr()
 		return 12
 	}
@@ -357,7 +357,7 @@ func opcode0x2F(cpu *CPU) int {
 //JR NC, n
 //#0x30:
 func opcode0x30(cpu *CPU) int {
-	if (!cpu.isSetFlag(carryFlag)) {
+	if !cpu.isSetFlag(carryFlag) {
 		cpu.jr()
 		return 12
 	}
@@ -419,7 +419,7 @@ func opcode0x37(cpu *CPU) int {
 //JR C, n
 //#0x38:
 func opcode0x38(cpu *CPU) int {
-	if (cpu.isSetFlag(carryFlag)) {
+	if cpu.isSetFlag(carryFlag) {
 		cpu.jr()
 		return 12
 	}
@@ -1383,6 +1383,10 @@ func opcode0xC1(cpu *CPU) int {
 //JP !FZ, nn
 //#0xC2:
 func opcode0xC2(cpu *CPU) int {
+	if !cpu.isSetFlag(zeroFlag) {
+		cpu.jp()
+		return 16
+	}
 
 	return 12
 }
@@ -1390,7 +1394,7 @@ func opcode0xC2(cpu *CPU) int {
 //JP nn
 //#0xC3:
 func opcode0xC3(cpu *CPU) int {
-
+	cpu.jp()
 	return 16
 }
 
@@ -1439,6 +1443,10 @@ func opcode0xC9(cpu *CPU) int {
 //JP FZ, nn
 //#0xCA:
 func opcode0xCA(cpu *CPU) int {
+	if cpu.isSetFlag(zeroFlag) {
+		cpu.jp()
+		return 16
+	}
 
 	return 12
 }
@@ -1446,7 +1454,6 @@ func opcode0xCA(cpu *CPU) int {
 //Secondary OP Code Set:
 //#0xCB:
 func opcode0xCB(cpu *CPU) int {
-
 	return 0
 }
 
@@ -1495,6 +1502,10 @@ func opcode0xD1(cpu *CPU) int {
 //JP !FC, nn
 //#0xD2:
 func opcode0xD2(cpu *CPU) int {
+	if !cpu.isSetFlag(carryFlag) {
+		cpu.jp()
+		return 16
+	}
 
 	return 12
 }
@@ -1550,6 +1561,10 @@ func opcode0xD9(cpu *CPU) int {
 //JP FC, nn
 //#0xDA:
 func opcode0xDA(cpu *CPU) int {
+	if cpu.isSetFlag(carryFlag) {
+		cpu.jp()
+		return 16
+	}
 
 	return 12
 }
@@ -1661,7 +1676,7 @@ func opcode0xE8(cpu *CPU) int {
 //JP, (HL)
 //#0xE9:
 func opcode0xE9(cpu *CPU) int {
-
+	cpu.pc = cpu.hl
 	return 4
 }
 
