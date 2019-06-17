@@ -415,7 +415,9 @@ func opcode0x36(cpu *CPU) int {
 //SCF
 //#0x37:
 func opcode0x37(cpu *CPU) int {
-
+	cpu.setFlag(carryFlag)
+	cpu.resetFlag(subFlag)
+	cpu.resetFlag(halfCarryFlag)
 	return 4
 }
 
