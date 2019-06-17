@@ -479,7 +479,9 @@ func opcode0x3E(cpu *CPU) int {
 //CCF
 //#0x3F:
 func opcode0x3F(cpu *CPU) int {
-
+	cpu.resetFlag(subFlag)
+	cpu.resetFlag(halfCarryFlag)
+	cpu.setFlagToCondition(carryFlag, !cpu.isSetFlag(carryFlag))
 	return 4
 }
 
