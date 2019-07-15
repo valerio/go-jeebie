@@ -17,8 +17,8 @@ const (
 
 const (
 	baseInterruptAddress   uint16 = 0x40
-	interruptEnableAddress        = 0xFFFF
-	interruptFlagAddress          = 0xFF0F
+	interruptEnableAddress uint16 = 0xFFFF
+	interruptFlagAddress   uint16 = 0xFF0F
 )
 
 // CPU is the main struct holding Z80 state
