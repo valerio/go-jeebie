@@ -3,7 +3,7 @@ package memory
 import (
 	"fmt"
 
-	"github.com/valerio/go-jeebie/jeebie/util"
+	"github.com/valerio/go-jeebie/jeebie/bit"
 )
 
 const titleLength = 11
@@ -53,8 +53,8 @@ func NewCartridgeWithData(bytes []byte) *Cartridge {
 	cart := &Cartridge{
 		data:           make([]byte, len(bytes)),
 		title:          string(titleBytes),
-		headerChecksum: util.CombineBytes(bytes[headerChecksumAddress+1], bytes[headerChecksumAddress]),
-		globalChecksum: util.CombineBytes(bytes[globalChecksumAddress+1], bytes[globalChecksumAddress]),
+		headerChecksum: bit.Combine(bytes[headerChecksumAddress], bytes[headerChecksumAddress+1]),
+		globalChecksum: bit.Combine(bytes[globalChecksumAddress], bytes[globalChecksumAddress+1]),
 		version:        bytes[versionNumberAddress],
 		cartType:       bytes[cartridgeTypeAddress],
 		romSize:        bytes[romSizeAddress],

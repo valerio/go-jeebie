@@ -4,7 +4,7 @@ import (
 	"math/rand"
 
 	"github.com/valerio/go-jeebie/jeebie/memory"
-	"github.com/valerio/go-jeebie/jeebie/util"
+	"github.com/valerio/go-jeebie/jeebie/bit"
 )
 
 type GpuMode int
@@ -86,7 +86,7 @@ func (g *GPU) Tick(cycles int) {
 				g.mode = vblank
 				// set vblank interrupt (bit 0)
 				interruptFlags := g.memory.ReadByte(0xFFFF)
-				g.memory.WriteByte(0xFFFF, util.SetBit(0, interruptFlags))
+				g.memory.WriteByte(0xFFFF, bit.Set(0, interruptFlags))
 				// g.drawFrame()
 			} else {
 				g.mode = oamRead
@@ -213,7 +213,7 @@ func newTile(address uint16, mmu *memory.MMU) *Tile {
 		// compose colors pixel by pixel
 		for pixel := 0; pixel < 8; pixel++ {
 			pixelIndex := 7 - uint8(pixel)
-			pixelColorValue := util.GetBitValue(pixelIndex, highPixelLine)<<1 | util.GetBitValue(pixelIndex, lowPixelLine)
+			pixelColorValue := bit.GetBitValue(pixelIndex, highPixelLine)<<1 | bit.GetBitValue(pixelIndex, lowPixelLine)
 
 			buffer[pixel*8+tileLine] = ByteToColor(pixelColorValue)
 		}
@@ -238,10 +238,10 @@ func (t *Tile) getPixel(x, y uint) GBColor {
 // Bit 1 - OBJ (Sprite) Display Enable (0=Off, 1=On)
 // Bit 0 - BG Display (0=Off, 1=On)
 
-type lcdcBit uint8
+type lcdcFlag uint8
 
 const (
-	lcdDisplayEnable       lcdcBit = 7
+	lcdDisplayEnable       lcdcFlag = 7
 	windowTileMapSelect            = 6
 	windowDisplayEnable            = 5
 	bgWindowTileDataSelect         = 4
@@ -251,20 +251,20 @@ const (
 	bgDisplay                      = 0
 )
 
-func (g *GPU) readLCDCVariable(bit lcdcBit) byte {
-	if util.IsBitSet(uint8(bit), g.memory.ReadByte(lcdcAddress)) {
+func (g *GPU) readLCDCVariable(flag lcdcFlag) byte {
+	if bit.IsSet(uint8(flag), g.memory.ReadByte(lcdcAddress)) {
 		return 1
 	}
 
 	return 0
 }
 
-func (g *GPU) setLCDCVariable(bit lcdcBit, shouldSet bool) {
+func (g *GPU) setLCDCVariable(flag lcdcFlag, shouldSet bool) {
 	lcdcRegister := g.memory.ReadByte(lcdcAddress)
 
 	if shouldSet {
-		lcdcRegister = util.SetBit(uint8(bit), lcdcRegister)
+		lcdcRegister = bit.Set(uint8(flag), lcdcRegister)
 	} else {
-		lcdcRegister = util.ClearBit(uint8(bit), lcdcRegister)
+		lcdcRegister = bit.Clear(uint8(flag), lcdcRegister)
 	}
 }

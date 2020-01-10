@@ -2,6 +2,8 @@ package cpu
 
 import "fmt"
 
+import "github.com/valerio/go-jeebie/jeebie/bit"
+
 func unimplemented(cpu *CPU) int {
 	msg := fmt.Sprintf("Unimplemented opcode 0x%X was called.", cpu.currentOpcode)
 	panic(msg)
@@ -16,49 +18,49 @@ func opcode0x00(_ *CPU) int {
 //LD BC, nn
 //#0x01:
 func opcode0x01(cpu *CPU) int {
-	cpu.bc.Set(cpu.readImmediateWord())
+	cpu.setBC(cpu.readImmediateWord())
 	return 12
 }
 
 //LD (BC), A
 //#0x02:
 func opcode0x02(cpu *CPU) int {
-	cpu.memory.WriteByte(cpu.bc.Get(), cpu.af.GetHigh())
+	cpu.memory.WriteByte(cpu.getBC(), cpu.a)
 	return 8
 }
 
 //INC BC
 //#0x03:
 func opcode0x03(cpu *CPU) int {
-	cpu.bc.Incr()
+	cpu.setBC(cpu.getBC() + 1)
 	return 8
 }
 
 //INC B
 //#0x04:
 func opcode0x04(cpu *CPU) int {
-	cpu.inc(&cpu.bc.High)
+	cpu.inc(&cpu.b)
 	return 4
 }
 
 //DEC B
 //#0x05:
 func opcode0x05(cpu *CPU) int {
-	cpu.dec(&cpu.bc.High)
+	cpu.dec(&cpu.b)
 	return 4
 }
 
 //LD B, n
 //#0x06:
 func opcode0x06(cpu *CPU) int {
-	cpu.bc.SetHigh(cpu.readImmediate())
+	cpu.b = cpu.readImmediate()
 	return 8
 }
 
 //RLCA
 //#0x07:
 func opcode0x07(cpu *CPU) int {
-	cpu.rlc(&cpu.af.High)
+	cpu.rlc(&cpu.a)
 	return 4
 }
 
@@ -66,57 +68,57 @@ func opcode0x07(cpu *CPU) int {
 //#0x08:
 func opcode0x08(cpu *CPU) int {
 	addr := cpu.readImmediateWord()
-	cpu.memory.WriteByte(addr, cpu.sp.GetLow())
-	cpu.memory.WriteByte(addr+1, cpu.sp.GetHigh())
+	cpu.memory.WriteByte(addr, bit.Low(cpu.sp))
+	cpu.memory.WriteByte(addr+1, bit.High(cpu.sp))
 	return 20
 }
 
 //ADD HL, BC
 //#0x09:
 func opcode0x09(cpu *CPU) int {
-	cpu.addToHL(cpu.bc)
+	cpu.addToHL(cpu.getBC())
 	return 8
 }
 
 //LD A, (BC)
 //#0x0A:
 func opcode0x0A(cpu *CPU) int {
-	cpu.af.SetLow(cpu.memory.ReadByte(cpu.bc.Get()))
+	cpu.a = cpu.memory.ReadByte(cpu.getBC())
 	return 8
 }
 
 //DEC BC
 //#0x0B:
 func opcode0x0B(cpu *CPU) int {
-	cpu.bc.Decr()
+	cpu.setBC(cpu.getBC() - 1)
 	return 8
 }
 
 //INC C
 //#0x0C:
 func opcode0x0C(cpu *CPU) int {
-	cpu.inc(&cpu.bc.Low)
+	cpu.inc(&cpu.c)
 	return 4
 }
 
 //DEC C
 //#0x0D:
 func opcode0x0D(cpu *CPU) int {
-	cpu.dec(&cpu.bc.Low)
+	cpu.dec(&cpu.c)
 	return 4
 }
 
 //LD C, n
 //#0x0E:
 func opcode0x0E(cpu *CPU) int {
-	cpu.bc.SetHigh(cpu.readImmediate())
+	cpu.c = cpu.readImmediate()
 	return 8
 }
 
 //RRCA
 //#0x0F:
 func opcode0x0F(cpu *CPU) int {
-	cpu.rrc(&cpu.af.High)
+	cpu.rrc(&cpu.a)
 	return 4
 }
 
@@ -130,49 +132,49 @@ func opcode0x10(cpu *CPU) int {
 //LD DE, nn
 //#0x11:
 func opcode0x11(cpu *CPU) int {
-	cpu.de.Set(cpu.readImmediateWord())
+	cpu.setDE(cpu.readImmediateWord())
 	return 12
 }
 
 //LD (DE), A
 //#0x12:
 func opcode0x12(cpu *CPU) int {
-	cpu.memory.WriteByte(cpu.de.Get(), cpu.af.GetLow())
+	cpu.memory.WriteByte(cpu.getDE(), cpu.a)
 	return 8
 }
 
 //INC DE
 //#0x13:
 func opcode0x13(cpu *CPU) int {
-	cpu.de.Incr()
+	cpu.setDE(cpu.getDE() + 1)
 	return 8
 }
 
 //INC D
 //#0x14:
 func opcode0x14(cpu *CPU) int {
-	cpu.inc(&cpu.de.High)
+	cpu.inc(&cpu.d)
 	return 4
 }
 
 //DEC D
 //#0x15:
 func opcode0x15(cpu *CPU) int {
-	cpu.dec(&cpu.de.High)
+	cpu.dec(&cpu.d)
 	return 4
 }
 
 //LD D, n
 //#0x16:
 func opcode0x16(cpu *CPU) int {
-	cpu.de.SetLow(cpu.readImmediate())
+	cpu.d = cpu.readImmediate()
 	return 8
 }
 
 //RLA
 //#0x17:
 func opcode0x17(cpu *CPU) int {
-	cpu.rl(&cpu.af.High)
+	cpu.rl(&cpu.a)
 	return 4
 }
 
@@ -186,49 +188,49 @@ func opcode0x18(cpu *CPU) int {
 //ADD HL, DE
 //#0x19:
 func opcode0x19(cpu *CPU) int {
-	cpu.addToHL(cpu.de)
+	cpu.addToHL(cpu.getDE())
 	return 8
 }
 
 //LD A, (DE)
 //#0x1A:
 func opcode0x1A(cpu *CPU) int {
-	cpu.af.SetLow(cpu.memory.ReadByte(cpu.de.Get()))
+	cpu.a = cpu.memory.ReadByte(cpu.getDE())
 	return 8
 }
 
 //DEC DE
 //#0x1B:
 func opcode0x1B(cpu *CPU) int {
-	cpu.de.Decr()
+	cpu.setDE(cpu.getDE())
 	return 8
 }
 
 //INC E
 //#0x1C:
 func opcode0x1C(cpu *CPU) int {
-	cpu.inc(&cpu.de.Low)
+	cpu.inc(&cpu.e)
 	return 4
 }
 
 //DEC E
 //#0x1D:
 func opcode0x1D(cpu *CPU) int {
-	cpu.dec(&cpu.de.Low)
+	cpu.dec(&cpu.e)
 	return 4
 }
 
 //LD E, n
 //#0x1E:
 func opcode0x1E(cpu *CPU) int {
-	cpu.de.SetHigh(cpu.readImmediate())
+	cpu.e = cpu.readImmediate()
 	return 8
 }
 
 //RRA
 //#0x1F:
 func opcode0x1F(cpu *CPU) int {
-	cpu.rr(&cpu.af.High)
+	cpu.rr(&cpu.a)
 	return 4
 }
 
@@ -246,43 +248,43 @@ func opcode0x20(cpu *CPU) int {
 //LD HL, nn
 //#0x21:
 func opcode0x21(cpu *CPU) int {
-	cpu.hl.Set(cpu.readImmediateWord())
+	cpu.setHL(cpu.readImmediateWord())
 	return 12
 }
 
 //LDI (HL), A
 //#0x22:
 func opcode0x22(cpu *CPU) int {
-	cpu.memory.WriteByte(cpu.hl.Get(), cpu.af.GetLow())
-	cpu.hl.Incr()
+	cpu.memory.WriteByte(cpu.getHL(), cpu.a)
+	cpu.setHL(cpu.getHL() + 1)
 	return 8
 }
 
 //INC HL
 //#0x23:
 func opcode0x23(cpu *CPU) int {
-	cpu.hl.Incr()
+	cpu.setHL(cpu.getHL() + 1)
 	return 8
 }
 
 //INC H
 //#0x24:
 func opcode0x24(cpu *CPU) int {
-	cpu.inc(&cpu.hl.High)
+	cpu.inc(&cpu.h)
 	return 4
 }
 
 //DEC H
 //#0x25:
 func opcode0x25(cpu *CPU) int {
-	cpu.dec(&cpu.hl.High)
+	cpu.dec(&cpu.h)
 	return 4
 }
 
 //LD H, n
 //#0x26:
 func opcode0x26(cpu *CPU) int {
-	cpu.hl.SetLow(cpu.readImmediate())
+	cpu.h = cpu.readImmediate()
 	return 8
 }
 
@@ -307,51 +309,51 @@ func opcode0x28(cpu *CPU) int {
 //ADD HL, HL
 //#0x29:
 func opcode0x29(cpu *CPU) int {
-	cpu.addToHL(cpu.hl)
+	cpu.addToHL(cpu.getHL())
 	return 8
 }
 
 //LDI A, (HL)
 //#0x2A:
 func opcode0x2A(cpu *CPU) int {
-	cpu.af.SetLow(cpu.memory.ReadByte(cpu.hl.Get()))
-	cpu.hl.Incr()
+	cpu.a = cpu.memory.ReadByte(cpu.getHL())
+	cpu.setHL(cpu.getHL() + 1)
 	return 8
 }
 
 //DEC HL
 //#0x2B:
 func opcode0x2B(cpu *CPU) int {
-	cpu.hl.Decr()
+	cpu.setHL(cpu.getHL() - 1)
 	return 8
 }
 
 //INC L
 //#0x2C:
 func opcode0x2C(cpu *CPU) int {
-	cpu.inc(&cpu.hl.Low)
+	cpu.inc(&cpu.l)
 	return 4
 }
 
 //DEC L
 //#0x2D:
 func opcode0x2D(cpu *CPU) int {
-	cpu.dec(&cpu.hl.Low)
+	cpu.dec(&cpu.l)
 	return 4
 }
 
 //LD L, n
 //#0x2E:
 func opcode0x2E(cpu *CPU) int {
-	cpu.hl.SetHigh(cpu.readImmediate())
+	cpu.l = cpu.readImmediate()
 	return 8
 }
 
 //CPL
 //#0x2F:
 func opcode0x2F(cpu *CPU) int {
-	value := cpu.af.GetHigh()
-	cpu.af.SetHigh(value ^ 0xFF)
+	value := cpu.a
+	cpu.a = value ^ 0xFF
 	cpu.setFlag(halfCarryFlag)
 	cpu.setFlag(subFlag)
 	return 4
@@ -371,45 +373,47 @@ func opcode0x30(cpu *CPU) int {
 //LD SP, nn
 //#0x31:
 func opcode0x31(cpu *CPU) int {
-	cpu.sp.Set(cpu.readImmediateWord())
+	cpu.sp = cpu.readImmediateWord()
 	return 12
 }
 
 //LDD (HL), A
 //#0x32:
 func opcode0x32(cpu *CPU) int {
-	cpu.memory.WriteByte(cpu.hl.Get(), cpu.af.GetHigh())
-	cpu.hl.Decr()
+	cpu.memory.WriteByte(cpu.getHL(), cpu.a)
+	cpu.setHL(cpu.getHL() - 1)
 	return 8
 }
 
 //INC SP
 //#0x33:
 func opcode0x33(cpu *CPU) int {
-	cpu.sp.Incr()
+	cpu.sp++
 	return 4
 }
 
 //INC (HL)
 //#0x34:
 func opcode0x34(cpu *CPU) int {
-	value := cpu.memory.ReadByte(cpu.hl.Get())
-	cpu.memory.WriteByte(cpu.hl.Get(), value+1)
+	addr := cpu.getHL()
+	value := cpu.memory.ReadByte(addr)
+	cpu.memory.WriteByte(addr, value+1)
 	return 12
 }
 
 //DEC (HL)
 //#0x35:
 func opcode0x35(cpu *CPU) int {
-	value := cpu.memory.ReadByte(cpu.hl.Get())
-	cpu.memory.WriteByte(cpu.hl.Get(), value-1)
+	addr := cpu.getHL()
+	value := cpu.memory.ReadByte(addr)
+	cpu.memory.WriteByte(addr, value-1)
 	return 12
 }
 
 //LD (HL), n
 //#0x36:
 func opcode0x36(cpu *CPU) int {
-	cpu.memory.WriteByte(cpu.hl.Get(), cpu.readImmediate())
+	cpu.memory.WriteByte(cpu.getHL(), cpu.readImmediate())
 	return 12
 }
 
@@ -443,36 +447,36 @@ func opcode0x39(cpu *CPU) int {
 //LDD A, (HL)
 //#0x3A:
 func opcode0x3A(cpu *CPU) int {
-	cpu.af.SetLow(cpu.memory.ReadByte(cpu.hl.Get()))
-	cpu.hl.Decr()
+	cpu.a = cpu.memory.ReadByte(cpu.getHL())
+	cpu.setHL(cpu.getHL() - 1)
 	return 8
 }
 
 //DEC SP
 //#0x3B:
 func opcode0x3B(cpu *CPU) int {
-	cpu.sp.Decr()
+	cpu.sp--
 	return 8
 }
 
 //INC A
 //#0x3C:
 func opcode0x3C(cpu *CPU) int {
-	cpu.inc(&cpu.af.High)
+	cpu.inc(&cpu.a)
 	return 4
 }
 
 //DEC A
 //#0x3D:
 func opcode0x3D(cpu *CPU) int {
-	cpu.dec(&cpu.af.High)
+	cpu.dec(&cpu.a)
 	return 4
 }
 
 //LD A, n
 //#0x3E:
 func opcode0x3E(cpu *CPU) int {
-	cpu.af.SetLow(cpu.readImmediate())
+	cpu.a = cpu.readImmediate()
 	return 8
 }
 
@@ -494,56 +498,56 @@ func opcode0x40(cpu *CPU) int {
 //LD B, C
 //#0x41:
 func opcode0x41(cpu *CPU) int {
-	cpu.bc.SetLow(cpu.bc.GetHigh())
+	cpu.b = cpu.c
 	return 4
 }
 
 //LD B, D
 //#0x42:
 func opcode0x42(cpu *CPU) int {
-	cpu.bc.SetLow(cpu.de.GetLow())
+	cpu.b = cpu.d
 	return 4
 }
 
 //LD B, E
 //#0x43:
 func opcode0x43(cpu *CPU) int {
-	cpu.bc.SetLow(cpu.de.GetHigh())
+	cpu.b = cpu.e
 	return 4
 }
 
 //LD B, H
 //#0x44:
 func opcode0x44(cpu *CPU) int {
-	cpu.bc.SetLow(cpu.hl.GetLow())
+	cpu.b = cpu.h
 	return 4
 }
 
 //LD B, L
 //#0x45:
 func opcode0x45(cpu *CPU) int {
-	cpu.bc.SetLow(cpu.hl.GetHigh())
+	cpu.b = cpu.l
 	return 4
 }
 
 //LD B, (HL)
 //#0x46:
 func opcode0x46(cpu *CPU) int {
-	cpu.bc.SetLow(cpu.memory.ReadByte(cpu.hl.Get()))
+	cpu.b = cpu.memory.ReadByte(cpu.getHL())
 	return 8
 }
 
 //LD B, A
 //#0x47:
 func opcode0x47(cpu *CPU) int {
-	cpu.bc.SetLow(cpu.af.GetLow())
+	cpu.b = cpu.a
 	return 4
 }
 
 //LD C, B
 //#0x48:
 func opcode0x48(cpu *CPU) int {
-	cpu.bc.SetHigh(cpu.bc.GetLow())
+	cpu.c = cpu.b
 	return 4
 }
 
@@ -556,56 +560,56 @@ func opcode0x49(cpu *CPU) int {
 //LD C, D
 //#0x4A:
 func opcode0x4A(cpu *CPU) int {
-	cpu.bc.SetHigh(cpu.de.GetLow())
+	cpu.c = cpu.d
 	return 4
 }
 
 //LD C, E
 //#0x4B:
 func opcode0x4B(cpu *CPU) int {
-	cpu.bc.SetHigh(cpu.de.GetHigh())
+	cpu.c = cpu.e
 	return 4
 }
 
 //LD C, H
 //#0x4C:
 func opcode0x4C(cpu *CPU) int {
-	cpu.bc.SetHigh(cpu.hl.GetLow())
+	cpu.c = cpu.h
 	return 4
 }
 
 //LD C, L
 //#0x4D:
 func opcode0x4D(cpu *CPU) int {
-	cpu.bc.SetHigh(cpu.hl.GetHigh())
+	cpu.c = cpu.l
 	return 4
 }
 
 //LD C, (HL)
 //#0x4E:
 func opcode0x4E(cpu *CPU) int {
-	cpu.bc.SetHigh(cpu.memory.ReadByte(cpu.hl.Get()))
+	cpu.c = cpu.memory.ReadByte(cpu.getHL())
 	return 8
 }
 
 //LD C, A
 //#0x4F:
 func opcode0x4F(cpu *CPU) int {
-	cpu.bc.SetHigh(cpu.af.GetLow())
+	cpu.c = cpu.a
 	return 4
 }
 
 //LD D, B
 //#0x50:
 func opcode0x50(cpu *CPU) int {
-	cpu.de.SetLow(cpu.bc.GetLow())
+	cpu.d = cpu.b
 	return 4
 }
 
 //LD D, C
 //#0x51:
 func opcode0x51(cpu *CPU) int {
-	cpu.de.SetLow(cpu.bc.GetHigh())
+	cpu.d = cpu.c
 	return 4
 }
 
@@ -618,56 +622,56 @@ func opcode0x52(cpu *CPU) int {
 //LD D, E
 //#0x53:
 func opcode0x53(cpu *CPU) int {
-	cpu.de.SetLow(cpu.de.GetHigh())
+	cpu.d = cpu.e
 	return 4
 }
 
 //LD D, H
 //#0x54:
 func opcode0x54(cpu *CPU) int {
-	cpu.de.SetLow(cpu.hl.GetLow())
+	cpu.d = cpu.h
 	return 4
 }
 
 //LD D, L
 //#0x55:
 func opcode0x55(cpu *CPU) int {
-	cpu.de.SetLow(cpu.hl.GetHigh())
+	cpu.d = cpu.l
 	return 4
 }
 
 //LD D, (HL)
 //#0x56:
 func opcode0x56(cpu *CPU) int {
-	cpu.de.SetLow(cpu.memory.ReadByte(cpu.hl.Get()))
+	cpu.d = cpu.memory.ReadByte(cpu.getHL())
 	return 8
 }
 
 //LD D, A
 //#0x57:
 func opcode0x57(cpu *CPU) int {
-	cpu.de.SetLow(cpu.af.GetLow())
+	cpu.d = cpu.a
 	return 4
 }
 
 //LD E, B
 //#0x58:
 func opcode0x58(cpu *CPU) int {
-	cpu.de.SetHigh(cpu.bc.GetLow())
+	cpu.e = cpu.b
 	return 4
 }
 
 //LD E, C
 //#0x59:
 func opcode0x59(cpu *CPU) int {
-	cpu.de.SetHigh(cpu.bc.GetHigh())
+	cpu.e = cpu.c
 	return 4
 }
 
 //LD E, D
 //#0x5A:
 func opcode0x5A(cpu *CPU) int {
-	cpu.de.SetHigh(cpu.de.GetLow())
+	cpu.e = cpu.d
 	return 4
 }
 
@@ -680,56 +684,56 @@ func opcode0x5B(cpu *CPU) int {
 //LD E, H
 //#0x5C:
 func opcode0x5C(cpu *CPU) int {
-	cpu.de.SetHigh(cpu.hl.GetLow())
+	cpu.e = cpu.h
 	return 4
 }
 
 //LD E, L
 //#0x5D:
 func opcode0x5D(cpu *CPU) int {
-	cpu.de.SetHigh(cpu.hl.GetHigh())
+	cpu.e = cpu.l
 	return 4
 }
 
 //LD E, (HL)
 //#0x5E:
 func opcode0x5E(cpu *CPU) int {
-	cpu.de.SetHigh(cpu.memory.ReadByte(cpu.hl.Get()))
+	cpu.e = cpu.memory.ReadByte(cpu.getHL())
 	return 8
 }
 
 //LD E, A
 //#0x5F:
 func opcode0x5F(cpu *CPU) int {
-	cpu.de.SetHigh(cpu.af.GetLow())
+	cpu.e = cpu.a
 	return 4
 }
 
 //LD H, B
 //#0x60:
 func opcode0x60(cpu *CPU) int {
-	cpu.hl.SetLow(cpu.bc.GetLow())
+	cpu.h = cpu.b
 	return 4
 }
 
 //LD H, C
 //#0x61:
 func opcode0x61(cpu *CPU) int {
-	cpu.hl.SetLow(cpu.bc.GetHigh())
+	cpu.h = cpu.c
 	return 4
 }
 
 //LD H, D
 //#0x62:
 func opcode0x62(cpu *CPU) int {
-	cpu.hl.SetLow(cpu.de.GetLow())
+	cpu.h = cpu.d
 	return 4
 }
 
 //LD H, E
 //#0x63:
 func opcode0x63(cpu *CPU) int {
-	cpu.hl.SetLow(cpu.de.GetHigh())
+	cpu.h = cpu.e
 	return 4
 }
 
@@ -742,56 +746,56 @@ func opcode0x64(cpu *CPU) int {
 //LD H, L
 //#0x65:
 func opcode0x65(cpu *CPU) int {
-	cpu.hl.SetLow(cpu.hl.GetHigh())
+	cpu.h = cpu.l
 	return 4
 }
 
 //LD H, (HL)
 //#0x66:
 func opcode0x66(cpu *CPU) int {
-	cpu.hl.SetLow(cpu.memory.ReadByte(cpu.hl.Get()))
+	cpu.h = cpu.memory.ReadByte(cpu.getHL())
 	return 8
 }
 
 //LD H, A
 //#0x67:
 func opcode0x67(cpu *CPU) int {
-	cpu.hl.SetLow(cpu.af.GetLow())
+	cpu.h = cpu.a
 	return 4
 }
 
 //LD L, B
 //#0x68:
 func opcode0x68(cpu *CPU) int {
-	cpu.hl.SetHigh(cpu.bc.GetLow())
+	cpu.l = cpu.b
 	return 4
 }
 
 //LD L, C
 //#0x69:
 func opcode0x69(cpu *CPU) int {
-	cpu.hl.SetHigh(cpu.bc.GetHigh())
+	cpu.l = cpu.c
 	return 4
 }
 
 //LD L, D
 //#0x6A:
 func opcode0x6A(cpu *CPU) int {
-	cpu.hl.SetHigh(cpu.de.GetLow())
+	cpu.l = cpu.d
 	return 4
 }
 
 //LD L, E
 //#0x6B:
 func opcode0x6B(cpu *CPU) int {
-	cpu.hl.SetHigh(cpu.de.GetHigh())
+	cpu.l = cpu.e
 	return 4
 }
 
 //LD L, H
 //#0x6C:
 func opcode0x6C(cpu *CPU) int {
-	cpu.hl.SetHigh(cpu.hl.GetLow())
+	cpu.l = cpu.h
 	return 4
 }
 
@@ -804,56 +808,56 @@ func opcode0x6D(cpu *CPU) int {
 //LD L, (HL)
 //#0x6E:
 func opcode0x6E(cpu *CPU) int {
-	cpu.hl.SetHigh(cpu.memory.ReadByte(cpu.hl.Get()))
+	cpu.l = cpu.memory.ReadByte(cpu.getHL())
 	return 8
 }
 
 //LD L, A
 //#0x6F:
 func opcode0x6F(cpu *CPU) int {
-	cpu.hl.SetHigh(cpu.af.GetLow())
+	cpu.l = cpu.a
 	return 4
 }
 
 //LD (HL), B
 //#0x70:
 func opcode0x70(cpu *CPU) int {
-	cpu.memory.WriteByte(cpu.hl.Get(), cpu.bc.GetLow())
+	cpu.memory.WriteByte(cpu.getHL(), cpu.b)
 	return 8
 }
 
 //LD (HL), C
 //#0x71:
 func opcode0x71(cpu *CPU) int {
-	cpu.memory.WriteByte(cpu.hl.Get(), cpu.bc.GetHigh())
+	cpu.memory.WriteByte(cpu.getHL(), cpu.c)
 	return 8
 }
 
 //LD (HL), D
 //#0x72:
 func opcode0x72(cpu *CPU) int {
-	cpu.memory.WriteByte(cpu.hl.Get(), cpu.de.GetLow())
+	cpu.memory.WriteByte(cpu.getHL(), cpu.d)
 	return 8
 }
 
 //LD (HL), E
 //#0x73:
 func opcode0x73(cpu *CPU) int {
-	cpu.memory.WriteByte(cpu.hl.Get(), cpu.de.GetHigh())
+	cpu.memory.WriteByte(cpu.getHL(), cpu.e)
 	return 8
 }
 
 //LD (HL), H
 //#0x74:
 func opcode0x74(cpu *CPU) int {
-	cpu.memory.WriteByte(cpu.hl.Get(), cpu.hl.GetLow())
+	cpu.memory.WriteByte(cpu.getHL(), cpu.h)
 	return 8
 }
 
 //LD (HL), L
 //#0x75:
 func opcode0x75(cpu *CPU) int {
-	cpu.memory.WriteByte(cpu.hl.Get(), cpu.hl.GetHigh())
+	cpu.memory.WriteByte(cpu.getHL(), cpu.l)
 	return 8
 }
 
@@ -867,56 +871,56 @@ func opcode0x76(cpu *CPU) int {
 //LD (HL), A
 //#0x77:
 func opcode0x77(cpu *CPU) int {
-	cpu.memory.WriteByte(cpu.hl.Get(), cpu.af.GetLow())
+	cpu.memory.WriteByte(cpu.getHL(), cpu.a)
 	return 8
 }
 
 //LD A, B
 //#0x78:
 func opcode0x78(cpu *CPU) int {
-	cpu.af.SetLow(cpu.bc.GetLow())
+	cpu.a = cpu.b
 	return 4
 }
 
 //LD A, C
 //#0x79:
 func opcode0x79(cpu *CPU) int {
-	cpu.af.SetLow(cpu.bc.GetHigh())
+	cpu.a = cpu.c
 	return 4
 }
 
 //LD A, D
 //#0x7A:
 func opcode0x7A(cpu *CPU) int {
-	cpu.af.SetLow(cpu.de.GetLow())
+	cpu.a = cpu.d
 	return 4
 }
 
 //LD A, E
 //#0x7B:
 func opcode0x7B(cpu *CPU) int {
-	cpu.af.SetLow(cpu.de.GetHigh())
+	cpu.a = cpu.e
 	return 4
 }
 
 //LD A, H
 //#0x7C:
 func opcode0x7C(cpu *CPU) int {
-	cpu.af.SetLow(cpu.hl.GetLow())
+	cpu.a = cpu.h
 	return 4
 }
 
 //LD A, L
 //#0x7D:
 func opcode0x7D(cpu *CPU) int {
-	cpu.af.SetLow(cpu.hl.GetHigh())
+	cpu.a = cpu.l
 	return 4
 }
 
 //LD, A, (HL)
 //#0x7E:
 func opcode0x7E(cpu *CPU) int {
-	cpu.af.SetLow(cpu.memory.ReadByte(cpu.hl.Get()))
+	cpu.a = cpu.memory.ReadByte(cpu.getHL())
 	return 8
 }
 
@@ -929,56 +933,56 @@ func opcode0x7F(cpu *CPU) int {
 //ADD A, B
 //#0x80:
 func opcode0x80(cpu *CPU) int {
-	cpu.addToA(cpu.bc.GetLow())
+	cpu.addToA(cpu.b)
 	return 4
 }
 
 //ADD A, C
 //#0x81:
 func opcode0x81(cpu *CPU) int {
-	cpu.addToA(cpu.bc.GetHigh())
+	cpu.addToA(cpu.c)
 	return 4
 }
 
 //ADD A, D
 //#0x82:
 func opcode0x82(cpu *CPU) int {
-	cpu.addToA(cpu.de.GetLow())
+	cpu.addToA(cpu.d)
 	return 4
 }
 
 //ADD A, E
 //#0x83:
 func opcode0x83(cpu *CPU) int {
-	cpu.addToA(cpu.de.GetHigh())
+	cpu.addToA(cpu.e)
 	return 4
 }
 
 //ADD A, H
 //#0x84:
 func opcode0x84(cpu *CPU) int {
-	cpu.addToA(cpu.hl.GetLow())
+	cpu.addToA(cpu.h)
 	return 4
 }
 
 //ADD A, L
 //#0x85:
 func opcode0x85(cpu *CPU) int {
-	cpu.addToA(cpu.hl.GetHigh())
+	cpu.addToA(cpu.l)
 	return 4
 }
 
 //ADD A, (HL)
 //#0x86:
 func opcode0x86(cpu *CPU) int {
-	cpu.addToA(cpu.memory.ReadByte(cpu.hl.Get()))
+	cpu.addToA(cpu.memory.ReadByte(cpu.getHL()))
 	return 8
 }
 
 //ADD A, A
 //#0x87:
 func opcode0x87(cpu *CPU) int {
-	cpu.addToA(cpu.af.GetLow())
+	cpu.addToA(cpu.a)
 	return 4
 }
 
@@ -1041,56 +1045,56 @@ func opcode0x8F(cpu *CPU) int {
 //SUB A, B
 //#0x90:
 func opcode0x90(cpu *CPU) int {
-	cpu.sub(cpu.bc.GetLow())
+	cpu.sub(cpu.b)
 	return 4
 }
 
 //SUB A, C
 //#0x91:
 func opcode0x91(cpu *CPU) int {
-	cpu.sub(cpu.bc.GetHigh())
+	cpu.sub(cpu.c)
 	return 4
 }
 
 //SUB A, D
 //#0x92:
 func opcode0x92(cpu *CPU) int {
-	cpu.sub(cpu.de.GetLow())
+	cpu.sub(cpu.d)
 	return 4
 }
 
 //SUB A, E
 //#0x93:
 func opcode0x93(cpu *CPU) int {
-	cpu.sub(cpu.de.GetHigh())
+	cpu.sub(cpu.e)
 	return 4
 }
 
 //SUB A, H
 //#0x94:
 func opcode0x94(cpu *CPU) int {
-	cpu.sub(cpu.hl.GetLow())
+	cpu.sub(cpu.h)
 	return 4
 }
 
 //SUB A, L
 //#0x95:
 func opcode0x95(cpu *CPU) int {
-	cpu.sub(cpu.hl.GetHigh())
+	cpu.sub(cpu.l)
 	return 4
 }
 
 //SUB A, (HL)
 //#0x96:
 func opcode0x96(cpu *CPU) int {
-	cpu.sub(cpu.memory.ReadByte(cpu.hl.Get()))
+	cpu.sub(cpu.memory.ReadByte(cpu.getHL()))
 	return 8
 }
 
 //SUB A, A
 //#0x97:
 func opcode0x97(cpu *CPU) int {
-	cpu.sub(cpu.af.GetLow())
+	cpu.sub(cpu.a)
 	return 4
 }
 
@@ -1625,8 +1629,8 @@ func opcode0xE1(cpu *CPU) int {
 //LD (0xFF00 + C), A
 //#0xE2:
 func opcode0xE2(cpu *CPU) int {
-	addr := 0xFF00 | cpu.bc.Get()
-	cpu.memory.WriteByte(addr, cpu.af.GetLow())
+	addr := 0xFF00 | uint16(cpu.c)
+	cpu.memory.WriteByte(addr, cpu.a)
 	return 8
 }
 
@@ -1666,7 +1670,7 @@ func opcode0xE7(cpu *CPU) int {
 //ADD SP, n
 //#0xE8:
 func opcode0xE8(cpu *CPU) int {
-	value := int32(cpu.sp.Get())
+	value := int32(cpu.sp)
 	n := int32(cpu.readSignedImmediate())
 
 	result := value + n
@@ -1676,7 +1680,7 @@ func opcode0xE8(cpu *CPU) int {
 	cpu.setFlagToCondition(halfCarryFlag, ((value^n^(result&0xFFFF))&0x10) == 0x10)
 	cpu.setFlagToCondition(carryFlag, ((value^n^(result&0xFFFF))&0x100) == 0x100)
 
-	cpu.sp.Set(uint16(result))
+	cpu.sp = uint16(result)
 
 	return 16
 }
@@ -1684,14 +1688,14 @@ func opcode0xE8(cpu *CPU) int {
 //JP, (HL)
 //#0xE9:
 func opcode0xE9(cpu *CPU) int {
-	cpu.pc = cpu.hl
+	cpu.pc = cpu.getHL()
 	return 4
 }
 
 //LD (nn), A
 //#0xEA:
 func opcode0xEA(cpu *CPU) int {
-	cpu.memory.WriteByte(cpu.readImmediateWord(), cpu.af.GetLow())
+	cpu.memory.WriteByte(cpu.readImmediateWord(), cpu.a)
 	return 16
 }
 
@@ -1744,7 +1748,7 @@ func opcode0xF1(cpu *CPU) int {
 //LD A, (0xFF00 + C)
 //#0xF2:
 func opcode0xF2(cpu *CPU) int {
-	cpu.af.SetLow(cpu.memory.ReadByte(0xFF00 | cpu.bc.Get()))
+	cpu.a = cpu.memory.ReadByte(0xFF00 | uint16(cpu.c))
 	return 8
 }
 
@@ -1792,14 +1796,14 @@ func opcode0xF8(cpu *CPU) int {
 //LD SP, HL
 //#0xF9:
 func opcode0xF9(cpu *CPU) int {
-	cpu.sp.Set(cpu.hl.Get())
+	cpu.sp = cpu.getHL()
 	return 8
 }
 
 //LD A, (nn)
 //#0xFA:
 func opcode0xFA(cpu *CPU) int {
-	cpu.af.SetLow(cpu.memory.ReadByte(cpu.readImmediateWord()))
+	cpu.a = cpu.memory.ReadByte(cpu.readImmediateWord())
 	return 16
 }
 

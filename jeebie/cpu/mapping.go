@@ -1,6 +1,6 @@
 package cpu
 
-import "github.com/valerio/go-jeebie/jeebie/util"
+import "github.com/valerio/go-jeebie/jeebie/bit"
 
 // Opcode represents a function that executes an opcode
 type Opcode func(*CPU) int
@@ -12,11 +12,11 @@ func Decode(c *CPU) Opcode {
 	// 0xCB is only ever used as a prefix for the next byte.
 	if code == 0xCB {
 		code = c.readImmediate()
-		c.currentOpcode = util.CombineBytes(code, 0xCB)
+		c.currentOpcode = bit.Combine(0xCB, code)
 		return opcodesCB[code]
 	}
 
-	c.currentOpcode = util.CombineBytes(code, 0)
+	c.currentOpcode = bit.Combine(0, code)
 	return opcodes[code]
 }
 

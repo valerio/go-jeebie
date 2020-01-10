@@ -1,43 +1,43 @@
 package cpu
 
-import "github.com/valerio/go-jeebie/jeebie/util"
+import "github.com/valerio/go-jeebie/jeebie/bit"
 
-func (c *CPU) pushStack(r util.Register16) {
-	c.sp.Decr()
-	c.memory.WriteByte(c.sp.Get(), r.GetHigh())
-	c.sp.Decr()
-	c.memory.WriteByte(c.sp.Get(), r.GetLow())
+func (c *CPU) pushStack(r uint16) {
+	c.sp--
+	c.memory.WriteByte(c.sp, bit.Low(r))
+	c.sp--
+	c.memory.WriteByte(c.sp, bit.High(r))
 }
 
 func (c *CPU) popStack() uint16 {
-	low := c.memory.ReadByte(c.sp.Get())
-	c.sp.Incr()
-	high := c.memory.ReadByte(c.sp.Get())
-	c.sp.Incr()
+	high := c.memory.ReadByte(c.sp)
+	c.sp++
+	low := c.memory.ReadByte(c.sp)
+	c.sp++
 
-	return util.CombineBytes(low, high)
+	return bit.Combine(high, low)
 }
 
-func (c *CPU) inc(r *util.Register8) {
-	r.Incr()
-	value := r.Get()
+func (c *CPU) inc(r *uint8) {
+	*r++
+	value := *r
 
 	c.setFlagToCondition(zeroFlag, value == 0)
 	c.setFlagToCondition(halfCarryFlag, (value&0xF) == 0xF)
 	c.resetFlag(subFlag)
 }
 
-func (c *CPU) dec(r *util.Register8) {
-	r.Decr()
-	value := r.Get()
+func (c *CPU) dec(r *uint8) {
+	*r--
+	value := *r
 
 	c.setFlagToCondition(zeroFlag, value == 0)
 	c.setFlagToCondition(halfCarryFlag, (value&0xF) == 0xF)
 	c.setFlag(subFlag)
 }
 
-func (c *CPU) rlc(r *util.Register8) {
-	value := r.Get()
+func (c *CPU) rlc(r *uint8) {
+	value := *r
 
 	c.setFlagToCondition(carryFlag, value > 0x7F)
 	c.resetFlag(zeroFlag)
@@ -45,11 +45,11 @@ func (c *CPU) rlc(r *util.Register8) {
 	c.resetFlag(halfCarryFlag)
 
 	value = (value << 1) | (value >> 7)
-	r.Set(value)
+	*r = value
 }
 
-func (c *CPU) rl(r *util.Register8) {
-	value := r.Get()
+func (c *CPU) rl(r *uint8) {
+	value := *r
 	carry := c.flagToBit(carryFlag)
 
 	c.setFlagToCondition(carryFlag, value > 0x7F)
@@ -58,11 +58,11 @@ func (c *CPU) rl(r *util.Register8) {
 	c.resetFlag(halfCarryFlag)
 
 	value = (value << 1) | carry
-	r.Set(value)
+	*r = value
 }
 
-func (c *CPU) rrc(r *util.Register8) {
-	value := r.Get()
+func (c *CPU) rrc(r *uint8) {
+	value := *r
 
 	c.setFlagToCondition(carryFlag, value > 0x7F)
 	c.resetFlag(zeroFlag)
@@ -70,11 +70,11 @@ func (c *CPU) rrc(r *util.Register8) {
 	c.resetFlag(halfCarryFlag)
 
 	value = (value >> 1) | ((value & 1) << 7)
-	r.Set(value)
+	*r = value
 }
 
-func (c *CPU) rr(r *util.Register8) {
-	value := r.Get()
+func (c *CPU) rr(r *uint8) {
+	value := *r
 	carry := c.flagToBit(carryFlag) << 7
 
 	c.setFlagToCondition(carryFlag, value > 0x7F)
@@ -83,12 +83,12 @@ func (c *CPU) rr(r *util.Register8) {
 	c.resetFlag(halfCarryFlag)
 
 	value = (value >> 1) | carry
-	r.Set(value)
+	*r = value
 }
 
 // add sets the result of adding an 8 bit register to A, while setting all relevant flags.
 func (c *CPU) addToA(value uint8) {
-	a := c.af.GetLow()
+	a := c.a
 	result := a + value
 
 	carry := (uint16(a) + uint16(value)) > 0xFF
@@ -99,32 +99,31 @@ func (c *CPU) addToA(value uint8) {
 	c.setFlagToCondition(carryFlag, carry)
 	c.setFlagToCondition(halfCarryFlag, halfCarry)
 
-	c.af.SetLow(result)
+	c.a = result
 }
 
 // addToHL sets the result of adding a 16 bit register to HL, while setting relevant flags.
-func (c *CPU) addToHL(reg util.Register16) {
-	dst := c.hl
-	result := dst.Get() + reg.Get()
+func (c *CPU) addToHL(reg uint16) {
+	hl := bit.Combine(c.h, c.l)
+	result := hl + reg
 
-	carry := (uint32(dst.Get()) + uint32(reg.Get())) > 0xFFFF
-	halfCarry := (dst.Get()&0xFFF)+(reg.Get()&0xFFF) > 0xFFF
+	carry := (uint32(hl) + uint32(reg)) > 0xFFFF
+	halfCarry := (hl&0xFFF)+(reg&0xFFF) > 0xFFF
 
 	c.resetFlag(subFlag)
 	c.setFlagToCondition(carryFlag, carry)
 	c.setFlagToCondition(halfCarryFlag, halfCarry)
 
-	c.hl.Set(result)
+	c.h = bit.High(result)
+	c.l = bit.Low(result)
 }
 
 // sub will subtract the value from register A and set all relevant flags.
 func (c *CPU) sub(value uint8) {
-	a := c.af.GetLow()
-	result := a - value
+	a := c.a
+	c.a = a - value
 
-	c.af.SetLow(result)
-
-	c.setFlagToCondition(zeroFlag, result == 0)
+	c.setFlagToCondition(zeroFlag, c.a == 0)
 	c.setFlag(subFlag)
 	c.setFlagToCondition(carryFlag, a < value)
 	c.setFlagToCondition(halfCarryFlag, (a&0xF)-(value&0xF) < 0)
@@ -132,12 +131,10 @@ func (c *CPU) sub(value uint8) {
 
 // jr performs a jump using the immediate value (byte)
 func (c *CPU) jr() {
-	n := uint16(c.peekImmediate())
-	c.pc.Set(c.pc.Get() + n)
+	c.pc += uint16(c.peekImmediate())
 }
 
 // jp performs a jump using the immediate value (16 bit word)
 func (c *CPU) jp() {
-	nn := c.peekImmediateWord()
-	c.pc.Set(c.pc.Get() + nn)
+	c.pc += c.peekImmediateWord()
 }
