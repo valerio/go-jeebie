@@ -1,8 +1,8 @@
-package util
+package bit
 
-// CombineBytes combines two 8 bit values into a single 16 bit value.
+// Combine combines two 8 bit values into a single 16 bit value.
 // The high byte will be the most significant one.
-func CombineBytes(low, high uint8) uint16 {
+func Combine(high, low uint8) uint16 {
 	return (uint16(high) << 8) | uint16(low)
 }
 
@@ -32,26 +32,36 @@ func CheckedSub(a, b uint8) (result uint8, borrow bool) {
 	return
 }
 
-// IsBitSet will check if the bit at the specified index is Set to 1 or not.
-func IsBitSet(index, byte uint8) bool {
+// IsSet will check if the bit at the specified index is Set to 1 or not.
+func IsSet(index, byte uint8) bool {
 	return ((byte >> index) & 1) == 1
 }
 
-// ClearBit will return the passed byte with the bit at the specified index Set to 0.
-func ClearBit(index, byte uint8) uint8 {
+// Clear will return the passed byte with the bit at the specified index Set to 0.
+func Clear(index, byte uint8) uint8 {
 	return byte & ^(1 << index)
 }
 
-// SetBit will return the passed byte with the bit at the specified index Set to 1.
-func SetBit(index, byte uint8) uint8 {
+// Set will return the passed byte with the bit at the specified index Set to 1.
+func Set(index, byte uint8) uint8 {
 	return byte | (1 << index)
 }
 
 // GetBitValue returns a byte set to the value of the bit at the specified index.
 func GetBitValue(index, byte uint8) uint8 {
-	if IsBitSet(index, byte) {
+	if IsSet(index, byte) {
 		return 1
 	}
 
 	return 0
+}
+
+// Low returns the low (LSB) part of a 16 bit number.
+func Low(value uint16) uint8 {
+	return uint8(value)
+}
+
+// Low returns the higg (MSB) part of a 16 bit number.
+func High(value uint16) uint8 {
+	return uint8(value >> 8)
 }
