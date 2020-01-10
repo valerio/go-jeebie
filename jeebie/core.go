@@ -50,6 +50,7 @@ func NewWithFile(path string) (*Emulator, error) {
 	return e, nil
 }
 
+// Tick runs the next instruction.
 func (e *Emulator) Tick() {
 	cycles := e.cpu.Tick()
 	e.gpu.Tick(cycles)
@@ -60,19 +61,24 @@ func (e *Emulator) Run() {
 	defer e.screen.Destroy()
 	defer sdl.Quit()
 
+	// TODO: this SDL loop should be performed outside of the emulator.
 	for {
 		e.Tick()
 
 		for event := sdl.PollEvent(); event != nil; event = sdl.PollEvent() {
 
 			switch t := event.(type) {
-			case *sdl.KeyDownEvent:
+			case *sdl.KeyboardEvent:
+				log.Printf("[%d ms] Keyboard\ttype:%d\tsym:%c\tmodifiers:%d\tstate:%d\trepeat:%d\n",
+					t.Timestamp, t.Type, t.Keysym.Sym, t.Keysym.Mod, t.State, t.Repeat)
 				if t.Keysym.Sym == sdl.K_ESCAPE {
 					return
 				}
-			case *sdl.KeyUpEvent:
-
+			case *sdl.QuitEvent:
+				return
 			}
 		}
+
+		sdl.Delay(16)
 	}
 }
