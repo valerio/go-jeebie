@@ -1101,56 +1101,56 @@ func opcode0x97(cpu *CPU) int {
 //SBC A, B
 //#0x98:
 func opcode0x98(cpu *CPU) int {
-
+	cpu.sbc(cpu.b)
 	return 4
 }
 
 //SBC A, C
 //#0x99:
 func opcode0x99(cpu *CPU) int {
-
+	cpu.sbc(cpu.c)
 	return 4
 }
 
 //SBC A, D
 //#0x9A:
 func opcode0x9A(cpu *CPU) int {
-
+	cpu.sbc(cpu.d)
 	return 4
 }
 
 //SBC A, E
 //#0x9B:
 func opcode0x9B(cpu *CPU) int {
-
+	cpu.sbc(cpu.e)
 	return 4
 }
 
 //SBC A, H
 //#0x9C:
 func opcode0x9C(cpu *CPU) int {
-
+	cpu.sbc(cpu.h)
 	return 4
 }
 
 //SBC A, L
 //#0x9D:
 func opcode0x9D(cpu *CPU) int {
-
+	cpu.sbc(cpu.l)
 	return 4
 }
 
 //SBC A, (HL)
 //#0x9E:
 func opcode0x9E(cpu *CPU) int {
-
+	cpu.sbc(cpu.memory.Read(cpu.getHL()))
 	return 8
 }
 
 //SBC A, A
 //#0x9F:
 func opcode0x9F(cpu *CPU) int {
-
+	cpu.sbc(cpu.a)
 	return 4
 }
 

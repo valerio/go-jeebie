@@ -126,7 +126,24 @@ func (c *CPU) sub(value uint8) {
 	c.setFlagToCondition(zeroFlag, c.a == 0)
 	c.setFlag(subFlag)
 	c.setFlagToCondition(carryFlag, a < value)
-	c.setFlagToCondition(halfCarryFlag, (a&0xF)-(value&0xF) < 0)
+	c.setFlagToCondition(halfCarryFlag, (int(a)&0xF)-(int(value)&0xF) < 0)
+}
+
+// sbc will subtract the value and carry (1 if set, 0 otherwise) from the register A.
+func (c *CPU) sbc(value uint8) {
+	a := c.a
+	carry := 0
+	if c.isSetFlag(carryFlag) {
+		carry = 1
+	}
+
+	result := int(c.a) - int(value) - carry
+	c.a = uint8(result)
+
+	c.setFlagToCondition(zeroFlag, result == 0)
+	c.setFlag(subFlag)
+	c.setFlagToCondition(carryFlag, result < 0)
+	c.setFlagToCondition(halfCarryFlag, (int(a)&0xF)-(int(value)&0xF)-carry < 0)
 }
 
 // jr performs a jump using the immediate value (byte)
