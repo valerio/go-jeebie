@@ -1157,56 +1157,56 @@ func opcode0x9F(cpu *CPU) int {
 //AND B
 //#0xA0:
 func opcode0xA0(cpu *CPU) int {
-
+	cpu.and(cpu.b)
 	return 4
 }
 
 //AND C
 //#0xA1:
 func opcode0xA1(cpu *CPU) int {
-
+	cpu.and(cpu.c)
 	return 4
 }
 
 //AND D
 //#0xA2:
 func opcode0xA2(cpu *CPU) int {
-
+	cpu.and(cpu.d)
 	return 4
 }
 
 //AND E
 //#0xA3:
 func opcode0xA3(cpu *CPU) int {
-
+	cpu.and(cpu.e)
 	return 4
 }
 
 //AND H
 //#0xA4:
 func opcode0xA4(cpu *CPU) int {
-
+	cpu.and(cpu.h)
 	return 4
 }
 
 //AND L
 //#0xA5:
 func opcode0xA5(cpu *CPU) int {
-
+	cpu.and(cpu.l)
 	return 4
 }
 
 //AND (HL)
 //#0xA6:
 func opcode0xA6(cpu *CPU) int {
-
+	cpu.and(cpu.memory.Read(cpu.getHL()))
 	return 8
 }
 
 //AND A
 //#0xA7:
 func opcode0xA7(cpu *CPU) int {
-
+	cpu.and(cpu.a)
 	return 4
 }
 

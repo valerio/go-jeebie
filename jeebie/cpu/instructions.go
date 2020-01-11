@@ -146,6 +146,12 @@ func (c *CPU) sbc(value uint8) {
 	c.setFlagToCondition(halfCarryFlag, (int(a)&0xF)-(int(value)&0xF)-carry < 0)
 }
 
+func (c *CPU) and(value uint8) {
+	c.a &= value
+	c.setFlagToCondition(zeroFlag, c.a == 0)
+	c.setFlag(halfCarryFlag)
+}
+
 // jr performs a jump using the immediate value (byte)
 func (c *CPU) jr() {
 	c.pc += uint16(c.peekImmediate())
