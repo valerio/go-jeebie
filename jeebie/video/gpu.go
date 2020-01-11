@@ -25,17 +25,30 @@ const (
 
 // addresses for gpu registers
 const (
-	lcdcAddress uint16 = 0xFF40
-	statAddress uint16 = 0xFF41
-	scyAddress  uint16 = 0xFF42
-	scxAddress  uint16 = 0xFF43
-	lyAddress   uint16 = 0xFF44
-	lycAddress  uint16 = 0xFF45
-	bgpAddress  uint16 = 0xFF47
-	obp0Address uint16 = 0xFF48
-	obp1Address uint16 = 0xFF49
-	wyAddress   uint16 = 0xFF4A
-	wxAddress   uint16 = 0xFF4B
+	// LCD Control
+	lcdcAddr uint16 = 0xFF40
+	// LCDC Status
+	statAddr uint16 = 0xFF41
+	// Scroll Y (SCY)
+	scyAddr uint16 = 0xFF42
+	// Scroll X (SCX)
+	scxAddr uint16 = 0xFF43
+	// LCDC Y-Coordinate (readonly)
+	lyAddr uint16 = 0xFF44
+	// LY Compare
+	lycAddr uint16 = 0xFF45
+	// DMA Transfer and Start
+	dmaAddr uint16 = 0xFF46
+	// BG Palette
+	bgpAddr uint16 = 0xFF47
+	// Object Palette 0
+	obp0Addr uint16 = 0xFF48
+	// Object Palette 1
+	obp1Addr uint16 = 0xFF49
+	// Window Y Position
+	wyAddr uint16 = 0xFF4A
+	// Window X Position
+	wxAddr uint16 = 0xFF4B
 )
 
 type GPU struct {
@@ -252,7 +265,7 @@ const (
 )
 
 func (g *GPU) readLCDCVariable(flag lcdcFlag) byte {
-	if bit.IsSet(uint8(flag), g.memory.Read(lcdcAddress)) {
+	if bit.IsSet(uint8(flag), g.memory.Read(lcdcAddr)) {
 		return 1
 	}
 
@@ -260,7 +273,7 @@ func (g *GPU) readLCDCVariable(flag lcdcFlag) byte {
 }
 
 func (g *GPU) setLCDCVariable(flag lcdcFlag, shouldSet bool) {
-	lcdcRegister := g.memory.Read(lcdcAddress)
+	lcdcRegister := g.memory.Read(lcdcAddr)
 
 	if shouldSet {
 		lcdcRegister = bit.Set(uint8(flag), lcdcRegister)
