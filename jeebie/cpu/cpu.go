@@ -25,6 +25,7 @@ const (
 
 // CPU is the main struct holding Z80 state
 type CPU struct {
+	// registers
 	a  uint8
 	f  uint8
 	b  uint8
@@ -36,17 +37,19 @@ type CPU struct {
 	sp uint16
 	pc uint16
 
-	memory            *memory.MMU
+	// metadata
 	interruptsEnabled bool
 	currentOpcode     uint16
 	stopped           bool
+	cycles            uint64
+
+	memory *memory.MMU
 }
 
 // New returns an uninitialized CPU instance
 func New(memory *memory.MMU) *CPU {
 	return &CPU{
 		memory: memory,
-		pc:     0x0100,
 	}
 }
 
@@ -58,6 +61,7 @@ func (c *CPU) Tick() int {
 
 	instruction := Decode(c)
 	cycles := instruction(c)
+	c.cycles += uint64(cycles)
 
 	return cycles
 }
