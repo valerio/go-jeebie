@@ -69,8 +69,8 @@ func (c *CPU) handleInterrupts() {
 	}
 
 	// retrieve the two masks
-	enabledInterruptsMask := c.memory.ReadByte(interruptEnableAddress)
-	firedInterrupts := c.memory.ReadByte(interruptFlagAddress)
+	enabledInterruptsMask := c.memory.Read(interruptEnableAddress)
+	firedInterrupts := c.memory.Read(interruptFlagAddress)
 
 	// if zero, no interrupts that are enabled were fired
 	if (enabledInterruptsMask & firedInterrupts) == 0 {
@@ -85,7 +85,7 @@ func (c *CPU) handleInterrupts() {
 			address := uint16(i)*8 + baseInterruptAddress
 
 			// mark as handled by clearing the bit at i
-			c.memory.WriteByte(interruptFlagAddress, bit.Clear(i, firedInterrupts))
+			c.memory.Write(interruptFlagAddress, bit.Clear(i, firedInterrupts))
 
 			c.pc = address
 			c.interruptsEnabled = false
@@ -99,15 +99,15 @@ func (c *CPU) handleInterrupts() {
 // peekImmediate returns the byte at the memory address pointed by the PC
 // this value is known as immediate ('n' in mnemonics), some opcodes use it as a parameter
 func (c CPU) peekImmediate() uint8 {
-	n := c.memory.ReadByte(c.pc)
+	n := c.memory.Read(c.pc)
 	return n
 }
 
 // peekImmediateWord returns the two bytes at the memory address pointed by PC and PC+1
 // this value is known as immediate ('nn' in mnemonics), some opcodes use it as a parameter
 func (c CPU) peekImmediateWord() uint16 {
-	low := c.memory.ReadByte(c.pc)
-	high := c.memory.ReadByte(c.pc + 1)
+	low := c.memory.Read(c.pc)
+	high := c.memory.Read(c.pc + 1)
 
 	return bit.Combine(low, high)
 }

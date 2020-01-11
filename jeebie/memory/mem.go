@@ -10,12 +10,16 @@ type MMU struct {
 	memory []byte
 }
 
+// New creates a new memory unity with default data, i.e. nothing cartridge loaded.
+// Equivalent to turning on a Gameboy without a cartridge in.
 func New() *MMU {
 	return &MMU{
 		memory: make([]byte, 0x10000),
 	}
 }
 
+// NewWithCartridge creates a new memory unit with the provided cartridge data loaded.
+// Equivalent to turning on a Gameboy with a cartridge in.
 func NewWithCartridge(cart *Cartridge) *MMU {
 	mmu := New()
 	mmu.cart = cart
@@ -26,7 +30,7 @@ func isBetween(addr, start, end uint16) bool {
 	return addr >= start && addr <= end
 }
 
-func (m *MMU) ReadByte(addr uint16) byte {
+func (m *MMU) Read(addr uint16) byte {
 
 	// ROM
 	if isBetween(addr, 0, 0x7FFF) {
@@ -36,7 +40,7 @@ func (m *MMU) ReadByte(addr uint16) byte {
 			return bootROM[addr]
 		}
 
-		return m.cart.ReadByte(addr)
+		return m.cart.Read(addr)
 	}
 
 	// VRAM
@@ -46,7 +50,7 @@ func (m *MMU) ReadByte(addr uint16) byte {
 
 	// external RAM
 	if isBetween(addr, 0xA000, 0xBFFF) {
-		return m.cart.ReadByte(addr)
+		return m.cart.Read(addr)
 	}
 
 	// RAM
@@ -67,7 +71,7 @@ func (m *MMU) ReadByte(addr uint16) byte {
 
 	// Unused
 	if isBetween(addr, 0xFEA0, 0xFEFF) {
-//		panic(fmt.Sprintf("Attempted read at unused/unmapped address: 0x%X", addr))
+		//		panic(fmt.Sprintf("Attempted read at unused/unmapped address: 0x%X", addr))
 		return 0
 	}
 
@@ -89,11 +93,11 @@ func (m *MMU) ReadByte(addr uint16) byte {
 	panic(fmt.Sprintf("Attempted read at unused/unmapped address: 0x%X", addr))
 }
 
-func (m *MMU) WriteByte(addr uint16, value byte) {
+func (m *MMU) Write(addr uint16, value byte) {
 
 	// ROM
 	if isBetween(addr, 0, 0x7FFF) {
-		m.cart.WriteByte(addr, value)
+		m.cart.Write(addr, value)
 		return
 	}
 

@@ -3,8 +3,8 @@ package video
 import (
 	"math/rand"
 
-	"github.com/valerio/go-jeebie/jeebie/memory"
 	"github.com/valerio/go-jeebie/jeebie/bit"
+	"github.com/valerio/go-jeebie/jeebie/memory"
 )
 
 type GpuMode int
@@ -85,8 +85,8 @@ func (g *GPU) Tick(cycles int) {
 			if g.line == 144 {
 				g.mode = vblank
 				// set vblank interrupt (bit 0)
-				interruptFlags := g.memory.ReadByte(0xFFFF)
-				g.memory.WriteByte(0xFFFF, bit.Set(0, interruptFlags))
+				interruptFlags := g.memory.Read(0xFFFF)
+				g.memory.Write(0xFFFF, bit.Set(0, interruptFlags))
 				// g.drawFrame()
 			} else {
 				g.mode = oamRead
@@ -177,7 +177,7 @@ func (g *GPU) drawTile(tileX, tileY int) {
 	tileIndex := tileY*32 + tileX
 	tileNumberAddress := tileMapAddress + tileIndex
 	// grab the tile number
-	tileNumber := g.memory.ReadByte(uint16(tileNumberAddress))
+	tileNumber := g.memory.Read(uint16(tileNumberAddress))
 	// offset is tile number times tile size (16 bytes per tile)
 	tileOffset := uint16(tileNumber) * 16
 
@@ -207,8 +207,8 @@ func newTile(address uint16, mmu *memory.MMU) *Tile {
 		// each line is 2 bytes
 		lineStartAddress := address + 2*uint16(tileLine)
 
-		lowPixelLine := mmu.ReadByte(lineStartAddress)
-		highPixelLine := mmu.ReadByte(lineStartAddress + 1)
+		lowPixelLine := mmu.Read(lineStartAddress)
+		highPixelLine := mmu.Read(lineStartAddress + 1)
 
 		// compose colors pixel by pixel
 		for pixel := 0; pixel < 8; pixel++ {
@@ -242,17 +242,17 @@ type lcdcFlag uint8
 
 const (
 	lcdDisplayEnable       lcdcFlag = 7
-	windowTileMapSelect            = 6
-	windowDisplayEnable            = 5
-	bgWindowTileDataSelect         = 4
-	bgTileMapDisplaySelect         = 3
-	spriteSize                     = 2
-	spriteDisplayEnable            = 1
-	bgDisplay                      = 0
+	windowTileMapSelect             = 6
+	windowDisplayEnable             = 5
+	bgWindowTileDataSelect          = 4
+	bgTileMapDisplaySelect          = 3
+	spriteSize                      = 2
+	spriteDisplayEnable             = 1
+	bgDisplay                       = 0
 )
 
 func (g *GPU) readLCDCVariable(flag lcdcFlag) byte {
-	if bit.IsSet(uint8(flag), g.memory.ReadByte(lcdcAddress)) {
+	if bit.IsSet(uint8(flag), g.memory.Read(lcdcAddress)) {
 		return 1
 	}
 
@@ -260,7 +260,7 @@ func (g *GPU) readLCDCVariable(flag lcdcFlag) byte {
 }
 
 func (g *GPU) setLCDCVariable(flag lcdcFlag, shouldSet bool) {
-	lcdcRegister := g.memory.ReadByte(lcdcAddress)
+	lcdcRegister := g.memory.Read(lcdcAddress)
 
 	if shouldSet {
 		lcdcRegister = bit.Set(uint8(flag), lcdcRegister)

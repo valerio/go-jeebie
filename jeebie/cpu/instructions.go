@@ -4,15 +4,15 @@ import "github.com/valerio/go-jeebie/jeebie/bit"
 
 func (c *CPU) pushStack(r uint16) {
 	c.sp--
-	c.memory.WriteByte(c.sp, bit.Low(r))
+	c.memory.Write(c.sp, bit.Low(r))
 	c.sp--
-	c.memory.WriteByte(c.sp, bit.High(r))
+	c.memory.Write(c.sp, bit.High(r))
 }
 
 func (c *CPU) popStack() uint16 {
-	high := c.memory.ReadByte(c.sp)
+	high := c.memory.Read(c.sp)
 	c.sp++
-	low := c.memory.ReadByte(c.sp)
+	low := c.memory.Read(c.sp)
 	c.sp++
 
 	return bit.Combine(high, low)

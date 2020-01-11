@@ -26,6 +26,7 @@ const (
 	globalChecksumAddress   = 0x14E
 )
 
+// Cartridge holds the data and metadata of a gameboy cartridge.
 type Cartridge struct {
 	data           []byte
 	title          string
@@ -72,12 +73,12 @@ func NewCartridgeWithData(bytes []byte) *Cartridge {
 
 // ReadByte reads a byte at the specified address. Does not check bounds, so the caller must make sure the
 // address is valid for the cartridge.
-func (c Cartridge) ReadByte(addr uint16) uint8 {
+func (c Cartridge) Read(addr uint16) uint8 {
 	return c.data[addr]
 }
 
 // WriteByte attempts a write to the specified address. Writing to a cartridge has sense if the cartridge
 // has extra RAM or for some special operations, like switching ROM banks.
-func (c Cartridge) WriteByte(addr uint16, value uint8) uint8 {
+func (c Cartridge) Write(addr uint16, value uint8) uint8 {
 	return c.data[addr]
 }
