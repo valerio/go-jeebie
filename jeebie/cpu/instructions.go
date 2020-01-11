@@ -152,6 +152,22 @@ func (c *CPU) and(value uint8) {
 	c.setFlag(halfCarryFlag)
 }
 
+func (c *CPU) or(value uint8) {
+	c.a |= value
+	c.setFlagToCondition(zeroFlag, c.a == 0)
+	c.resetFlag(subFlag)
+	c.resetFlag(carryFlag)
+	c.resetFlag(halfCarryFlag)
+}
+
+func (c *CPU) xor(value uint8) {
+	c.a ^= value
+	c.setFlagToCondition(zeroFlag, c.a == 0)
+	c.resetFlag(subFlag)
+	c.resetFlag(carryFlag)
+	c.resetFlag(halfCarryFlag)
+}
+
 // jr performs a jump using the immediate value (byte)
 func (c *CPU) jr() {
 	c.pc += uint16(c.peekImmediate())

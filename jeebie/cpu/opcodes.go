@@ -1213,112 +1213,112 @@ func opcode0xA7(cpu *CPU) int {
 //XOR B
 //#0xA8:
 func opcode0xA8(cpu *CPU) int {
-
+	cpu.xor(cpu.b)
 	return 4
 }
 
 //XOR C
 //#0xA9:
 func opcode0xA9(cpu *CPU) int {
-
+	cpu.xor(cpu.c)
 	return 4
 }
 
 //XOR D
 //#0xAA:
 func opcode0xAA(cpu *CPU) int {
-
+	cpu.xor(cpu.d)
 	return 4
 }
 
 //XOR E
 //#0xAB:
 func opcode0xAB(cpu *CPU) int {
-
+	cpu.xor(cpu.e)
 	return 4
 }
 
 //XOR H
 //#0xAC:
 func opcode0xAC(cpu *CPU) int {
-
+	cpu.xor(cpu.h)
 	return 4
 }
 
 //XOR L
 //#0xAD:
 func opcode0xAD(cpu *CPU) int {
-
+	cpu.xor(cpu.l)
 	return 4
 }
 
 //XOR (HL)
 //#0xAE:
 func opcode0xAE(cpu *CPU) int {
-
+	cpu.xor(cpu.memory.Read(cpu.getHL()))
 	return 8
 }
 
 //XOR A
 //#0xAF:
 func opcode0xAF(cpu *CPU) int {
-
+	cpu.xor(cpu.a)
 	return 4
 }
 
 //OR B
 //#0xB0:
 func opcode0xB0(cpu *CPU) int {
-
+	cpu.or(cpu.b)
 	return 4
 }
 
 //OR C
 //#0xB1:
 func opcode0xB1(cpu *CPU) int {
-
+	cpu.or(cpu.c)
 	return 4
 }
 
 //OR D
 //#0xB2:
 func opcode0xB2(cpu *CPU) int {
-
+	cpu.or(cpu.d)
 	return 4
 }
 
 //OR E
 //#0xB3:
 func opcode0xB3(cpu *CPU) int {
-
+	cpu.or(cpu.e)
 	return 4
 }
 
 //OR H
 //#0xB4:
 func opcode0xB4(cpu *CPU) int {
-
+	cpu.or(cpu.h)
 	return 4
 }
 
 //OR L
 //#0xB5:
 func opcode0xB5(cpu *CPU) int {
-
+	cpu.or(cpu.l)
 	return 4
 }
 
 //OR (HL)
 //#0xB6:
 func opcode0xB6(cpu *CPU) int {
-
+	cpu.or(cpu.memory.Read(cpu.getHL()))
 	return 8
 }
 
 //OR A
 //#0xB7:
 func opcode0xB7(cpu *CPU) int {
-
+	cpu.or(cpu.a)
 	return 4
 }
 
@@ -1720,7 +1720,7 @@ func opcode0xED(cpu *CPU) int {
 //XOR n
 //#0xEE:
 func opcode0xEE(cpu *CPU) int {
-
+	cpu.xor(cpu.readImmediate())
 	return 4
 }
 
@@ -1775,7 +1775,7 @@ func opcode0xF5(cpu *CPU) int {
 //OR n
 //#0xF6:
 func opcode0xF6(cpu *CPU) int {
-
+	cpu.or(cpu.readImmediate())
 	return 8
 }
 
