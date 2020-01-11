@@ -102,6 +102,27 @@ func (c *CPU) addToA(value uint8) {
 	c.a = result
 }
 
+// adc sets the result of adding an 8 bit register and the carry value to A.
+func (c *CPU) adc(value uint8) {
+	carry := uint8(0)
+	if c.isSetFlag(carryFlag) {
+		carry = 1
+	}
+
+	a := c.a
+	result := a + value + carry
+
+	shouldSetCarry := (uint16(a) + uint16(value) + uint16(carry)) > 0xFF
+	shouldSetHalfCarry := (a&0xF)+(value&0xF)+carry > 0xF
+
+	c.setFlagToCondition(zeroFlag, result == 0)
+	c.resetFlag(subFlag)
+	c.setFlagToCondition(carryFlag, shouldSetCarry)
+	c.setFlagToCondition(halfCarryFlag, shouldSetHalfCarry)
+
+	c.a = result
+}
+
 // addToHL sets the result of adding a 16 bit register to HL, while setting relevant flags.
 func (c *CPU) addToHL(reg uint16) {
 	hl := bit.Combine(c.h, c.l)

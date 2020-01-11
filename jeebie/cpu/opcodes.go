@@ -989,56 +989,56 @@ func opcode0x87(cpu *CPU) int {
 //ADC A, B
 //#0x88:
 func opcode0x88(cpu *CPU) int {
-
+	cpu.adc(cpu.b)
 	return 4
 }
 
 //ADC A, C
 //#0x89:
 func opcode0x89(cpu *CPU) int {
-
+	cpu.adc(cpu.c)
 	return 4
 }
 
 //ADC A, D
 //#0x8A:
 func opcode0x8A(cpu *CPU) int {
-
+	cpu.adc(cpu.d)
 	return 4
 }
 
 //ADC A, E
 //#0x8B:
 func opcode0x8B(cpu *CPU) int {
-
+	cpu.adc(cpu.e)
 	return 4
 }
 
 //ADC A, H
 //#0x8C:
 func opcode0x8C(cpu *CPU) int {
-
+	cpu.adc(cpu.h)
 	return 4
 }
 
 //ADC A, L
 //#0x8D:
 func opcode0x8D(cpu *CPU) int {
-
+	cpu.adc(cpu.l)
 	return 4
 }
 
 //ADC A, (HL)
 //#0x8E:
 func opcode0x8E(cpu *CPU) int {
-
+	cpu.adc(cpu.memory.Read(cpu.getHL()))
 	return 8
 }
 
 //ADC A, A
 //#0x8F:
 func opcode0x8F(cpu *CPU) int {
-
+	cpu.adc(cpu.a)
 	return 4
 }
 
@@ -1486,7 +1486,7 @@ func opcode0xCD(cpu *CPU) int {
 //ADC A, n
 //#0xCE:
 func opcode0xCE(cpu *CPU) int {
-
+	cpu.adc(cpu.readImmediate())
 	return 8
 }
 
