@@ -1325,56 +1325,56 @@ func opcode0xB7(cpu *CPU) int {
 //CP B
 //#0xB8:
 func opcode0xB8(cpu *CPU) int {
-
+	cpu.cp(cpu.b)
 	return 4
 }
 
 //CP C
 //#0xB9:
 func opcode0xB9(cpu *CPU) int {
-
+	cpu.cp(cpu.c)
 	return 4
 }
 
 //CP D
 //#0xBA:
 func opcode0xBA(cpu *CPU) int {
-
+	cpu.cp(cpu.d)
 	return 4
 }
 
 //CP E
 //#0xBB:
 func opcode0xBB(cpu *CPU) int {
-
+	cpu.cp(cpu.e)
 	return 4
 }
 
 //CP H
 //#0xBC:
 func opcode0xBC(cpu *CPU) int {
-
+	cpu.cp(cpu.h)
 	return 4
 }
 
 //CP L
 //#0xBD:
 func opcode0xBD(cpu *CPU) int {
-
+	cpu.cp(cpu.l)
 	return 4
 }
 
 //CP (HL)
 //#0xBE:
 func opcode0xBE(cpu *CPU) int {
-
+	cpu.cp(cpu.memory.Read(cpu.getHL()))
 	return 8
 }
 
 //CP A
 //#0xBF:
 func opcode0xBF(cpu *CPU) int {
-
+	cpu.cp(cpu.a)
 	return 4
 }
 
@@ -1388,7 +1388,7 @@ func opcode0xC0(cpu *CPU) int {
 //POP BC
 //#0xC1:
 func opcode0xC1(cpu *CPU) int {
-
+	cpu.setBC(cpu.popStack())
 	return 12
 }
 
@@ -1420,14 +1420,14 @@ func opcode0xC4(cpu *CPU) int {
 //PUSH BC
 //#0xC5:
 func opcode0xC5(cpu *CPU) int {
-
+	cpu.pushStack(cpu.getBC())
 	return 16
 }
 
-//ADD, n
+//ADD A, n
 //#0xC6:
 func opcode0xC6(cpu *CPU) int {
-
+	cpu.addToA(cpu.readImmediate())
 	return 8
 }
 
@@ -1507,7 +1507,7 @@ func opcode0xD0(cpu *CPU) int {
 //POP DE
 //#0xD1:
 func opcode0xD1(cpu *CPU) int {
-
+	cpu.setDE(cpu.popStack())
 	return 12
 }
 
@@ -1538,14 +1538,14 @@ func opcode0xD4(cpu *CPU) int {
 //PUSH DE
 //#0xD5:
 func opcode0xD5(cpu *CPU) int {
-
+	cpu.pushStack(cpu.getDE())
 	return 16
 }
 
 //SUB A, n
 //#0xD6:
 func opcode0xD6(cpu *CPU) int {
-
+	cpu.sub(cpu.readImmediate())
 	return 8
 }
 
@@ -1622,7 +1622,7 @@ func opcode0xE0(cpu *CPU) int {
 //POP HL
 //#0xE1:
 func opcode0xE1(cpu *CPU) int {
-
+	cpu.setHL(cpu.popStack())
 	return 12
 }
 
@@ -1649,7 +1649,7 @@ func opcode0xE4(cpu *CPU) int {
 //PUSH HL
 //#0xE5:
 func opcode0xE5(cpu *CPU) int {
-
+	cpu.pushStack(cpu.getHL())
 	return 16
 }
 
@@ -1741,7 +1741,7 @@ func opcode0xF0(cpu *CPU) int {
 //POP AF
 //#0xF1:
 func opcode0xF1(cpu *CPU) int {
-
+	cpu.setAF(cpu.popStack())
 	return 12
 }
 
@@ -1755,7 +1755,7 @@ func opcode0xF2(cpu *CPU) int {
 //DI
 //#0xF3:
 func opcode0xF3(cpu *CPU) int {
-
+	cpu.interruptsEnabled = false
 	return 4
 }
 
@@ -1768,7 +1768,7 @@ func opcode0xF4(cpu *CPU) int {
 //PUSH AF
 //#0xF5:
 func opcode0xF5(cpu *CPU) int {
-
+	cpu.pushStack(cpu.getAF())
 	return 16
 }
 
@@ -1810,7 +1810,7 @@ func opcode0xFA(cpu *CPU) int {
 //EI
 //#0xFB:
 func opcode0xFB(cpu *CPU) int {
-
+	cpu.interruptsEnabled = true
 	return 4
 }
 
@@ -1829,7 +1829,7 @@ func opcode0xFD(cpu *CPU) int {
 //CP n
 //#0xFE:
 func opcode0xFE(cpu *CPU) int {
-
+	cpu.cp(cpu.readImmediate())
 	return 8
 }
 
