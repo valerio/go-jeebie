@@ -36,6 +36,7 @@ func (c *CPU) dec(r *uint8) {
 	c.setFlag(subFlag)
 }
 
+// TODO: all RLC/RL RR/RRC instructions should also toggle the zero flag if done on register A.
 func (c *CPU) rlc(r *uint8) {
 	value := *r
 
@@ -187,6 +188,101 @@ func (c *CPU) xor(value uint8) {
 	c.resetFlag(subFlag)
 	c.resetFlag(carryFlag)
 	c.resetFlag(halfCarryFlag)
+}
+
+// Implements the compare (CP) instruction.
+func (c *CPU) cp(value uint8) {
+	c.setFlagToCondition(zeroFlag, c.a == value)
+	c.resetFlag(subFlag)
+	c.setFlagToCondition(carryFlag, c.a < value)
+	c.setFlagToCondition(halfCarryFlag, (c.a-value)&0xF > c.a&0xF)
+}
+
+// Implements SWAP, which swaps the upper and lower nibbles (4 bits) of the 8-bit argument.
+func (c *CPU) swap(r *uint8) {
+	result := *r>>4 + *r<<4
+
+	c.setFlagToCondition(zeroFlag, result == 0)
+	c.resetFlag(subFlag)
+	c.resetFlag(carryFlag)
+	c.resetFlag(halfCarryFlag)
+
+	*r = result
+}
+
+// Implements DAA (Decimmal Adjust Accumulator).
+// It adjusts the A register so that it is valid Binary Coded Decimal (BCD).
+func (c *CPU) daa() {
+	// use a 16-bit integer to detect overflows and set carry accordingly
+	a := uint16(c.a)
+
+	if c.isSetFlag(subFlag) {
+		if c.isSetFlag(halfCarryFlag) || (a&0x0F) > 9 {
+			a += 0x06
+		}
+		if c.isSetFlag(carryFlag) || a > 0x9F {
+			a += 0x60
+		}
+	} else {
+		if c.isSetFlag(halfCarryFlag) {
+			a = (a - 0x06) & 0xFF
+		}
+		if c.isSetFlag(carryFlag) {
+			a -= 0x60
+		}
+	}
+
+	c.setFlagToCondition(zeroFlag, a == 0)
+	// detect overflow
+	if (a & 0x100) == 0x100 {
+		c.setFlag(carryFlag)
+	}
+	c.resetFlag(halfCarryFlag)
+
+	c.a = uint8(a)
+}
+
+// cpl complements the A register (flips all bits).
+func (c *CPU) cpl() {
+	c.a ^= 0xFF
+	c.setFlag(subFlag)
+	c.setFlag(halfCarryFlag)
+}
+
+// ccf complements the carry flag.
+func (c *CPU) ccf() {
+	c.resetFlag(subFlag)
+	c.resetFlag(halfCarryFlag)
+	// flip the carry flag
+	c.setFlagToCondition(carryFlag, !c.isSetFlag(carryFlag))
+}
+
+// scf sets the carry flag
+func (c *CPU) scf() {
+	c.resetFlag(subFlag)
+	c.resetFlag(halfCarryFlag)
+	c.setFlag(carryFlag)
+}
+
+// bit (BIT) tests if the bit b in register r is set or not.
+func (c *CPU) bit(b, r uint8) {
+	isSet := bit.IsSet(b, r)
+
+	if !isSet {
+		c.setFlag(zeroFlag)
+	}
+	c.resetFlag(subFlag)
+	c.setFlag(halfCarryFlag)
+}
+
+// set (SET) sets bit b in register r
+func (c *CPU) set(b uint8, r *uint8) {
+	*r = bit.Set(b, *r)
+}
+
+// res (RES) resets bit b in register r
+func (c *CPU) res(b uint8, r *uint8) {
+	*r = bit.Reset(b, *r)
 }
 
 // jr performs a jump using the immediate value (byte)

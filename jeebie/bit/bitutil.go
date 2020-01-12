@@ -47,6 +47,11 @@ func Set(index, byte uint8) uint8 {
 	return byte | (1 << index)
 }
 
+// Reset will return the passed byte with the bit at the specified index Set to 0.
+func Reset(index, byte uint8) uint8 {
+	return byte & ((1 << index) ^ 0xFF)
+}
+
 // GetBitValue returns a byte set to the value of the bit at the specified index.
 func GetBitValue(index, byte uint8) uint8 {
 	if IsSet(index, byte) {
