@@ -239,96 +239,118 @@ func opcode0xCB1F(c *CPU) int {
 // SLA B
 // 0xCB20:
 func opcode0xCB20(c *CPU) int {
+	c.sla(&c.b)
 	return 4
 }
 
 // SLA C
 // 0xCB21:
 func opcode0xCB21(c *CPU) int {
+	c.sla(&c.c)
 	return 4
 }
 
 // SLA D
 // 0xCB22:
 func opcode0xCB22(c *CPU) int {
+	c.sla(&c.d)
 	return 4
 }
 
 // SLA E
 // 0xCB23:
 func opcode0xCB23(c *CPU) int {
+	c.sla(&c.e)
 	return 4
 }
 
 // SLA H
 // 0xCB24:
 func opcode0xCB24(c *CPU) int {
+	c.sla(&c.h)
 	return 4
 }
 
 // SLA L
 // 0xCB25:
 func opcode0xCB25(c *CPU) int {
+	c.sla(&c.l)
 	return 4
 }
 
-// SLA (HL
+// SLA (HL)
 // 0xCB26:
 func opcode0xCB26(c *CPU) int {
+	addr := c.getHL()
+	value := c.memory.Read(addr)
+	c.sla(&value)
+	c.memory.Write(addr, value)
 	return 16
 }
 
 // SLA A
 // 0xCB27:
 func opcode0xCB27(c *CPU) int {
+	c.sla(&c.a)
 	return 4
 }
 
 // SRA B
 // 0xCB28:
 func opcode0xCB28(c *CPU) int {
+	c.sra(&c.b)
 	return 4
 }
 
 // SRA C
 // 0xCB29:
 func opcode0xCB29(c *CPU) int {
+	c.sra(&c.c)
 	return 4
 }
 
 // SRA D
 // 0xCB2A:
 func opcode0xCB2A(c *CPU) int {
+	c.sra(&c.d)
 	return 4
 }
 
 // SRA E
 // 0xCB2B:
 func opcode0xCB2B(c *CPU) int {
+	c.sra(&c.e)
 	return 4
 }
 
 // SRA H
 // 0xCB2C:
 func opcode0xCB2C(c *CPU) int {
+	c.sra(&c.h)
 	return 4
 }
 
 // SRA L
 // 0xCB2D:
 func opcode0xCB2D(c *CPU) int {
+	c.sra(&c.l)
 	return 4
 }
 
 // SRA (HL)
 // 0xCB2E:
 func opcode0xCB2E(c *CPU) int {
+	addr := c.getHL()
+	value := c.memory.Read(addr)
+	c.sra(&value)
+	c.memory.Write(addr, value)
 	return 16
 }
 
 // SRA A
 // 0xCB2F:
 func opcode0xCB2F(c *CPU) int {
+	c.sra(&c.a)
 	return 4
 }
 
@@ -394,48 +416,59 @@ func opcode0xCB37(c *CPU) int {
 // SRL B
 // 0xCB38:
 func opcode0xCB38(c *CPU) int {
+	c.srl(&c.b)
 	return 4
 }
 
 // SRL C
 // 0xCB39:
 func opcode0xCB39(c *CPU) int {
+	c.srl(&c.c)
 	return 4
 }
 
 // SRL D
 // 0xCB3A:
 func opcode0xCB3A(c *CPU) int {
+	c.srl(&c.d)
 	return 4
 }
 
 // SRL E
 // 0xCB3B:
 func opcode0xCB3B(c *CPU) int {
+	c.srl(&c.e)
 	return 4
 }
 
 // SRL H
 // 0xCB3C:
 func opcode0xCB3C(c *CPU) int {
+	c.srl(&c.h)
 	return 4
 }
 
 // SRL L
 // 0xCB3D:
 func opcode0xCB3D(c *CPU) int {
+	c.srl(&c.l)
 	return 4
 }
 
-// SRL (HL
+// SRL (HL)
 // 0xCB3E:
 func opcode0xCB3E(c *CPU) int {
+	addr := c.getHL()
+	value := c.memory.Read(addr)
+	c.srl(&value)
+	c.memory.Write(addr, value)
 	return 16
 }
 
 // SRL A
 // 0xCB3F:
 func opcode0xCB3F(c *CPU) int {
+	c.srl(&c.a)
 	return 4
 }
 

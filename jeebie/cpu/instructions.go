@@ -37,7 +37,6 @@ func (c *CPU) dec(r *uint8) {
 	c.setFlag(subFlag)
 }
 
-// TODO: all RLC/RL RR/RRC instructions should also NOT toggle the zero flag if done on register A.
 func (c *CPU) rlc(r *uint8) {
 	value := *r
 
@@ -111,6 +110,49 @@ func (c *CPU) rr(r *uint8) {
 		c.setFlagToCondition(zeroFlag, value == 0)
 	}
 
+	*r = value
+}
+
+func (c *CPU) sla(r *uint8) {
+	value := *r
+
+	c.setFlagToCondition(carryFlag, bit.IsSet(7, value))
+	c.resetFlag(subFlag)
+	c.resetFlag(halfCarryFlag)
+
+	value <<= 1
+	c.setFlagToCondition(zeroFlag, value == 0)
+	*r = value
+}
+
+func (c *CPU) sra(r *uint8) {
+	value := *r
+
+	c.setFlagToCondition(carryFlag, bit.IsSet(0, value))
+	c.resetFlag(subFlag)
+	c.resetFlag(halfCarryFlag)
+
+	// preserve the MSB
+	if bit.IsSet(7, value) {
+		value = (value >> 1) | 0x80
+	} else {
+		value >>= 1
+	}
+
+	c.setFlagToCondition(zeroFlag, value == 0)
+
+	*r = value
+}
+
+func (c *CPU) srl(r *uint8) {
+	value := *r
+
+	c.setFlagToCondition(carryFlag, bit.IsSet(0, value))
+	c.resetFlag(subFlag)
+	c.resetFlag(halfCarryFlag)
+
+	value >>= 1
+	c.setFlagToCondition(zeroFlag, value == 0)
 	*r = value
 }
 
