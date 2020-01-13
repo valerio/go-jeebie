@@ -1,6 +1,7 @@
 package cpu
 
 import "github.com/valerio/go-jeebie/jeebie/bit"
+import "math/bits"
 
 func (c *CPU) pushStack(r uint16) {
 	c.sp--
@@ -36,16 +37,23 @@ func (c *CPU) dec(r *uint8) {
 	c.setFlag(subFlag)
 }
 
-// TODO: all RLC/RL RR/RRC instructions should also toggle the zero flag if done on register A.
+// TODO: all RLC/RL RR/RRC instructions should also NOT toggle the zero flag if done on register A.
 func (c *CPU) rlc(r *uint8) {
 	value := *r
 
-	c.setFlagToCondition(carryFlag, value > 0x7F)
+	// set carry if bit 7 was set
+	c.setFlagToCondition(carryFlag, bit.IsSet(7, value))
 	c.resetFlag(zeroFlag)
 	c.resetFlag(subFlag)
 	c.resetFlag(halfCarryFlag)
 
-	value = (value << 1) | (value >> 7)
+	value = bits.RotateLeft8(value, 1)
+
+	// if rotating the A register, don't set the zero flag.
+	if r != &c.a {
+		c.setFlagToCondition(zeroFlag, value == 0)
+	}
+
 	*r = value
 }
 
@@ -59,18 +67,31 @@ func (c *CPU) rl(r *uint8) {
 	c.resetFlag(halfCarryFlag)
 
 	value = (value << 1) | carry
+
+	// if rotating the A register, don't set the zero flag.
+	if r != &c.a {
+		c.setFlagToCondition(zeroFlag, value == 0)
+	}
+
 	*r = value
 }
 
 func (c *CPU) rrc(r *uint8) {
 	value := *r
 
-	c.setFlagToCondition(carryFlag, value > 0x7F)
+	// set carry if bit 0 was set
+	c.setFlagToCondition(carryFlag, bit.IsSet(0, value))
 	c.resetFlag(zeroFlag)
 	c.resetFlag(subFlag)
 	c.resetFlag(halfCarryFlag)
 
-	value = (value >> 1) | ((value & 1) << 7)
+	value = bits.RotateLeft8(value, -1)
+
+	// if rotating the A register, don't set the zero flag.
+	if r != &c.a {
+		c.setFlagToCondition(zeroFlag, value == 0)
+	}
+
 	*r = value
 }
 
@@ -78,12 +99,18 @@ func (c *CPU) rr(r *uint8) {
 	value := *r
 	carry := c.flagToBit(carryFlag) << 7
 
-	c.setFlagToCondition(carryFlag, value > 0x7F)
+	c.setFlagToCondition(carryFlag, bit.IsSet(0, value))
 	c.resetFlag(zeroFlag)
 	c.resetFlag(subFlag)
 	c.resetFlag(halfCarryFlag)
 
 	value = (value >> 1) | carry
+
+	// if rotating the A register, don't set the zero flag.
+	if r != &c.a {
+		c.setFlagToCondition(zeroFlag, value == 0)
+	}
+
 	*r = value
 }
 
@@ -105,11 +132,7 @@ func (c *CPU) addToA(value uint8) {
 
 // adc sets the result of adding an 8 bit register and the carry value to A.
 func (c *CPU) adc(value uint8) {
-	carry := uint8(0)
-	if c.isSetFlag(carryFlag) {
-		carry = 1
-	}
-
+	carry := c.flagToBit(carryFlag)
 	a := c.a
 	result := a + value + carry
 
@@ -154,18 +177,15 @@ func (c *CPU) sub(value uint8) {
 // sbc will subtract the value and carry (1 if set, 0 otherwise) from the register A.
 func (c *CPU) sbc(value uint8) {
 	a := c.a
-	carry := 0
-	if c.isSetFlag(carryFlag) {
-		carry = 1
-	}
+	carry := c.flagToBit(carryFlag)
 
-	result := int(c.a) - int(value) - carry
+	result := c.a - value - carry
 	c.a = uint8(result)
 
 	c.setFlagToCondition(zeroFlag, result == 0)
 	c.setFlag(subFlag)
 	c.setFlagToCondition(carryFlag, result < 0)
-	c.setFlagToCondition(halfCarryFlag, (int(a)&0xF)-(int(value)&0xF)-carry < 0)
+	c.setFlagToCondition(halfCarryFlag, (a&0xF)-(value&0xF)-carry < 0)
 }
 
 func (c *CPU) and(value uint8) {

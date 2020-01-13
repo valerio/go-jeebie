@@ -3,192 +3,236 @@ package cpu
 // RLC B
 // 0xCB00:
 func opcode0xCB00(c *CPU) int {
+	c.rlc(&c.b)
 	return 4
 }
 
 // RLC C
 // 0xCB01:
 func opcode0xCB01(c *CPU) int {
+	c.rlc(&c.c)
 	return 4
 }
 
 // RLC D
 // 0xCB02:
 func opcode0xCB02(c *CPU) int {
+	c.rlc(&c.d)
 	return 4
 }
 
 // RLC E
 // 0xCB03:
 func opcode0xCB03(c *CPU) int {
+	c.rlc(&c.e)
 	return 4
 }
 
 // RLC H
 // 0xCB04:
 func opcode0xCB04(c *CPU) int {
+	c.rlc(&c.h)
 	return 4
 }
 
 // RLC L
 // 0xCB05:
 func opcode0xCB05(c *CPU) int {
+	c.rlc(&c.l)
 	return 4
 }
 
-// RLC (HL
+// RLC (HL)
 // 0xCB06:
 func opcode0xCB06(c *CPU) int {
+	addr := c.getHL()
+	value := c.memory.Read(addr)
+	c.rlc(&value)
+	c.memory.Write(addr, value)
 	return 16
 }
 
 // RLC A
 // 0xCB07:
 func opcode0xCB07(c *CPU) int {
+	c.rlc(&c.a)
 	return 4
 }
 
 // RRC B
 // 0xCB08:
 func opcode0xCB08(c *CPU) int {
+	c.rrc(&c.b)
 	return 4
 }
 
 // RRC C
 // 0xCB09:
 func opcode0xCB09(c *CPU) int {
+	c.rrc(&c.c)
 	return 4
 }
 
 // RRC D
 // 0xCB0A:
 func opcode0xCB0A(c *CPU) int {
+	c.rrc(&c.d)
 	return 4
 }
 
 // RRC E
 // 0xCB0B:
 func opcode0xCB0B(c *CPU) int {
+	c.rrc(&c.e)
 	return 4
 }
 
 // RRC H
 // 0xCB0C:
 func opcode0xCB0C(c *CPU) int {
+	c.rrc(&c.h)
 	return 4
 }
 
 // RRC L
 // 0xCB0D:
 func opcode0xCB0D(c *CPU) int {
+	c.rrc(&c.l)
 	return 4
 }
 
-// RRC (HL
+// RRC (HL)
 // 0xCB0E:
 func opcode0xCB0E(c *CPU) int {
+	addr := c.getHL()
+	value := c.memory.Read(addr)
+	c.rrc(&value)
+	c.memory.Write(addr, value)
 	return 16
 }
 
 // RRC A
 // 0xCB0F:
 func opcode0xCB0F(c *CPU) int {
+	c.rrc(&c.a)
 	return 4
 }
 
 // RL B
 // 0xCB10:
 func opcode0xCB10(c *CPU) int {
+	c.rl(&c.b)
 	return 4
 }
 
 // RL C
 // 0xCB11:
 func opcode0xCB11(c *CPU) int {
+	c.rl(&c.c)
 	return 4
 }
 
 // RL D
 // 0xCB12:
 func opcode0xCB12(c *CPU) int {
+	c.rl(&c.d)
 	return 4
 }
 
 // RL E
 // 0xCB13:
 func opcode0xCB13(c *CPU) int {
+	c.rl(&c.e)
 	return 4
 }
 
 // RL H
 // 0xCB14:
 func opcode0xCB14(c *CPU) int {
+	c.rl(&c.h)
 	return 4
 }
 
 // RL L
 // 0xCB15:
 func opcode0xCB15(c *CPU) int {
+	c.rl(&c.l)
 	return 4
 }
 
 // RL (HL)
 // 0xCB16:
 func opcode0xCB16(c *CPU) int {
+	addr := c.getHL()
+	value := c.memory.Read(addr)
+	c.rl(&value)
+	c.memory.Write(addr, value)
 	return 16
 }
 
 // RL A
 // 0xCB17:
 func opcode0xCB17(c *CPU) int {
+	c.rl(&c.a)
 	return 4
 }
 
 // RR B
 // 0xCB18:
 func opcode0xCB18(c *CPU) int {
+	c.rr(&c.b)
 	return 4
 }
 
 // RR C
 // 0xCB19:
 func opcode0xCB19(c *CPU) int {
+	c.rr(&c.c)
 	return 4
 }
 
 // RR D
 // 0xCB1A:
 func opcode0xCB1A(c *CPU) int {
+	c.rr(&c.d)
 	return 4
 }
 
 // RR E
 // 0xCB1B:
 func opcode0xCB1B(c *CPU) int {
+	c.rr(&c.e)
 	return 4
 }
 
 // RR H
 // 0xCB1C:
 func opcode0xCB1C(c *CPU) int {
+	c.rr(&c.h)
 	return 4
 }
 
 // RR L
 // 0xCB1D:
 func opcode0xCB1D(c *CPU) int {
+	c.rr(&c.l)
 	return 4
 }
 
 // RR (HL)
 // 0xCB1E:
 func opcode0xCB1E(c *CPU) int {
+	addr := c.getHL()
+	value := c.memory.Read(addr)
+	c.rr(&value)
+	c.memory.Write(addr, value)
 	return 16
 }
 
 // RR A
 // 0xCB1F:
 func opcode0xCB1F(c *CPU) int {
+	c.rr(&c.a)
 	return 4
 }
 
