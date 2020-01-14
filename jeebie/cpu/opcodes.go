@@ -1378,10 +1378,13 @@ func opcode0xBF(cpu *CPU) int {
 	return 4
 }
 
-//RET !FZ
+//RET NZ
 //#0xC0:
 func opcode0xC0(cpu *CPU) int {
-
+	if !cpu.isSetFlag(zeroFlag) {
+		cpu.pc = cpu.popStack()
+		return 20
+	}
 	return 8
 }
 
@@ -1396,24 +1399,31 @@ func opcode0xC1(cpu *CPU) int {
 //#0xC2:
 func opcode0xC2(cpu *CPU) int {
 	if !cpu.isSetFlag(zeroFlag) {
-		cpu.jp()
+		cpu.pc = cpu.peekImmediateWord()
 		return 16
 	}
-
+	// jump wasn't taken, we need to skip the immediate value (nn)
+	cpu.pc += 2
 	return 12
 }
 
 //JP nn
 //#0xC3:
 func opcode0xC3(cpu *CPU) int {
-	cpu.jp()
+	cpu.pc = cpu.peekImmediateWord()
 	return 16
 }
 
 //CALL !FZ, nn
 //#0xC4:
 func opcode0xC4(cpu *CPU) int {
+	if !cpu.isSetFlag(zeroFlag) {
+		cpu.pc = cpu.readImmediateWord()
+		cpu.pushStack(cpu.pc)
+		return 24
+	}
 
+	cpu.pc += 2
 	return 12
 }
 
@@ -1441,14 +1451,17 @@ func opcode0xC7(cpu *CPU) int {
 //RET FZ
 //#0xC8:
 func opcode0xC8(cpu *CPU) int {
-
+	if cpu.isSetFlag(zeroFlag) {
+		cpu.pc = cpu.popStack()
+		return 20
+	}
 	return 8
 }
 
-//RET
+// RET Z
 //#0xC9:
 func opcode0xC9(cpu *CPU) int {
-
+	cpu.pc = cpu.popStack()
 	return 16
 }
 
@@ -1456,10 +1469,11 @@ func opcode0xC9(cpu *CPU) int {
 //#0xCA:
 func opcode0xCA(cpu *CPU) int {
 	if cpu.isSetFlag(zeroFlag) {
-		cpu.jp()
+		cpu.pc = cpu.peekImmediateWord()
 		return 16
 	}
-
+	// jump wasn't taken, we need to skip the immediate value (nn)
+	cpu.pc += 2
 	return 12
 }
 
@@ -1472,14 +1486,21 @@ func opcode0xCB(cpu *CPU) int {
 //CALL FZ, nn
 //#0xCC:
 func opcode0xCC(cpu *CPU) int {
+	if cpu.isSetFlag(zeroFlag) {
+		cpu.pc = cpu.readImmediateWord()
+		cpu.pushStack(cpu.pc)
+		return 24
+	}
 
+	cpu.pc += 2
 	return 12
 }
 
 //CALL nn
 //#0xCD:
 func opcode0xCD(cpu *CPU) int {
-
+	cpu.pc = cpu.readImmediateWord()
+	cpu.pushStack(cpu.pc)
 	return 24
 }
 
@@ -1497,10 +1518,13 @@ func opcode0xCF(cpu *CPU) int {
 	return 16
 }
 
-//RET !FC
+//RET NC
 //#0xD0:
 func opcode0xD0(cpu *CPU) int {
-
+	if !cpu.isSetFlag(carryFlag) {
+		cpu.pc = cpu.popStack()
+		return 20
+	}
 	return 8
 }
 
@@ -1515,10 +1539,11 @@ func opcode0xD1(cpu *CPU) int {
 //#0xD2:
 func opcode0xD2(cpu *CPU) int {
 	if !cpu.isSetFlag(carryFlag) {
-		cpu.jp()
+		cpu.pc = cpu.peekImmediateWord()
 		return 16
 	}
-
+	// jump wasn't taken, we need to skip the immediate value (nn)
+	cpu.pc += 2
 	return 12
 }
 
@@ -1531,7 +1556,13 @@ func opcode0xD3(cpu *CPU) int {
 //CALL !FC, nn
 //#0xD4:
 func opcode0xD4(cpu *CPU) int {
+	if !cpu.isSetFlag(carryFlag) {
+		cpu.pc = cpu.readImmediateWord()
+		cpu.pushStack(cpu.pc)
+		return 24
+	}
 
+	cpu.pc += 2
 	return 12
 }
 
@@ -1559,7 +1590,10 @@ func opcode0xD7(cpu *CPU) int {
 //RET FC
 //#0xD8:
 func opcode0xD8(cpu *CPU) int {
-
+	if cpu.isSetFlag(carryFlag) {
+		cpu.pc = cpu.popStack()
+		return 20
+	}
 	return 8
 }
 
@@ -1574,10 +1608,11 @@ func opcode0xD9(cpu *CPU) int {
 //#0xDA:
 func opcode0xDA(cpu *CPU) int {
 	if cpu.isSetFlag(carryFlag) {
-		cpu.jp()
+		cpu.pc = cpu.peekImmediateWord()
 		return 16
 	}
-
+	// jump wasn't taken, we need to skip the immediate value (nn)
+	cpu.pc += 2
 	return 12
 }
 
@@ -1590,7 +1625,13 @@ func opcode0xDB(cpu *CPU) int {
 //CALL FC, nn
 //#0xDC:
 func opcode0xDC(cpu *CPU) int {
+	if cpu.isSetFlag(carryFlag) {
+		cpu.pc = cpu.readImmediateWord()
+		cpu.pushStack(cpu.pc)
+		return 24
+	}
 
+	cpu.pc += 2
 	return 12
 }
 

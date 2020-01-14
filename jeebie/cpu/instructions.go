@@ -351,8 +351,3 @@ func (c *CPU) res(b uint8, r *uint8) {
 func (c *CPU) jr() {
 	c.pc += uint16(c.peekImmediate())
 }
-
-// jp performs a jump using the immediate value (16 bit word)
-func (c *CPU) jp() {
-	c.pc += c.peekImmediateWord()
-}
