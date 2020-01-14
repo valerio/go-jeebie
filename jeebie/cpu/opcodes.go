@@ -181,7 +181,8 @@ func opcode0x17(cpu *CPU) int {
 //JR n
 //#0x18:
 func opcode0x18(cpu *CPU) int {
-	cpu.jr()
+	value := int16(cpu.pc) + int16(cpu.readSignedImmediate())
+	cpu.pc += uint16(value)
 	return 12
 }
 
@@ -238,10 +239,12 @@ func opcode0x1F(cpu *CPU) int {
 //#0x20:
 func opcode0x20(cpu *CPU) int {
 	if !cpu.isSetFlag(zeroFlag) {
-		cpu.jr()
+		value := int16(cpu.pc) + int16(cpu.readSignedImmediate())
+		cpu.pc += uint16(value)
 		return 12
 	}
 
+	cpu.pc++
 	return 8
 }
 
@@ -291,7 +294,7 @@ func opcode0x26(cpu *CPU) int {
 //DAA
 //#0x27:
 func opcode0x27(cpu *CPU) int {
-
+	cpu.daa()
 	return 4
 }
 
@@ -299,10 +302,12 @@ func opcode0x27(cpu *CPU) int {
 //#0x28:
 func opcode0x28(cpu *CPU) int {
 	if cpu.isSetFlag(zeroFlag) {
-		cpu.jr()
+		value := int16(cpu.pc) + int16(cpu.readSignedImmediate())
+		cpu.pc += uint16(value)
 		return 12
 	}
 
+	cpu.pc++
 	return 8
 }
 
@@ -363,10 +368,12 @@ func opcode0x2F(cpu *CPU) int {
 //#0x30:
 func opcode0x30(cpu *CPU) int {
 	if !cpu.isSetFlag(carryFlag) {
-		cpu.jr()
+		value := int16(cpu.pc) + int16(cpu.readSignedImmediate())
+		cpu.pc += uint16(value)
 		return 12
 	}
 
+	cpu.pc++
 	return 8
 }
 
@@ -430,10 +437,12 @@ func opcode0x37(cpu *CPU) int {
 //#0x38:
 func opcode0x38(cpu *CPU) int {
 	if cpu.isSetFlag(carryFlag) {
-		cpu.jr()
+		value := int16(cpu.pc) + int16(cpu.readSignedImmediate())
+		cpu.pc += uint16(value)
 		return 12
 	}
 
+	cpu.pc++
 	return 8
 }
 
@@ -864,8 +873,8 @@ func opcode0x75(cpu *CPU) int {
 //HALT
 //#0x76:
 func opcode0x76(cpu *CPU) int {
-
-	return 4
+	panic("HALT 0x76 was called, but is unimplemented.")
+	// return 4
 }
 
 //LD (HL), A
@@ -1444,7 +1453,8 @@ func opcode0xC6(cpu *CPU) int {
 //RST 0
 //#0xC7:
 func opcode0xC7(cpu *CPU) int {
-
+	cpu.pushStack(cpu.pc)
+	cpu.pc = 0
 	return 16
 }
 
@@ -1514,7 +1524,8 @@ func opcode0xCE(cpu *CPU) int {
 //RST 0x8
 //#0xCF:
 func opcode0xCF(cpu *CPU) int {
-
+	cpu.pushStack(cpu.pc)
+	cpu.pc = 0x8
 	return 16
 }
 
@@ -1583,6 +1594,8 @@ func opcode0xD6(cpu *CPU) int {
 //RST 0x10
 //#0xD7:
 func opcode0xD7(cpu *CPU) int {
+	cpu.pushStack(cpu.pc)
+	cpu.pc = 0x10
 
 	return 16
 }
@@ -1600,7 +1613,8 @@ func opcode0xD8(cpu *CPU) int {
 //RETI
 //#0xD9:
 func opcode0xD9(cpu *CPU) int {
-
+	cpu.pc = cpu.popStack()
+	cpu.interruptsEnabled = true
 	return 16
 }
 
@@ -1644,19 +1658,23 @@ func opcode0xDD(cpu *CPU) int {
 //SBC A, n
 //#0xDE:
 func opcode0xDE(cpu *CPU) int {
+	cpu.sbc(cpu.readImmediate())
 	return 8
 }
 
 //RST 0x18
 //#0xDF:
 func opcode0xDF(cpu *CPU) int {
+	cpu.pushStack(cpu.pc)
+	cpu.pc = 0x18
 	return 16
 }
 
-//LDH (n), A
+//LDH (0xFF00+n), A
 //#0xE0:
 func opcode0xE0(cpu *CPU) int {
-
+	addr := 0xFF00 + uint16(cpu.readImmediate())
+	cpu.memory.Write(addr, cpu.a)
 	return 12
 }
 
@@ -1670,7 +1688,7 @@ func opcode0xE1(cpu *CPU) int {
 //LD (0xFF00 + C), A
 //#0xE2:
 func opcode0xE2(cpu *CPU) int {
-	addr := 0xFF00 | uint16(cpu.c)
+	addr := 0xFF00 + uint16(cpu.c)
 	cpu.memory.Write(addr, cpu.a)
 	return 8
 }
@@ -1697,14 +1715,15 @@ func opcode0xE5(cpu *CPU) int {
 //AND n
 //#0xE6:
 func opcode0xE6(cpu *CPU) int {
-
+	cpu.and(cpu.readImmediate())
 	return 8
 }
 
 //RST 0x20
 //#0xE7:
 func opcode0xE7(cpu *CPU) int {
-
+	cpu.pushStack(cpu.pc)
+	cpu.pc = 0x20
 	return 16
 }
 
@@ -1768,14 +1787,16 @@ func opcode0xEE(cpu *CPU) int {
 //RST 0x28
 //#0xEF:
 func opcode0xEF(cpu *CPU) int {
-
+	cpu.pushStack(cpu.pc)
+	cpu.pc = 0x28
 	return 16
 }
 
-//LDH A, (n)
+//LDH A, (0xFF00 + n)
 //#0xF0:
 func opcode0xF0(cpu *CPU) int {
-
+	addr := 0xFF00 + uint16(cpu.readImmediate())
+	cpu.a = cpu.memory.Read(addr)
 	return 12
 }
 
@@ -1823,13 +1844,23 @@ func opcode0xF6(cpu *CPU) int {
 //RST 0x30
 //#0xF7:
 func opcode0xF7(cpu *CPU) int {
-
+	cpu.pushStack(cpu.pc)
+	cpu.pc = 0x30
 	return 16
 }
 
 //LDHL SP, n
 //#0xF8:
 func opcode0xF8(cpu *CPU) int {
+	n := cpu.peekSignedImmediate()
+	result := uint16(int16(cpu.sp) + int16(cpu.readSignedImmediate()))
+
+	cpu.setFlagToCondition(carryFlag, (cpu.sp^uint16(n)^result)&0x100 == 0x100)
+	cpu.setFlagToCondition(halfCarryFlag, (cpu.sp^uint16(n)^result)&0x10 == 0x10)
+	cpu.resetFlag(zeroFlag)
+	cpu.resetFlag(subFlag)
+
+	cpu.setHL(result)
 
 	return 12
 }
@@ -1877,6 +1908,7 @@ func opcode0xFE(cpu *CPU) int {
 //RST 0x38
 //#0xFF:
 func opcode0xFF(cpu *CPU) int {
-
+	cpu.pushStack(cpu.pc)
+	cpu.pc = 0x38
 	return 16
 }

@@ -272,7 +272,7 @@ func (c *CPU) swap(r *uint8) {
 	*r = result
 }
 
-// Implements DAA (Decimmal Adjust Accumulator).
+// Implements DAA (Decimal Adjust Accumulator).
 // It adjusts the A register so that it is valid Binary Coded Decimal (BCD).
 func (c *CPU) daa() {
 	// use a 16-bit integer to detect overflows and set carry accordingly
@@ -345,9 +345,4 @@ func (c *CPU) set(b uint8, r *uint8) {
 // res (RES) resets bit b in register r
 func (c *CPU) res(b uint8, r *uint8) {
 	*r = bit.Reset(b, *r)
-}
-
-// jr performs a jump using the immediate value (byte)
-func (c *CPU) jr() {
-	c.pc += uint16(c.peekImmediate())
 }
