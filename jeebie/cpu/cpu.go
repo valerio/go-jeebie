@@ -1,8 +1,6 @@
 package cpu
 
 import (
-	"fmt"
-
 	"github.com/valerio/go-jeebie/jeebie/bit"
 	"github.com/valerio/go-jeebie/jeebie/memory"
 )
@@ -57,7 +55,6 @@ func New(memory *memory.MMU) *CPU {
 // Returns the amount of cycles that execution has taken.
 func (c *CPU) Tick() int {
 	c.handleInterrupts()
-	fmt.Printf("CPU: %+v\n", c)
 
 	instruction := Decode(c)
 	cycles := instruction(c)
@@ -81,20 +78,27 @@ func (c *CPU) handleInterrupts() {
 		return
 	}
 
-	c.pushStack(c.pc)
-
 	for i := uint8(0); i < 5; i++ {
 		if bit.IsSet(i, firedInterrupts) {
 			// interrupt handlers are offset by 8
+			// 0x40 - 0x48 - 0x50 - 0x58 - 0x60
 			address := uint16(i)*8 + baseInterruptAddress
 
 			// mark as handled by clearing the bit at i
 			c.memory.Write(interruptFlagAddress, bit.Clear(i, firedInterrupts))
 
+			// move PC to interrupt handler address
+			c.pushStack(c.pc)
 			c.pc = address
+
+			// add cycles equivalent to a JMP.
+			c.cycles += 20
+
+			// disable interrupts
 			c.interruptsEnabled = false
 
-			// only handle one interrupt at a time
+			// return on the first served interrupt.
+			// will serve the next when interrupts are enabled again.
 			return
 		}
 	}
