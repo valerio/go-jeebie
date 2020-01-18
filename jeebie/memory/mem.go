@@ -133,7 +133,8 @@ func (m *MMU) Write(addr uint16, value byte) {
 
 	// Unused
 	if isBetween(addr, 0xFEA0, 0xFEFF) {
-		panic(fmt.Sprintf("Attempted write at unused/unmapped address: 0x%X", addr))
+		// panic(fmt.Sprintf("Attempted write at unused/unmapped address: 0x%X", addr))
+		return
 	}
 
 	// IO registers
