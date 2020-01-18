@@ -1,5 +1,7 @@
 package video
 
+import "math/rand"
+
 type GBColor uint32
 
 const (
@@ -51,4 +53,30 @@ func (fb *FrameBuffer) SetPixel(x, y uint, color GBColor) {
 
 func (fb *FrameBuffer) ToSlice() []uint32 {
 	return fb.buffer
+}
+
+func (fb *FrameBuffer) DrawNoise() {
+	// placeholder: draws random pixels
+	for i := 0; i < len(fb.buffer); i++ {
+
+		var color GBColor
+		switch rand.Uint32() % 4 {
+		case 0:
+			color = WhiteColor
+			break
+		case 1:
+			color = BlackColor
+			break
+		case 2:
+			color = LightGreyColor
+			break
+		case 3:
+			color = DarkGreyColor
+			break
+		default:
+			color = BlackColor
+		}
+
+		fb.buffer[i] = uint32(color)
+	}
 }

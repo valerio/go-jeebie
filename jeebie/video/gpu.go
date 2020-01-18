@@ -1,7 +1,7 @@
 package video
 
 import (
-	"math/rand"
+	"fmt"
 
 	"github.com/valerio/go-jeebie/jeebie/bit"
 	"github.com/valerio/go-jeebie/jeebie/memory"
@@ -75,6 +75,7 @@ func NewGpu(screen *Screen, memory *memory.MMU) *GPU {
 
 // Tick simulates gpu behaviour for a certain amount of clock cycles.
 func (g *GPU) Tick(cycles int) {
+	fmt.Printf("GPU TICK %v %v \n\n", cycles, g.cycles)
 	g.cycles += cycles
 
 	switch g.mode {
@@ -120,32 +121,6 @@ func (g *GPU) Tick(cycles int) {
 			}
 		}
 		break
-	}
-}
-
-func (g *GPU) drawNoise() {
-	// placeholder: draws random pixels
-	for i := 0; i < len(g.framebuffer.buffer); i++ {
-
-		var color GBColor
-		switch rand.Uint32() % 4 {
-		case 0:
-			color = WhiteColor
-			break
-		case 1:
-			color = BlackColor
-			break
-		case 2:
-			color = LightGreyColor
-			break
-		case 3:
-			color = DarkGreyColor
-			break
-		default:
-			color = BlackColor
-		}
-
-		g.framebuffer.buffer[i] = uint32(color)
 	}
 }
 
@@ -207,38 +182,6 @@ func (g *GPU) drawTile(tileX, tileY int) {
 			g.framebuffer.SetPixel(fbX+x, fbY+y, color)
 		}
 	}
-}
-
-type Tile struct {
-	buffer []GBColor
-}
-
-func newTile(address uint16, mmu *memory.MMU) *Tile {
-	buffer := make([]GBColor, 64)
-
-	for tileLine := 0; tileLine < 8; tileLine++ {
-		// each line is 2 bytes
-		lineStartAddress := address + 2*uint16(tileLine)
-
-		lowPixelLine := mmu.Read(lineStartAddress)
-		highPixelLine := mmu.Read(lineStartAddress + 1)
-
-		// compose colors pixel by pixel
-		for pixel := 0; pixel < 8; pixel++ {
-			pixelIndex := 7 - uint8(pixel)
-			pixelColorValue := bit.GetBitValue(pixelIndex, highPixelLine)<<1 | bit.GetBitValue(pixelIndex, lowPixelLine)
-
-			buffer[pixel*8+tileLine] = ByteToColor(pixelColorValue)
-		}
-	}
-
-	return &Tile{
-		buffer: make([]GBColor, 0),
-	}
-}
-
-func (t *Tile) getPixel(x, y uint) GBColor {
-	return t.buffer[(y*8)+x]
 }
 
 // LCDC (LCD Control) Register bit values
