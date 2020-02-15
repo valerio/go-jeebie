@@ -2,6 +2,9 @@ package memory
 
 import (
 	"fmt"
+
+	"github.com/valerio/go-jeebie/jeebie/addr"
+	"github.com/valerio/go-jeebie/jeebie/bit"
 )
 
 // MMU allows access to all memory mapped I/O and data/registers
@@ -28,6 +31,26 @@ func NewWithCartridge(cart *Cartridge) *MMU {
 
 func isBetween(addr, start, end uint16) bool {
 	return addr >= start && addr <= end
+}
+
+// RequestInterrupt sets the interrupt flag (IF register) of the chosen interrupt to 1.
+func (m *MMU) RequestInterrupt(interrupt uint8) {
+	interruptFlags := m.Read(addr.IF)
+	m.Write(addr.IF, bit.Set(interrupt, interruptFlags))
+}
+
+func (m *MMU) ReadBit(index uint8, addr uint16) bool {
+	return bit.IsSet(index, m.Read(addr))
+}
+
+func (m *MMU) SetBit(index uint8, addr uint16, set bool) {
+	value := m.Read(addr)
+	if set {
+		bit.Set(index, value)
+	} else {
+		bit.Reset(index, value)
+	}
+	m.Write(addr, value)
 }
 
 func (m *MMU) Read(addr uint16) byte {

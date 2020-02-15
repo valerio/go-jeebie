@@ -5,6 +5,12 @@ import "math/rand"
 type GBColor uint32
 
 const (
+	framebufferWidth  = 160
+	framebufferHeight = 144
+	framebufferSize   = framebufferWidth * framebufferHeight
+)
+
+const (
 	WhiteColor     GBColor = 0xFFFFFFFF
 	LightGreyColor         = 0xFF989898
 	DarkGreyColor          = 0xFF4C4C4C
@@ -32,9 +38,8 @@ type FrameBuffer struct {
 	buffer []uint32
 }
 
-// NewFrameBuffer creates a frame buffer with the specified size.
-func NewFrameBuffer(width, height uint) *FrameBuffer {
-	colorSlice := make([]uint32, width*height, width*height)
+func NewFrameBuffer() *FrameBuffer {
+	colorSlice := make([]uint32, framebufferSize, framebufferSize)
 
 	return &FrameBuffer{
 		width:  width,

@@ -1,8 +1,7 @@
 package video
 
 import (
-	"fmt"
-
+	"github.com/valerio/go-jeebie/jeebie/addr"
 	"github.com/valerio/go-jeebie/jeebie/bit"
 	"github.com/valerio/go-jeebie/jeebie/memory"
 )
@@ -23,46 +22,19 @@ const (
 	scanlineCycles     = oamScanlineCycles + vramScanlineCycles + hblankCycles
 )
 
-// addresses for gpu registers
-const (
-	// LCD Control
-	lcdcAddr uint16 = 0xFF40
-	// LCDC Status
-	statAddr uint16 = 0xFF41
-	// Scroll Y (SCY)
-	scyAddr uint16 = 0xFF42
-	// Scroll X (SCX)
-	scxAddr uint16 = 0xFF43
-	// LCDC Y-Coordinate (readonly)
-	lyAddr uint16 = 0xFF44
-	// LY Compare
-	lycAddr uint16 = 0xFF45
-	// DMA Transfer and Start
-	dmaAddr uint16 = 0xFF46
-	// BG Palette
-	bgpAddr uint16 = 0xFF47
-	// Object Palette 0
-	obp0Addr uint16 = 0xFF48
-	// Object Palette 1
-	obp1Addr uint16 = 0xFF49
-	// Window Y Position
-	wyAddr uint16 = 0xFF4A
-	// Window X Position
-	wxAddr uint16 = 0xFF4B
-)
-
 type GPU struct {
 	memory      *memory.MMU
 	screen      *Screen
 	framebuffer *FrameBuffer
 
-	line   uint8
-	mode   GpuMode
-	cycles int
+	line       uint8
+	vblankLine int
+	mode       GpuMode
+	cycles     int
 }
 
 func NewGpu(screen *Screen, memory *memory.MMU) *GPU {
-	fb := NewFrameBuffer(160, 144)
+	fb := NewFrameBuffer()
 	return &GPU{
 		framebuffer: fb,
 		screen:      screen,
@@ -75,7 +47,6 @@ func NewGpu(screen *Screen, memory *memory.MMU) *GPU {
 
 // Tick simulates gpu behaviour for a certain amount of clock cycles.
 func (g *GPU) Tick(cycles int) {
-	fmt.Printf("GPU TICK %v %v \n\n", cycles, g.cycles)
 	g.cycles += cycles
 
 	switch g.mode {
@@ -94,16 +65,20 @@ func (g *GPU) Tick(cycles int) {
 	case hblank:
 		if g.cycles >= hblankCycles {
 			g.line++
+			g.memory.Write(addr.LY, g.line)
+			// TODO: g.compareLYtoLYC()
+
 			g.cycles %= hblankCycles
+			g.mode = oamRead
 
 			if g.line == 144 {
 				g.mode = vblank
+				g.vblankLine = 0
+
 				// set vblank interrupt (bit 0)
-				interruptFlags := g.memory.Read(0xFFFF)
-				g.memory.Write(0xFFFF, bit.Set(0, interruptFlags))
+				g.memory.RequestInterrupt(0)
+
 				// g.drawFrame()
-			} else {
-				g.mode = oamRead
 			}
 		}
 		break
@@ -113,7 +88,7 @@ func (g *GPU) Tick(cycles int) {
 			g.cycles %= scanlineCycles
 
 			if g.line == 154 {
-				g.drawNoise()
+				g.framebuffer.DrawNoise()
 				// g.drawScanline()
 				g.screen.Draw(g.framebuffer.ToSlice())
 				g.line = 0
@@ -208,7 +183,7 @@ const (
 )
 
 func (g *GPU) readLCDCVariable(flag lcdcFlag) byte {
-	if bit.IsSet(uint8(flag), g.memory.Read(lcdcAddr)) {
+	if bit.IsSet(uint8(flag), g.memory.Read(addr.LCDC)) {
 		return 1
 	}
 
@@ -216,7 +191,7 @@ func (g *GPU) readLCDCVariable(flag lcdcFlag) byte {
 }
 
 func (g *GPU) setLCDCVariable(flag lcdcFlag, shouldSet bool) {
-	lcdcRegister := g.memory.Read(lcdcAddr)
+	lcdcRegister := g.memory.Read(addr.LCDC)
 
 	if shouldSet {
 		lcdcRegister = bit.Set(uint8(flag), lcdcRegister)
