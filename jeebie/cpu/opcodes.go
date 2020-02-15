@@ -1,8 +1,10 @@
 package cpu
 
-import "fmt"
+import (
+	"fmt"
 
-import "github.com/valerio/go-jeebie/jeebie/bit"
+	"github.com/valerio/go-jeebie/jeebie/bit"
+)
 
 func unimplemented(cpu *CPU) int {
 	msg := fmt.Sprintf("Unimplemented opcode 0x%X was called.", cpu.currentOpcode)
@@ -873,8 +875,8 @@ func opcode0x75(cpu *CPU) int {
 //HALT
 //#0x76:
 func opcode0x76(cpu *CPU) int {
-	panic("HALT 0x76 was called, but is unimplemented.")
-	// return 4
+	unimplemented(cpu)
+	return 4
 }
 
 //LD (HL), A
