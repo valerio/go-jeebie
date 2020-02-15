@@ -50,10 +50,18 @@ func NewWithFile(path string) (*Emulator, error) {
 	return e, nil
 }
 
-// Tick runs the next instruction.
-func (e *Emulator) Tick() {
-	cycles := e.cpu.Tick()
-	e.gpu.Tick(cycles)
+func (e *Emulator) RunUntilFrame() {
+	total := 0
+	for {
+		cycles := e.cpu.Tick()
+		e.gpu.Tick(cycles)
+
+		total += cycles
+
+		if total >= 70224 {
+			return
+		}
+	}
 }
 
 // Run executes the main loop of the emulator
@@ -63,8 +71,7 @@ func (e *Emulator) Run() {
 
 	// TODO: this SDL loop should be performed outside of the emulator.
 	for {
-		e.Tick()
-
+		// poll & handle inputs
 		for event := sdl.PollEvent(); event != nil; event = sdl.PollEvent() {
 
 			switch t := event.(type) {
@@ -78,6 +85,9 @@ func (e *Emulator) Run() {
 				return
 			}
 		}
+
+		// run emulation until a frame is ready
+		e.RunUntilFrame()
 
 		sdl.Delay(16)
 	}
