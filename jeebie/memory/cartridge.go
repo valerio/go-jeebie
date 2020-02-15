@@ -26,6 +26,18 @@ const (
 	globalChecksumAddress   = 0x14E
 )
 
+type MBCType int
+
+const (
+	NoMBC      MBCType = iota
+	MBC1               = iota
+	MBC2               = iota
+	MBC3               = iota
+	MBC5               = iota
+	MBC1Multi          = iota
+	MBCUnknown         = iota
+)
+
 // Cartridge holds the data and metadata of a gameboy cartridge.
 type Cartridge struct {
 	data           []byte
@@ -36,6 +48,13 @@ type Cartridge struct {
 	cartType       uint8
 	romSize        uint8
 	ramSize        uint8
+	isCGB          bool
+	isSGB          bool
+	mbcType        MBCType
+	hasRTC         bool
+	hasRumble      bool
+	hasBattery     bool
+	ramBankCount   uint8
 }
 
 // NewCartridge creates an empty cartridge, useful only for debugging purposes.
@@ -47,26 +66,50 @@ func NewCartridge() *Cartridge {
 
 // NewCartridgeWithData initializes a new Cartridge from a slice of bytes.
 func NewCartridgeWithData(bytes []byte) *Cartridge {
-	// TODO: process metadata into actual types instead of just reading it (cart type, rom/ram size, etc.)
+	// load cartridge title
+	title := string(bytes[titleAddress : titleAddress+titleLength])
 
-	titleBytes := bytes[titleAddress : titleAddress+titleLength]
+	// determine if cart is for gameboy color (CGB)
+	isCGB := bytes[cgbFlagAddress] == 0x80 || bytes[cgbFlagAddress] == 0xC0
+	// determine if cart is for super gameboy (SGB)
+	isSGB := bytes[sgbFlagAddress] == 0x03
+
+	cartType := bytes[cartridgeTypeAddress]
+	romSize := bytes[romSizeAddress]
+	ramSize := bytes[ramSizeAddress]
+	version := bytes[versionNumberAddress]
+
+	mbcType := getMBCType(cartType)
+	hasRTC := hasRealTimeClock(cartType)
+	hasRumble := hasRumble(cartType)
+	hasBattery := hasBattery(cartType)
+
+	ramBankCount := getRAMBankCount(ramSize, mbcType)
 
 	cart := &Cartridge{
-		data:           make([]byte, len(bytes)),
-		title:          string(titleBytes),
+		data:           bytes,
+		title:          title,
 		headerChecksum: bit.Combine(bytes[headerChecksumAddress], bytes[headerChecksumAddress+1]),
 		globalChecksum: bit.Combine(bytes[globalChecksumAddress], bytes[globalChecksumAddress+1]),
-		version:        bytes[versionNumberAddress],
-		cartType:       bytes[cartridgeTypeAddress],
-		romSize:        bytes[romSizeAddress],
-		ramSize:        bytes[ramSizeAddress],
+		version:        version,
+		cartType:       cartType,
+		romSize:        romSize,
+		ramSize:        ramSize,
+		isCGB:          isCGB,
+		isSGB:          isSGB,
+		mbcType:        mbcType,
+		hasRTC:         hasRTC,
+		hasRumble:      hasRumble,
+		hasBattery:     hasBattery,
+		ramBankCount:   ramBankCount,
 	}
 
-	copy(cart.data, bytes)
+	isValid := isValidCheckSum(bytes[titleAddress:globalChecksumAddress])
+	if !isValid {
+		fmt.Println("Cartridge has invalid checksum.")
+	}
 
-	fmt.Printf("Bytes %v\n", bytes)
-
-	fmt.Printf("title %v\n", cart.title)
+	fmt.Printf("Cartridge loaded: %+v\n", cart)
 
 	return cart
 }
@@ -81,4 +124,107 @@ func (c Cartridge) Read(addr uint16) uint8 {
 // has extra RAM or for some special operations, like switching ROM banks.
 func (c Cartridge) Write(addr uint16, value uint8) uint8 {
 	return c.data[addr]
+}
+
+func getRAMBankCount(ramSize uint8, mbcType MBCType) uint8 {
+	switch ramSize {
+	case 0x00:
+		if mbcType == MBC2 {
+			return 1
+		}
+		return 0
+	case 0x01:
+	case 0x02:
+		return 1
+	case 0x04:
+		return 16
+	}
+
+	return 4
+}
+
+func getMBCType(cartType uint8) MBCType {
+	switch cartType {
+	case 0x00:
+	case 0x08:
+	case 0x09:
+		return NoMBC
+	case 0x01:
+	case 0x02:
+	case 0x03:
+	case 0xEA:
+	case 0xFF:
+		return MBC1
+	case 0x05:
+	case 0x06:
+		return MBC2
+	case 0x0F:
+	case 0x10:
+	case 0x11:
+	case 0x12:
+	case 0x13:
+	case 0xFC:
+		return MBC3
+	case 0x19:
+	case 0x1A:
+	case 0x1B:
+	case 0x1C:
+	case 0x1D:
+	case 0x1E:
+		return MBC5
+	}
+
+	return MBCUnknown
+}
+
+func hasRumble(cartType uint8) bool {
+	switch cartType {
+	case 0x1C:
+	case 0x1D:
+	case 0x1E:
+		return true
+	}
+	return false
+}
+
+func hasRealTimeClock(cartType uint8) bool {
+	switch cartType {
+	case 0x0F:
+	case 0x10:
+		return true
+	}
+	return false
+}
+
+func hasBattery(cartType uint8) bool {
+	switch cartType {
+	case 0x03:
+	case 0x06:
+	case 0x09:
+	case 0x0D:
+	case 0x0F:
+	case 0x10:
+	case 0x13:
+	case 0x17:
+	case 0x1B:
+	case 0x1E:
+	case 0x22:
+	case 0xFD:
+	case 0xFF:
+		return true
+	}
+
+	return false
+}
+
+func isValidCheckSum(bytes []byte) bool {
+	checksum := 0
+
+	for _, n := range bytes {
+		checksum += int(n)
+	}
+
+	isValid := ((checksum + 25) & 0xFF) == 0
+
+	return isValid
 }
