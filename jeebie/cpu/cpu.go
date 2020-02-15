@@ -1,6 +1,7 @@
 package cpu
 
 import (
+	"github.com/valerio/go-jeebie/jeebie/addr"
 	"github.com/valerio/go-jeebie/jeebie/bit"
 	"github.com/valerio/go-jeebie/jeebie/memory"
 )
@@ -16,9 +17,23 @@ const (
 )
 
 const (
-	baseInterruptAddress   uint16 = 0x40
-	interruptEnableAddress uint16 = 0xFFFF
-	interruptFlagAddress   uint16 = 0xFF0F
+	baseInterruptAddress uint16 = 0x40
+)
+
+// Interrupt is an enum that represents one of the possible interrupts.
+type Interrupt uint8
+
+const (
+	// VBlankInterrupt is fired when the GPU has completed a frame.
+	VBlankInterrupt Interrupt = 1
+	// LCDSTATInterrupt is fired based on one of the conditions in the LCDSTAT register.
+	LCDSTATInterrupt = 1 << 1
+	// TimerInterrupt is fired when the timer register (TIMA) overflows (i.e. goes from 0xFF to 0x00).
+	TimerInterrupt = 1 << 2
+	// SerialInterrupt is fired when a serial transfer has completed on the game link port.
+	SerialInterrupt = 1 << 3
+	// JoypadInterrupt is fired when any of the keypad inputs goes from high to low.
+	JoypadInterrupt = 1 << 4
 )
 
 // CPU is the main struct holding Z80 state
@@ -70,8 +85,8 @@ func (c *CPU) handleInterrupts() {
 	}
 
 	// retrieve the two masks
-	enabledInterruptsMask := c.memory.Read(interruptEnableAddress)
-	firedInterrupts := c.memory.Read(interruptFlagAddress)
+	enabledInterruptsMask := c.memory.Read(addr.IE)
+	firedInterrupts := c.memory.Read(addr.IF)
 
 	// if zero, no interrupts that are enabled were fired
 	if (enabledInterruptsMask & firedInterrupts) == 0 {
@@ -85,7 +100,7 @@ func (c *CPU) handleInterrupts() {
 			address := uint16(i)*8 + baseInterruptAddress
 
 			// mark as handled by clearing the bit at i
-			c.memory.Write(interruptFlagAddress, bit.Clear(i, firedInterrupts))
+			c.memory.Write(addr.IF, bit.Clear(i, firedInterrupts))
 
 			// move PC to interrupt handler address
 			c.pushStack(c.pc)
