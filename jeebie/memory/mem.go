@@ -57,12 +57,6 @@ func (m *MMU) Read(addr uint16) byte {
 
 	// ROM
 	if isBetween(addr, 0, 0x7FFF) {
-		// reading boot ROM happens only if it is enabled, checked from a register at 0xFF50.
-		bootRomEnabled := m.memory[0xFF50] != 0x1
-		if bootRomEnabled && isBetween(addr, 0, 0xFF) {
-			return bootROM[addr]
-		}
-
 		return m.cart.Read(addr)
 	}
 
@@ -94,7 +88,6 @@ func (m *MMU) Read(addr uint16) byte {
 
 	// Unused
 	if isBetween(addr, 0xFEA0, 0xFEFF) {
-		//		panic(fmt.Sprintf("Attempted read at unused/unmapped address: 0x%X", addr))
 		return 0
 	}
 
@@ -132,7 +125,7 @@ func (m *MMU) Write(addr uint16, value byte) {
 
 	// external RAM
 	if isBetween(addr, 0xA000, 0xBFFF) {
-		panic(fmt.Sprintf("Attempted write at unused/unmapped address: 0x%X", addr))
+		panic(fmt.Sprintf("Attempted write on external RAM address: 0x%X", addr))
 	}
 
 	// RAM
@@ -156,7 +149,6 @@ func (m *MMU) Write(addr uint16, value byte) {
 
 	// Unused
 	if isBetween(addr, 0xFEA0, 0xFEFF) {
-		// panic(fmt.Sprintf("Attempted write at unused/unmapped address: 0x%X", addr))
 		return
 	}
 

@@ -59,11 +59,56 @@ type CPU struct {
 	memory *memory.MMU
 }
 
-// New returns an uninitialized CPU instance
+func initializeMemory(mmu *memory.MMU) {
+	mmu.Write(0xFF05, 0x00) //    ; TIMA
+	mmu.Write(0xFF06, 0x00) //    ; TMA
+	mmu.Write(0xFF07, 0x00) //    ; TAC
+	mmu.Write(0xFF10, 0x80) //    ; NR10
+	mmu.Write(0xFF11, 0xBF) //    ; NR11
+	mmu.Write(0xFF12, 0xF3) //    ; NR12
+	mmu.Write(0xFF14, 0xBF) //    ; NR14
+	mmu.Write(0xFF16, 0x3F) //    ; NR21
+	mmu.Write(0xFF17, 0x00) //    ; NR22
+	mmu.Write(0xFF19, 0xBF) //    ; NR24
+	mmu.Write(0xFF1A, 0x7F) //    ; NR30
+	mmu.Write(0xFF1B, 0xFF) //    ; NR31
+	mmu.Write(0xFF1C, 0x9F) //    ; NR32
+	mmu.Write(0xFF1E, 0xBF) //    ; NR33
+	mmu.Write(0xFF20, 0xFF) //    ; NR41
+	mmu.Write(0xFF21, 0x00) //    ; NR42
+	mmu.Write(0xFF22, 0x00) //    ; NR43
+	mmu.Write(0xFF23, 0xBF) //    ; NR30
+	mmu.Write(0xFF24, 0x77) //    ; NR50
+	mmu.Write(0xFF25, 0xF3) //    ; NR51
+	mmu.Write(0xFF26, 0xF1) //    ; NR52  -- should be 0xF0 on SGB
+	mmu.Write(0xFF40, 0x91) //    ; LCDC
+	mmu.Write(0xFF42, 0x00) //    ; SCY
+	mmu.Write(0xFF43, 0x00) //    ; SCX
+	mmu.Write(0xFF45, 0x00) //    ; LYC
+	mmu.Write(0xFF47, 0xFC) //    ; BGP
+	mmu.Write(0xFF48, 0xFF) //    ; OBP0
+	mmu.Write(0xFF49, 0xFF) //    ; OBP1
+	mmu.Write(0xFF4A, 0x00) //    ; WY
+	mmu.Write(0xFF4B, 0x00) //    ; WX
+	mmu.Write(0xFFFF, 0x00) //    ; IE
+}
+
+// New returns an initialized CPU instance
 func New(memory *memory.MMU) *CPU {
-	return &CPU{
+	initializeMemory(memory)
+
+	cpu := &CPU{
 		memory: memory,
 	}
+
+	cpu.setAF(0x01B0)
+	cpu.setBC(0x0013)
+	cpu.setDE(0x00D8)
+	cpu.setHL(0x014D)
+	cpu.sp = 0xFFFE
+	cpu.pc = 0x0100
+
+	return cpu
 }
 
 // Tick emulates a single step during the main loop for the cpu.
