@@ -1,7 +1,7 @@
 package memory
 
 import (
-	"fmt"
+	"log"
 
 	"github.com/valerio/go-jeebie/jeebie/bit"
 )
@@ -86,8 +86,11 @@ func NewCartridgeWithData(bytes []byte) *Cartridge {
 
 	ramBankCount := getRAMBankCount(ramSize, mbcType)
 
+	data := make([]byte, len(bytes))
+	copy(data, bytes)
+
 	cart := &Cartridge{
-		data:           bytes,
+		data:           data,
 		title:          title,
 		headerChecksum: bit.Combine(bytes[headerChecksumAddress], bytes[headerChecksumAddress+1]),
 		globalChecksum: bit.Combine(bytes[globalChecksumAddress], bytes[globalChecksumAddress+1]),
@@ -106,23 +109,23 @@ func NewCartridgeWithData(bytes []byte) *Cartridge {
 
 	isValid := isValidCheckSum(bytes[titleAddress:globalChecksumAddress])
 	if !isValid {
-		fmt.Println("Cartridge has invalid checksum.")
+		log.Fatalln("Cartridge has invalid checksum.")
 	}
 
-	fmt.Printf("Cartridge loaded: %+v\n", cart)
+	log.Printf("Cartridge loaded: %s\n", cart.title)
 
 	return cart
 }
 
 // ReadByte reads a byte at the specified address. Does not check bounds, so the caller must make sure the
 // address is valid for the cartridge.
-func (c Cartridge) Read(addr uint16) uint8 {
+func (c *Cartridge) Read(addr uint16) uint8 {
 	return c.data[addr]
 }
 
 // WriteByte attempts a write to the specified address. Writing to a cartridge has sense if the cartridge
 // has extra RAM or for some special operations, like switching ROM banks.
-func (c Cartridge) Write(addr uint16, value uint8) uint8 {
+func (c *Cartridge) Write(addr uint16, value uint8) uint8 {
 	return c.data[addr]
 }
 

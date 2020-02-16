@@ -18,18 +18,17 @@ type Emulator struct {
 	screen *video.Screen
 }
 
-func (e *Emulator) init() {
-	e.mem = memory.NewWithCartridge(memory.NewCartridge())
+func (e *Emulator) init(mem *memory.MMU) {
 	e.screen = video.NewScreen()
-
-	e.cpu = cpu.New(e.mem)
-	e.gpu = video.NewGpu(e.screen, e.mem)
+	e.cpu = cpu.New(mem)
+	e.gpu = video.NewGpu(e.screen, mem)
+	e.mem = mem
 }
 
 // New creates a new emulator instance
 func New() *Emulator {
 	e := &Emulator{}
-	e.init()
+	e.init(memory.NewWithCartridge(memory.NewCartridge()))
 
 	return e
 }
@@ -44,8 +43,7 @@ func NewWithFile(path string) (*Emulator, error) {
 	log.Printf("Loaded %v bytes of ROM data\n", len(data))
 
 	e := &Emulator{}
-	e.init()
-	e.mem = memory.NewWithCartridge(memory.NewCartridgeWithData(data))
+	e.init(memory.NewWithCartridge(memory.NewCartridgeWithData(data)))
 
 	return e, nil
 }
