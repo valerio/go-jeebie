@@ -61,3 +61,19 @@ const (
 	// TAC is the timer control register. Used to start/stop and control the timer clock.
 	TAC uint16 = 0xFF
 )
+
+// Interrupt is an enum that represents one of the possible interrupts.
+type Interrupt uint8
+
+const (
+	// VBlankInterrupt is fired when the GPU has completed a frame.
+	VBlankInterrupt Interrupt = 1
+	// LCDSTATInterrupt is fired based on one of the conditions in the LCDSTAT register.
+	LCDSTATInterrupt = 1 << 1
+	// TimerInterrupt is fired when the timer register (TIMA) overflows (i.e. goes from 0xFF to 0x00).
+	TimerInterrupt = 1 << 2
+	// SerialInterrupt is fired when a serial transfer has completed on the game link port.
+	SerialInterrupt = 1 << 3
+	// JoypadInterrupt is fired when any of the keypad inputs goes from high to low.
+	JoypadInterrupt = 1 << 4
+)

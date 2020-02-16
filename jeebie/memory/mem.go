@@ -34,9 +34,9 @@ func isBetween(addr, start, end uint16) bool {
 }
 
 // RequestInterrupt sets the interrupt flag (IF register) of the chosen interrupt to 1.
-func (m *MMU) RequestInterrupt(interrupt uint8) {
+func (m *MMU) RequestInterrupt(interrupt addr.Interrupt) {
 	interruptFlags := m.Read(addr.IF)
-	m.Write(addr.IF, bit.Set(interrupt, interruptFlags))
+	m.Write(addr.IF, bit.Set(uint8(interrupt), interruptFlags))
 }
 
 func (m *MMU) ReadBit(index uint8, addr uint16) bool {
