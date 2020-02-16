@@ -9,10 +9,10 @@ import (
 type GpuMode int
 
 const (
-	oamRead GpuMode = iota
-	vramRead
-	hblank
-	vblank
+	hblankMode GpuMode = iota
+	vblankMode
+	oamReadMode
+	vramReadMode
 )
 
 const (
@@ -27,10 +27,16 @@ type GPU struct {
 	screen      *Screen
 	framebuffer *FrameBuffer
 
-	line       uint8
-	vblankLine int
-	mode       GpuMode
-	cycles     int
+	mode                 GpuMode
+	line                 int
+	cycles               int
+	modeCounterAux       int
+	vBlankLine           int
+	pixelCounter         int
+	tileCycleCounter     int
+	isScanLineTransfered bool
+	windowLine           int
+	irqSignal            uint8
 }
 
 func NewGpu(screen *Screen, memory *memory.MMU) *GPU {
@@ -39,9 +45,9 @@ func NewGpu(screen *Screen, memory *memory.MMU) *GPU {
 		framebuffer: fb,
 		screen:      screen,
 		memory:      memory,
-		mode:        oamRead,
-		line:        0,
-		cycles:      0,
+		mode:        vblankMode,
+
+		line: 144,
 	}
 }
 
@@ -50,114 +56,348 @@ func (g *GPU) Tick(cycles int) {
 	g.cycles += cycles
 
 	switch g.mode {
-	case oamRead:
+	case hblankMode:
+		if g.cycles < hblankCycles {
+			break
+		}
+
+		g.cycles %= hblankCycles
+		g.mode = oamReadMode
+
+		g.line++
+		g.memory.Write(addr.LY, byte(g.line))
+		g.compareLYToLYC()
+
+		if g.line == 144 {
+			g.mode = vblankMode
+			g.vBlankLine = 0
+			g.modeCounterAux = g.cycles
+
+			g.memory.RequestInterrupt(addr.VBlankInterrupt)
+
+			// We're switching to VBlank Mode
+			// if enabled on STAT, trigger the LCDStat interrupt
+			g.irqSignal &= 0x9
+			if g.memory.ReadBit(statVblankIrq, addr.STAT) {
+				if bit.IsSet(0, g.irqSignal) && !bit.IsSet(3, g.irqSignal) {
+					g.memory.RequestInterrupt(addr.LCDSTATInterrupt)
+				}
+				g.irqSignal = bit.Set(1, g.irqSignal)
+			}
+			g.irqSignal &= 0xE
+
+			g.windowLine = 0
+		} else {
+			// We're switching to OAM Read Mode
+			// if enabled on STAT, trigger the LCDStat interrupt
+			g.irqSignal &= 0x9
+			if g.memory.ReadBit(statOamIrq, addr.STAT) {
+				if bit.IsSet(0, g.irqSignal) && !bit.IsSet(3, g.irqSignal) {
+					g.memory.RequestInterrupt(addr.LCDSTATInterrupt)
+				}
+				g.irqSignal = bit.Set(2, g.irqSignal)
+			}
+			g.irqSignal &= 0xE
+
+			g.updateMode()
+		}
+
+		break
+	case vblankMode:
+		g.modeCounterAux += cycles
+
+		if g.cycles >= scanlineCycles {
+			g.cycles %= scanlineCycles
+			g.vBlankLine++
+
+			if g.vBlankLine <= 9 {
+				g.line++
+				g.memory.Write(addr.LY, byte(g.line))
+				g.compareLYToLYC()
+			}
+		}
+
+		if g.cycles >= 4104 && g.modeCounterAux >= 4 && g.line == 153 {
+			g.line = 0
+			g.memory.Write(addr.LY, byte(g.line))
+			g.compareLYToLYC()
+		}
+
+		if g.cycles >= 4560 {
+			g.cycles %= 4560
+			g.mode = oamReadMode
+			g.updateMode()
+
+			// We're switching to OAM Read Mode
+			// if enabled on STAT, trigger the LCDStat interrupt
+			g.irqSignal &= 0x7
+			g.irqSignal &= 0xA
+			if g.memory.ReadBit(statOamIrq, addr.STAT) {
+				if bit.IsSet(0, g.irqSignal) && !bit.IsSet(3, g.irqSignal) {
+					g.memory.RequestInterrupt(addr.LCDSTATInterrupt)
+				}
+				g.irqSignal = bit.Set(2, g.irqSignal)
+			}
+			g.irqSignal &= 0xD
+		}
+
+		break
+	case oamReadMode:
 		if g.cycles >= oamScanlineCycles {
 			g.cycles %= oamScanlineCycles
-			g.mode = vramRead
+			g.mode = vramReadMode
+			g.updateMode()
+			g.isScanLineTransfered = false
+			g.irqSignal &= 0x8
 		}
 		break
-	case vramRead:
+	case vramReadMode:
+		if g.pixelCounter < 160 {
+			g.tileCycleCounter += cycles
+
+			if g.readLCDCVariable(lcdDisplayEnable) == 1 {
+				for g.tileCycleCounter >= 3 {
+					g.drawBackground(g.line, g.pixelCounter, 4)
+
+					g.pixelCounter += 4
+					g.tileCycleCounter -= 3
+
+					if g.pixelCounter >= 160 {
+						break
+					}
+				}
+
+			}
+		}
+
+		if g.cycles >= 160 && g.isScanLineTransfered {
+			g.drawScanline(g.line)
+			g.isScanLineTransfered = true
+		}
+
 		if g.cycles >= vramScanlineCycles {
+			g.pixelCounter = 0
 			g.cycles %= vramScanlineCycles
-			g.mode = hblank
-		}
-		break
-	case hblank:
-		if g.cycles >= hblankCycles {
-			g.line++
-			g.memory.Write(addr.LY, g.line)
-			// TODO: g.compareLYtoLYC()
+			g.mode = hblankMode
+			g.tileCycleCounter = 0
+			g.updateMode()
 
-			g.cycles %= hblankCycles
-			g.mode = oamRead
-
-			if g.line == 144 {
-				g.mode = vblank
-				g.vblankLine = 0
-
-				// set vblank interrupt (bit 0)
-				g.memory.RequestInterrupt(0)
-
-				// g.drawFrame()
-			}
-		}
-		break
-	case vblank:
-		if g.cycles >= scanlineCycles {
-			g.line++
-			g.cycles %= scanlineCycles
-
-			if g.line == 154 {
-				g.framebuffer.DrawNoise()
-				// g.drawScanline()
-				g.screen.Draw(g.framebuffer.ToSlice())
-				g.line = 0
-				g.mode = oamRead
+			// We're switching to HBlank Mode
+			// if enabled on STAT, trigger the LCDStat interrupt
+			g.irqSignal &= 0x8
+			if g.memory.ReadBit(statHblankIrq, addr.STAT) {
+				if !bit.IsSet(3, g.irqSignal) {
+					g.memory.RequestInterrupt(addr.LCDSTATInterrupt)
+				}
+				g.irqSignal = bit.Set(0, g.irqSignal)
 			}
 		}
 		break
 	}
 }
 
-func (g *GPU) drawScanline() {
-	if g.readLCDCVariable(lcdDisplayEnable) == 0 {
-		// display is disabled
+func (g *GPU) drawScanline(line int) {
+	lcdEnabled := g.readLCDCVariable(lcdDisplayEnable) == 1
+	if lcdEnabled {
+		g.drawWindow(line)
+		g.drawSprites(line)
 		return
 	}
 
-	if g.readLCDCVariable(bgDisplay) == 0 {
-		// drawing the background is disabled
+	g.framebuffer.Clear()
+}
+
+func (g *GPU) drawBackground(line, pixel, count int) {
+	// g.line, g.pixelCounter, 4
+	startXOffset := pixel % 8
+	endXOffset := startXOffset + count
+	screenTile := pixel / 8
+	lineWidth := line * width
+
+	backgroundEnabled := g.readLCDCVariable(bgDisplay) == 1
+	if !backgroundEnabled {
+		// TODO: clear current line
 		return
 	}
 
-	g.drawTiles()
-}
-
-func (g *GPU) drawTiles() {
-	for y := 0; y < 32; y++ {
-		for x := 0; x < 32; x++ {
-			g.drawTile(x, y)
-		}
-	}
-}
-
-func (g *GPU) drawTile(tileX, tileY int) {
 	useTileSetZero := g.readLCDCVariable(bgWindowTileDataSelect) == 0
 	useTileMapZero := g.readLCDCVariable(bgTileMapDisplaySelect) == 0
 
 	// select the correct starting address based on which tileMap/tileSet is set
-	tileSetAddress := uint16(0x8000)
+	tilesAddr := uint16(0x8000)
 	if useTileSetZero {
-		tileSetAddress = 0x8800
+		tilesAddr = 0x8800
 	}
 
-	tileMapAddress := 0x9C00
+	tileMapAddr := 0x9C00
 	if useTileMapZero {
-		tileMapAddress = 0x9800
+		tileMapAddr = 0x9800
 	}
 
-	// 32 tiles per scanline
-	tileIndex := tileY*32 + tileX
-	tileNumberAddress := tileMapAddress + tileIndex
-	// grab the tile number
-	tileNumber := g.memory.Read(uint16(tileNumberAddress))
-	// offset is tile number times tile size (16 bytes per tile)
-	tileOffset := uint16(tileNumber) * 16
+	scrollX := g.memory.Read(addr.SCX)
+	scrollY := g.memory.Read(addr.SCY)
+	lineScrolled := line + int(scrollY)
+	lineScrolled32 := (lineScrolled / 8) * 32
+	tilePixelY := lineScrolled % 8
+	tilePixelY2 := tilePixelY * 2
 
-	tileAddress := tileSetAddress + tileOffset
-	tile := newTile(uint16(tileAddress), g.memory)
+	for xOffset := startXOffset; xOffset < endXOffset; xOffset++ {
+		screenPixelX := (screenTile * 8) + xOffset
+		mapPixelX := screenPixelX + int(scrollX)
+		mapTileX := mapPixelX / 8
+		mapTileXOffset := mapPixelX % 8
+		mapTileAddr := uint16(tileMapAddr + lineScrolled32 + mapTileX)
 
-	// x and y inside a tile are offset by 8 in terms of address
-	fbX := uint(8 * tileX)
-	fbY := uint(8 * tileY)
+		mapTile := 0
 
-	for y := uint(0); y < 8; y++ {
-		for x := uint(0); x < 8; x++ {
-			color := tile.getPixel(x, y)
-			g.framebuffer.SetPixel(fbX+x, fbY+y, color)
+		if useTileSetZero {
+			offset := int8(g.memory.Read(mapTileAddr))
+			mapTile = int(offset) + 128
+		} else {
+			mapTile = int(g.memory.Read(mapTileAddr))
 		}
+
+		mapTile16 := mapTile * 16
+		tileAddr := tilesAddr + uint16(mapTile16) + uint16(tilePixelY2)
+
+		low := g.memory.Read(tileAddr)
+		high := g.memory.Read(tileAddr + 1)
+
+		pixelIndex := uint8(7 - mapTileXOffset)
+		// the pixel is the bitwise OR of the low/high bit at
+		// the current X index (from 7 to 0)
+		pixel := 0
+		if bit.IsSet(pixelIndex, low) {
+			pixel |= 1
+		}
+		if bit.IsSet(pixelIndex, high) {
+			pixel |= 2
+		}
+
+		pixelPosition := lineWidth + screenPixelX
+
+		palette := g.memory.Read(addr.BGP)
+		color := (palette >> (pixel * 2)) & 0x03
+		g.framebuffer.buffer[pixelPosition] = uint32(ByteToColor(color))
 	}
 }
+
+func (g *GPU) drawWindow(line int) {
+	if g.windowLine > 143 {
+		return
+	}
+
+	windowEnabled := g.readLCDCVariable(windowDisplayEnable) == 1
+	if !windowEnabled {
+		return
+	}
+
+	wx := g.memory.Read(addr.WX) - 7
+	wy := g.memory.Read(addr.WY)
+
+	if wx > 159 {
+		return
+	}
+
+	if wy > 143 || int(wy) > line {
+		return
+	}
+
+	useTileSetZero := g.readLCDCVariable(bgWindowTileDataSelect) == 0
+	useTileMapZero := g.readLCDCVariable(windowTileMapSelect) == 0
+
+	// select the correct starting address based on which tileMap/tileSet is set
+	tilesAddr := uint16(0x8000)
+	if useTileSetZero {
+		tilesAddr = 0x8800
+	}
+
+	tileMapAddr := 0x9C00
+	if useTileMapZero {
+		tileMapAddr = 0x9800
+	}
+
+	lineAdj := g.windowLine
+
+	y32 := (lineAdj / 8) * 32
+	pixelY := lineAdj & 8
+	pixelY2 := pixelY * 2
+	lineWidth := line * width
+
+	for x := 0; x < 32; x++ {
+		tileIndexAddr := uint16(tileMapAddr + y32 + x)
+		tile := 0
+
+		if useTileSetZero {
+			offset := int8(g.memory.Read(tileIndexAddr))
+			tile = int(offset) + 128
+		} else {
+			tile = int(g.memory.Read(tileIndexAddr))
+		}
+
+		xOffset := x * 8
+		tile16 := tile * 16
+
+		tileAddr := tilesAddr + uint16(tile16) + uint16(pixelY2)
+
+		low := g.memory.Read(tileAddr)
+		high := g.memory.Read(tileAddr + 1)
+
+		for pixelX := 0; pixelX < 8; pixelX++ {
+			bufferX := xOffset + pixelX + int(wx)
+
+			if bufferX < 0 || bufferX > width {
+				continue
+			}
+
+			// the pixel is the bitwise OR of the low/high bit at
+			// the current X index (from 7 to 0)
+			pixel := 0
+			if bit.IsSet(7-uint8(pixelX), low) {
+				pixel |= 1
+			}
+			if bit.IsSet(7-uint8(pixelX), high) {
+				pixel |= 2
+			}
+
+			position := lineWidth + bufferX
+
+			palette := g.memory.Read(addr.BGP)
+			color := (palette >> (pixel * 2)) & 0x03
+			g.framebuffer.buffer[position] = uint32(ByteToColor(color))
+		}
+	}
+	g.windowLine++
+}
+
+func (g *GPU) drawSprites(line int) {
+	// TODO: implement this
+}
+
+// LCD Stat (Status) Register bit values
+// Bit 7 - unused
+// Bit 6 - Interrupt based on LYC to LY comparison (based on bit 2)
+// Bit 5 - Interrupt when Mode 10 (oamReadMode)
+// Bit 4 - Interrupt when Mode 01 (vblankMode)
+// Bit 3 - Interrupt when Mode 00 (hblankMode)
+// Bit 2 - condition for triggering LYC/LY (0=LYC != LY, 1=LYC == LY)
+// Bit 1,0 - represents the current GPU mode
+//         - 00 -> hblankMode
+//         - 01 -> vblankMode
+//         - 10 -> oamReadMode
+//         - 11 -> vramReadMode
+
+type statFlag uint8
+
+const (
+	statLycIrq       statFlag = 6
+	statOamIrq                = 5
+	statVblankIrq             = 4
+	statHblankIrq             = 3
+	statLycCondition          = 2
+	statModeHigh              = 1
+	statModeLow               = 0
+)
 
 // LCDC (LCD Control) Register bit values
 // Bit 7 - LCD Display Enable (0=Off, 1=On)
@@ -198,4 +438,33 @@ func (g *GPU) setLCDCVariable(flag lcdcFlag, shouldSet bool) {
 	} else {
 		lcdcRegister = bit.Clear(uint8(flag), lcdcRegister)
 	}
+}
+
+func (g *GPU) compareLYToLYC() {
+	ly := g.memory.Read(addr.LY)
+	lyc := g.memory.Read(addr.LYC)
+	stat := g.memory.Read(addr.STAT)
+
+	if ly == lyc {
+		stat = bit.Set(statLycCondition, stat)
+		if bit.IsSet(uint8(statLycIrq), stat) {
+			if g.irqSignal == 0 {
+				g.memory.RequestInterrupt(addr.LCDSTATInterrupt)
+			}
+			g.irqSignal = bit.Set(3, g.irqSignal)
+		}
+	} else {
+		stat = bit.Reset(statLycCondition, stat)
+		g.irqSignal = bit.Reset(3, g.irqSignal)
+	}
+
+	g.memory.Write(addr.STAT, stat)
+}
+
+// updateMode sets the two bits (1,0) in the STAT register
+// according to the current GPU mode.
+func (g *GPU) updateMode() {
+	stat := g.memory.Read(addr.STAT)
+	stat = stat&0xFC | byte(g.mode)
+	g.memory.Write(addr.STAT, stat)
 }
