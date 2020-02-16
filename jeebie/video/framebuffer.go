@@ -60,6 +60,13 @@ func (fb *FrameBuffer) ToSlice() []uint32 {
 	return fb.buffer
 }
 
+// Clear resets the framebuffer to a black screen.
+func (fb *FrameBuffer) Clear() {
+	for i := range fb.buffer {
+		fb.buffer[i] = 0
+	}
+}
+
 func (fb *FrameBuffer) DrawNoise() {
 	// placeholder: draws random pixels
 	for i := 0; i < len(fb.buffer); i++ {
