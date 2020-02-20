@@ -59,7 +59,7 @@ const (
 	// TMA is the timer modulo register. When TIMA overflows, this data will be loaded.
 	TMA uint16 = 0xFF06
 	// TAC is the timer control register. Used to start/stop and control the timer clock.
-	TAC uint16 = 0xFF
+	TAC uint16 = 0xFF07
 )
 
 // Interrupt is an enum that represents one of the possible interrupts.

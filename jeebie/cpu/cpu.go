@@ -44,9 +44,21 @@ type CPU struct {
 }
 
 func initializeMemory(mmu *memory.MMU) {
-	mmu.Write(0xFF05, 0x00) //    ; TIMA
-	mmu.Write(0xFF06, 0x00) //    ; TMA
-	mmu.Write(0xFF07, 0x00) //    ; TAC
+	mmu.Write(addr.TIMA, 0x00)
+	mmu.Write(addr.TMA, 0x00)
+	mmu.Write(addr.TAC, 0x00)
+	mmu.Write(addr.LCDC, 0x91)
+	mmu.Write(addr.SCY, 0x00)
+	mmu.Write(addr.SCX, 0x00)
+	mmu.Write(addr.LYC, 0x00)
+	mmu.Write(addr.BGP, 0xFC)
+	mmu.Write(addr.OBP0, 0xFF)
+	mmu.Write(addr.OBP1, 0xFF)
+	mmu.Write(addr.WY, 0x00)
+	mmu.Write(addr.WX, 0x00)
+	mmu.Write(addr.IE, 0x00)
+
+	// TODO: make the audio registers constant
 	mmu.Write(0xFF10, 0x80) //    ; NR10
 	mmu.Write(0xFF11, 0xBF) //    ; NR11
 	mmu.Write(0xFF12, 0xF3) //    ; NR12
@@ -65,16 +77,6 @@ func initializeMemory(mmu *memory.MMU) {
 	mmu.Write(0xFF24, 0x77) //    ; NR50
 	mmu.Write(0xFF25, 0xF3) //    ; NR51
 	mmu.Write(0xFF26, 0xF1) //    ; NR52  -- should be 0xF0 on SGB
-	mmu.Write(0xFF40, 0x91) //    ; LCDC
-	mmu.Write(0xFF42, 0x00) //    ; SCY
-	mmu.Write(0xFF43, 0x00) //    ; SCX
-	mmu.Write(0xFF45, 0x00) //    ; LYC
-	mmu.Write(0xFF47, 0xFC) //    ; BGP
-	mmu.Write(0xFF48, 0xFF) //    ; OBP0
-	mmu.Write(0xFF49, 0xFF) //    ; OBP1
-	mmu.Write(0xFF4A, 0x00) //    ; WY
-	mmu.Write(0xFF4B, 0x00) //    ; WX
-	mmu.Write(0xFFFF, 0x00) //    ; IE
 }
 
 // New returns an initialized CPU instance
