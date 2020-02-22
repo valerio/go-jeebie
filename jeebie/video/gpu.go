@@ -371,7 +371,107 @@ func (g *GPU) drawWindow(line int) {
 }
 
 func (g *GPU) drawSprites(line int) {
-	// TODO: implement this
+	if g.readLCDCVariable(spriteDisplayEnable) != 1 {
+		return
+	}
+
+	spriteHeight := 8
+	if g.readLCDCVariable(spriteSize) == 1 {
+		spriteHeight = 16
+	}
+
+	lineWidth := g.line * width
+
+	for sprite := 39; sprite >= 0; sprite-- {
+		sprite4 := sprite * 4
+		spriteY := int(g.memory.Read(0xFE00+uint16(sprite4))) - 16
+		spriteX := int(g.memory.Read(0xFE00+uint16(sprite4)+1)) - 8
+
+		if int(spriteY) > g.line || (int(spriteY)+spriteHeight) <= g.line {
+			continue
+		}
+
+		if spriteX < -7 || spriteX >= width {
+			continue
+		}
+
+		spriteTile := g.memory.Read(0xFE00 + uint16(sprite4) + 2)
+
+		spriteMask := 0xFF
+		if spriteHeight == 16 {
+			spriteMask = 0xFE
+		}
+
+		spriteTile16 := (int(spriteTile) & spriteMask) * 16
+		spriteFlags := g.memory.Read(0xFE00 + uint16(sprite4) + 3)
+		objPaletteAddr := addr.OBP0
+		if bit.IsSet(4, spriteFlags) {
+			objPaletteAddr = addr.OBP1
+		}
+
+		flipX := bit.IsSet(5, spriteFlags)
+		flipY := bit.IsSet(6, spriteFlags)
+		aboveBG := !bit.IsSet(7, spriteFlags)
+
+		tileAddr := 0x8000
+
+		pixelY := line - spriteY
+		if flipY {
+			pixelY = spriteHeight - 1 - pixelY
+		}
+
+		pixelY2 := 0
+		offset := 0
+
+		if spriteHeight == 16 && pixelY >= 8 {
+			pixelY2 = (pixelY - 8) * 2
+			offset = 16
+		} else {
+			pixelY2 = pixelY * 2
+		}
+
+		tileAddr += spriteTile16 + pixelY2 + offset
+
+		low := g.memory.Read(uint16(tileAddr))
+		high := g.memory.Read(uint16(tileAddr) + 1)
+
+		for pixelX := 0; pixelX < 8; pixelX++ {
+			// if the flip flag is set, we render a mirrored sprite
+			// i.e. we start from the other end (0 instead of 7)
+			pixelIdx := 7 - pixelX
+			if flipX {
+				pixelIdx = pixelX
+			}
+
+			pixel := 0
+			if bit.IsSet(uint8(pixelIdx), low) {
+				pixel |= 1
+			}
+			if bit.IsSet(uint8(pixelIdx), high) {
+				pixel |= 2
+			}
+
+			// transparent pixel
+			if pixel == 0 {
+				continue
+			}
+
+			bufferX := spriteX + pixelX
+			if bufferX < 0 || bufferX >= width {
+				continue
+			}
+
+			position := lineWidth + bufferX
+
+			if !aboveBG {
+				continue
+			}
+
+			palette := g.memory.Read(objPaletteAddr)
+			color := (palette >> (pixel * 2)) & 0x03
+			g.framebuffer.buffer[position] = uint32(ByteToColor(color))
+		}
+	}
 }
 
 // LCD Stat (Status) Register bit values
