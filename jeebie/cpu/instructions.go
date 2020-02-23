@@ -27,7 +27,7 @@ func (c *CPU) inc(r *uint8) {
 	value := *r
 
 	c.setFlagToCondition(zeroFlag, value == 0)
-	c.setFlagToCondition(halfCarryFlag, (value&0xF) == 0xF)
+	c.setFlagToCondition(halfCarryFlag, (value&0xF) == 0)
 	c.resetFlag(subFlag)
 }
 
