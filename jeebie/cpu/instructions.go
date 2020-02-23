@@ -194,18 +194,14 @@ func (c *CPU) adc(value uint8) {
 
 // addToHL sets the result of adding a 16 bit register to HL, while setting relevant flags.
 func (c *CPU) addToHL(reg uint16) {
-	hl := bit.Combine(c.h, c.l)
-	result := hl + reg
-
-	carry := (uint32(hl) + uint32(reg)) > 0xFFFF
-	halfCarry := (hl&0xFFF)+(reg&0xFFF) > 0xFFF
+	hl := c.getHL()
+	result := uint32(hl) + uint32(reg)
 
 	c.resetFlag(subFlag)
-	c.setFlagToCondition(carryFlag, carry)
-	c.setFlagToCondition(halfCarryFlag, halfCarry)
+	c.setFlagToCondition(carryFlag, (result&0x10000) != 0)
+	c.setFlagToCondition(halfCarryFlag, (hl^reg^uint16(result))&0x1000 != 0)
 
-	c.h = bit.High(result)
-	c.l = bit.Low(result)
+	c.setHL(uint16(result))
 }
 
 // sub will subtract the value from register A and set all relevant flags.
