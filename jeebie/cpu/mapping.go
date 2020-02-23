@@ -1,8 +1,10 @@
 package cpu
 
-import "github.com/valerio/go-jeebie/jeebie/bit"
+import (
+	"fmt"
 
-import "fmt"
+	"github.com/valerio/go-jeebie/jeebie/bit"
+)
 
 // Opcode represents a function that executes an opcode
 type Opcode func(*CPU) int
