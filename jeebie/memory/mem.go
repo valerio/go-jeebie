@@ -54,7 +54,6 @@ func (m *MMU) SetBit(index uint8, addr uint16, set bool) {
 }
 
 func (m *MMU) Read(addr uint16) byte {
-
 	// ROM
 	if isBetween(addr, 0, 0x7FFF) {
 		return m.cart.Read(addr)
@@ -67,7 +66,7 @@ func (m *MMU) Read(addr uint16) byte {
 
 	// external RAM
 	if isBetween(addr, 0xA000, 0xBFFF) {
-		return m.cart.Read(addr)
+		return m.memory[addr]
 	}
 
 	// RAM
@@ -88,7 +87,7 @@ func (m *MMU) Read(addr uint16) byte {
 
 	// Unused
 	if isBetween(addr, 0xFEA0, 0xFEFF) {
-		return 0
+		return m.memory[addr]
 	}
 
 	// IO registers
@@ -96,13 +95,8 @@ func (m *MMU) Read(addr uint16) byte {
 		return m.memory[addr]
 	}
 
-	// Zero Page RAM
-	if isBetween(addr, 0xFF80, 0xFFFE) {
-		return m.memory[addr]
-	}
-
-	/* Interrupt Enable register */
-	if addr == 0xFFFF {
+	// Zero Page RAM & I/O registers
+	if isBetween(addr, 0xFF80, 0xFFFF) {
 		return m.memory[addr]
 	}
 
@@ -125,7 +119,8 @@ func (m *MMU) Write(addr uint16, value byte) {
 
 	// external RAM
 	if isBetween(addr, 0xA000, 0xBFFF) {
-		panic(fmt.Sprintf("Attempted write on external RAM address: 0x%X", addr))
+		m.memory[addr] = value
+		return
 	}
 
 	// RAM
@@ -149,6 +144,7 @@ func (m *MMU) Write(addr uint16, value byte) {
 
 	// Unused
 	if isBetween(addr, 0xFEA0, 0xFEFF) {
+		m.memory[addr] = value
 		return
 	}
 
@@ -158,14 +154,8 @@ func (m *MMU) Write(addr uint16, value byte) {
 		return
 	}
 
-	// Zero Page RAM
-	if isBetween(addr, 0xFF80, 0xFFFE) {
-		m.memory[addr] = value
-		return
-	}
-
-	/* Interrupt Enable register */
-	if addr == 0xFFFF {
+	// Zero Page RAM + I/O registers
+	if isBetween(addr, 0xFF80, 0xFFFF) {
 		m.memory[addr] = value
 		return
 	}
