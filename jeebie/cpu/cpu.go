@@ -160,8 +160,8 @@ func (c CPU) peekImmediate() uint8 {
 // peekImmediateWord returns the two bytes at the memory address pointed by PC and PC+1
 // this value is known as immediate ('nn' in mnemonics), some opcodes use it as a parameter
 func (c CPU) peekImmediateWord() uint16 {
-	low := c.memory.Read(c.pc)
-	high := c.memory.Read(c.pc + 1)
+	low := c.memory.Read(c.pc + 1)
+	high := c.memory.Read(c.pc)
 
 	return bit.Combine(low, high)
 }

@@ -68,13 +68,13 @@ func GetOpcodeName(c *CPU) string {
 	if code == 0xCB {
 		code = c.memory.Read(c.pc + 1)
 		n := c.memory.Read(c.pc + 2)
-		nn := bit.Combine(n, c.memory.Read(c.pc+3))
-		return fmt.Sprintf("%s n=0x%x nn=0x%x", opcodeNamesCB[code], n, nn)
+		nn := bit.Combine(c.memory.Read(c.pc+3), n)
+		return fmt.Sprintf("0xcb%x (%s) n=0x%x nn=0x%x", code, opcodeNamesCB[code], n, nn)
 	}
 
 	n := c.memory.Read(c.pc + 1)
-	nn := bit.Combine(n, c.memory.Read(c.pc+2))
-	return fmt.Sprintf("%s n=0x%x nn=0x%x", opcodeNames[code], n, nn)
+	nn := bit.Combine(c.memory.Read(c.pc+2), n)
+	return fmt.Sprintf("0x%x (%s) n=0x%x nn=0x%x", code, opcodeNames[code], n, nn)
 }
 
 var opcodeNames = [...]string{
