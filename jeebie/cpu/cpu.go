@@ -194,7 +194,7 @@ func (c *CPU) readSignedImmediate() int8 {
 }
 
 func (c *CPU) setFlag(flag Flag) {
-	c.f &= uint8(flag)
+	c.f |= uint8(flag)
 }
 
 func (c *CPU) resetFlag(flag Flag) {
