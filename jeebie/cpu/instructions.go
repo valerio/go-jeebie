@@ -1,7 +1,10 @@
 package cpu
 
-import "github.com/valerio/go-jeebie/jeebie/bit"
-import "math/bits"
+import (
+	"math/bits"
+
+	"github.com/valerio/go-jeebie/jeebie/bit"
+)
 
 func (c *CPU) pushStack(r uint16) {
 	c.sp--
@@ -345,4 +348,9 @@ func (c *CPU) set(b uint8, r *uint8) {
 // res (RES) resets bit b in register r
 func (c *CPU) res(b uint8, r *uint8) {
 	*r = bit.Reset(b, *r)
+}
+
+func (c *CPU) jr() {
+	addr := uint16(int(c.pc) + int(c.readSignedImmediate()))
+	c.pc = addr + 1
 }

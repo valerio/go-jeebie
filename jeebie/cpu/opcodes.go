@@ -183,8 +183,7 @@ func opcode0x17(cpu *CPU) int {
 //JR n
 //#0x18:
 func opcode0x18(cpu *CPU) int {
-	value := int16(cpu.pc) + int16(cpu.readSignedImmediate())
-	cpu.pc += uint16(value)
+	cpu.jr()
 	return 12
 }
 
@@ -241,8 +240,7 @@ func opcode0x1F(cpu *CPU) int {
 //#0x20:
 func opcode0x20(cpu *CPU) int {
 	if !cpu.isSetFlag(zeroFlag) {
-		value := int16(cpu.pc) + int16(cpu.readSignedImmediate())
-		cpu.pc += uint16(value)
+		cpu.jr()
 		return 12
 	}
 
@@ -304,8 +302,7 @@ func opcode0x27(cpu *CPU) int {
 //#0x28:
 func opcode0x28(cpu *CPU) int {
 	if cpu.isSetFlag(zeroFlag) {
-		value := int16(cpu.pc) + int16(cpu.readSignedImmediate())
-		cpu.pc += uint16(value)
+		cpu.jr()
 		return 12
 	}
 
@@ -370,8 +367,7 @@ func opcode0x2F(cpu *CPU) int {
 //#0x30:
 func opcode0x30(cpu *CPU) int {
 	if !cpu.isSetFlag(carryFlag) {
-		value := int16(cpu.pc) + int16(cpu.readSignedImmediate())
-		cpu.pc += uint16(value)
+		cpu.jr()
 		return 12
 	}
 
@@ -439,8 +435,7 @@ func opcode0x37(cpu *CPU) int {
 //#0x38:
 func opcode0x38(cpu *CPU) int {
 	if cpu.isSetFlag(carryFlag) {
-		value := int16(cpu.pc) + int16(cpu.readSignedImmediate())
-		cpu.pc += uint16(value)
+		cpu.jr()
 		return 12
 	}
 
