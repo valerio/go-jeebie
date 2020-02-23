@@ -21,3 +21,6 @@ vendor/
 
 # local build output
 go-jeebie
+
+# bin folder
+bin/
