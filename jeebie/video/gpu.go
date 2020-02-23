@@ -36,7 +36,6 @@ type GPU struct {
 	tileCycleCounter     int
 	isScanLineTransfered bool
 	windowLine           int
-	irqSignal            uint8
 }
 
 func NewGpu(screen *Screen, memory *memory.MMU) *GPU {
@@ -62,52 +61,41 @@ func (g *GPU) Tick(cycles int) {
 		}
 
 		g.cycles %= hblankCycles
-		g.mode = oamReadMode
+		g.setMode(oamReadMode)
 
 		g.line++
 		g.memory.Write(addr.LY, byte(g.line))
 		g.compareLYToLYC()
 
 		if g.line == 144 {
-			g.mode = vblankMode
+			g.setMode(vblankMode)
 			g.vBlankLine = 0
 			g.modeCounterAux = g.cycles
-
-			g.memory.RequestInterrupt(addr.VBlankInterrupt)
+			g.windowLine = 0
 
 			// We're switching to VBlank Mode
 			// if enabled on STAT, trigger the LCDStat interrupt
-			g.irqSignal &= 0x9
 			if g.memory.ReadBit(statVblankIrq, addr.STAT) {
-				if bit.IsSet(0, g.irqSignal) && !bit.IsSet(3, g.irqSignal) {
-					g.memory.RequestInterrupt(addr.LCDSTATInterrupt)
-				}
-				g.irqSignal = bit.Set(1, g.irqSignal)
+				g.memory.RequestInterrupt(addr.LCDSTATInterrupt)
 			}
-			g.irqSignal &= 0xE
 
-			g.windowLine = 0
+			// always trigger the vblank interrupt when switching
+			g.memory.RequestInterrupt(addr.VBlankInterrupt)
+
 		} else {
 			// We're switching to OAM Read Mode
 			// if enabled on STAT, trigger the LCDStat interrupt
-			g.irqSignal &= 0x9
 			if g.memory.ReadBit(statOamIrq, addr.STAT) {
-				if bit.IsSet(0, g.irqSignal) && !bit.IsSet(3, g.irqSignal) {
-					g.memory.RequestInterrupt(addr.LCDSTATInterrupt)
-				}
-				g.irqSignal = bit.Set(2, g.irqSignal)
+				g.memory.RequestInterrupt(addr.LCDSTATInterrupt)
 			}
-			g.irqSignal &= 0xE
-
-			g.updateMode()
 		}
 
 		break
 	case vblankMode:
 		g.modeCounterAux += cycles
 
-		if g.cycles >= scanlineCycles {
-			g.cycles %= scanlineCycles
+		if g.modeCounterAux >= scanlineCycles {
+			g.modeCounterAux %= scanlineCycles
 			g.vBlankLine++
 
 			if g.vBlankLine <= 9 {
@@ -125,30 +113,21 @@ func (g *GPU) Tick(cycles int) {
 
 		if g.cycles >= 4560 {
 			g.cycles %= 4560
-			g.mode = oamReadMode
-			g.updateMode()
+			g.setMode(oamReadMode)
 
 			// We're switching to OAM Read Mode
 			// if enabled on STAT, trigger the LCDStat interrupt
-			g.irqSignal &= 0x7
-			g.irqSignal &= 0xA
 			if g.memory.ReadBit(statOamIrq, addr.STAT) {
-				if bit.IsSet(0, g.irqSignal) && !bit.IsSet(3, g.irqSignal) {
-					g.memory.RequestInterrupt(addr.LCDSTATInterrupt)
-				}
-				g.irqSignal = bit.Set(2, g.irqSignal)
+				g.memory.RequestInterrupt(addr.LCDSTATInterrupt)
 			}
-			g.irqSignal &= 0xD
 		}
 
 		break
 	case oamReadMode:
 		if g.cycles >= oamScanlineCycles {
 			g.cycles %= oamScanlineCycles
-			g.mode = vramReadMode
-			g.updateMode()
+			g.setMode(vramReadMode)
 			g.isScanLineTransfered = false
-			g.irqSignal &= 0x8
 		}
 		break
 	case vramReadMode:
@@ -178,18 +157,13 @@ func (g *GPU) Tick(cycles int) {
 		if g.cycles >= vramScanlineCycles {
 			g.pixelCounter = 0
 			g.cycles %= vramScanlineCycles
-			g.mode = hblankMode
 			g.tileCycleCounter = 0
-			g.updateMode()
+			g.setMode(hblankMode)
 
 			// We're switching to HBlank Mode
 			// if enabled on STAT, trigger the LCDStat interrupt
-			g.irqSignal &= 0x8
 			if g.memory.ReadBit(statHblankIrq, addr.STAT) {
-				if !bit.IsSet(3, g.irqSignal) {
-					g.memory.RequestInterrupt(addr.LCDSTATInterrupt)
-				}
-				g.irqSignal = bit.Set(0, g.irqSignal)
+				g.memory.RequestInterrupt(addr.LCDSTATInterrupt)
 			}
 		}
 		break
@@ -548,22 +522,19 @@ func (g *GPU) compareLYToLYC() {
 	if ly == lyc {
 		stat = bit.Set(statLycCondition, stat)
 		if bit.IsSet(uint8(statLycIrq), stat) {
-			if g.irqSignal == 0 {
-				g.memory.RequestInterrupt(addr.LCDSTATInterrupt)
-			}
-			g.irqSignal = bit.Set(3, g.irqSignal)
+			g.memory.RequestInterrupt(addr.LCDSTATInterrupt)
 		}
 	} else {
 		stat = bit.Reset(statLycCondition, stat)
-		g.irqSignal = bit.Reset(3, g.irqSignal)
 	}
 
 	g.memory.Write(addr.STAT, stat)
 }
 
-// updateMode sets the two bits (1,0) in the STAT register
-// according to the current GPU mode.
-func (g *GPU) updateMode() {
+// setMode sets the two bits (1,0) in the STAT register
+// according to the selected GPU mode.
+func (g *GPU) setMode(mode GpuMode) {
+	g.mode = mode
 	stat := g.memory.Read(addr.STAT)
 	stat = stat&0xFC | byte(g.mode)
 	g.memory.Write(addr.STAT, stat)
