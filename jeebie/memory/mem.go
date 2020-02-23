@@ -18,6 +18,7 @@ type MMU struct {
 func New() *MMU {
 	return &MMU{
 		memory: make([]byte, 0x10000),
+		cart:   NewCartridge(),
 	}
 }
 
