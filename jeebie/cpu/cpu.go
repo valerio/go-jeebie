@@ -215,11 +215,12 @@ func (c CPU) flagToBit(flag Flag) uint8 {
 }
 
 func (c *CPU) setFlagToCondition(flag Flag, condition bool) {
-	if condition {
-		c.setFlag(flag)
-	} else {
+	if !condition {
 		c.resetFlag(flag)
+		return
 	}
+
+	c.setFlag(flag)
 }
 
 func (c *CPU) setBC(value uint16) {
