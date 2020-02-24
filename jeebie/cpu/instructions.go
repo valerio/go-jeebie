@@ -307,35 +307,9 @@ func (c *CPU) daa() {
 	c.a = uint8(a)
 }
 
-// cpl complements the A register (flips all bits).
-func (c *CPU) cpl() {
-	c.a ^= 0xFF
-	c.setFlag(subFlag)
-	c.setFlag(halfCarryFlag)
-}
-
-// ccf complements the carry flag.
-func (c *CPU) ccf() {
-	c.resetFlag(subFlag)
-	c.resetFlag(halfCarryFlag)
-	// flip the carry flag
-	c.setFlagToCondition(carryFlag, !c.isSetFlag(carryFlag))
-}
-
-// scf sets the carry flag
-func (c *CPU) scf() {
-	c.resetFlag(subFlag)
-	c.resetFlag(halfCarryFlag)
-	c.setFlag(carryFlag)
-}
-
 // bit (BIT) tests if the bit b in register r is set or not.
 func (c *CPU) bit(b, r uint8) {
-	isSet := bit.IsSet(b, r)
-
-	if !isSet {
-		c.setFlag(zeroFlag)
-	}
+	c.setFlagToCondition(zeroFlag, !bit.IsSet(b, r))
 	c.resetFlag(subFlag)
 	c.setFlag(halfCarryFlag)
 }
