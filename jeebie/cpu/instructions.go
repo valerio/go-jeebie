@@ -254,7 +254,7 @@ func (c *CPU) xor(value uint8) {
 // Implements the compare (CP) instruction.
 func (c *CPU) cp(value uint8) {
 	c.setFlagToCondition(zeroFlag, c.a == value)
-	c.resetFlag(subFlag)
+	c.setFlag(subFlag)
 	c.setFlagToCondition(carryFlag, c.a < value)
 	c.setFlagToCondition(halfCarryFlag, (c.a-value)&0xF > c.a&0xF)
 }

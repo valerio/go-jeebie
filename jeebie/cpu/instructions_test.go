@@ -407,15 +407,103 @@ func TestCPU_sbc(t *testing.T) {
 }
 
 func TestCPU_and(t *testing.T) {
+	mmu := memory.New()
+	cpu := New(mmu)
+
+	testCases := []struct {
+		desc  string
+		a     uint8
+		arg   uint8
+		want  uint8
+		flags Flag
+	}{
+		{desc: "does bitwise and with A", a: 0x0F, arg: 0x44, want: 0x04, flags: halfCarryFlag},
+		{desc: "sets zero flag", a: 0x0F, arg: 0x40, want: 0, flags: zeroFlag | halfCarryFlag},
+	}
+	for _, tC := range testCases {
+		t.Run(tC.desc, func(t *testing.T) {
+			cpu.f = 0
+			cpu.a = tC.a
+			cpu.and(tC.arg)
+			assert.Equal(t, tC.want, cpu.a)
+			assert.Equalf(t, uint8(tC.flags), cpu.f, "flags don't match")
+		})
+	}
 }
 
 func TestCPU_or(t *testing.T) {
+	mmu := memory.New()
+	cpu := New(mmu)
+
+	testCases := []struct {
+		desc  string
+		a     uint8
+		arg   uint8
+		want  uint8
+		flags Flag
+	}{
+		{desc: "does bitwise or with A", a: 0x40, arg: 0x04, want: 0x44},
+		{desc: "sets zero flag", a: 0, arg: 0, want: 0, flags: zeroFlag},
+	}
+	for _, tC := range testCases {
+		t.Run(tC.desc, func(t *testing.T) {
+			cpu.f = 0
+			cpu.a = tC.a
+			cpu.or(tC.arg)
+			assert.Equal(t, tC.want, cpu.a)
+			assert.Equalf(t, uint8(tC.flags), cpu.f, "flags don't match")
+		})
+	}
 }
 
 func TestCPU_xor(t *testing.T) {
+	mmu := memory.New()
+	cpu := New(mmu)
+
+	testCases := []struct {
+		desc  string
+		a     uint8
+		arg   uint8
+		want  uint8
+		flags Flag
+	}{
+		{desc: "does bitwise xor with A", a: 0x0F, arg: 0x03, want: 0x0c},
+		{desc: "sets zero flag", a: 0xFF, arg: 0xFF, want: 0, flags: zeroFlag},
+	}
+	for _, tC := range testCases {
+		t.Run(tC.desc, func(t *testing.T) {
+			cpu.f = 0
+			cpu.a = tC.a
+			cpu.xor(tC.arg)
+			assert.Equal(t, tC.want, cpu.a)
+			assert.Equalf(t, uint8(tC.flags), cpu.f, "flags don't match")
+		})
+	}
 }
 
 func TestCPU_cp(t *testing.T) {
+	mmu := memory.New()
+	cpu := New(mmu)
+
+	testCases := []struct {
+		desc string
+		a    uint8
+		arg  uint8
+
+		flags Flag
+	}{
+		{desc: "sets zero flag (a == n)", a: 0x0F, arg: 0x0F, flags: subFlag | zeroFlag},
+		{desc: "sets carry flag (a < n)", a: 0x00, arg: 0x01, flags: subFlag | halfCarryFlag | carryFlag},
+		{desc: "sets half carry flag", a: 0x10, arg: 0x01, flags: subFlag | halfCarryFlag},
+	}
+	for _, tC := range testCases {
+		t.Run(tC.desc, func(t *testing.T) {
+			cpu.f = 0
+			cpu.a = tC.a
+			cpu.cp(tC.arg)
+			assert.Equalf(t, uint8(tC.flags), cpu.f, "flags don't match")
+		})
+	}
 }
 
 func TestCPU_swap(t *testing.T) {
