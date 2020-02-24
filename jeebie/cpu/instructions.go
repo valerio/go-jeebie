@@ -220,13 +220,13 @@ func (c *CPU) sbc(value uint8) {
 	a := c.a
 	carry := c.flagToBit(carryFlag)
 
-	result := c.a - value - carry
+	result := int(c.a) - int(value) - int(carry)
 	c.a = uint8(result)
 
-	c.setFlagToCondition(zeroFlag, result == 0)
+	c.setFlagToCondition(zeroFlag, c.a == 0)
 	c.setFlag(subFlag)
 	c.setFlagToCondition(carryFlag, result < 0)
-	c.setFlagToCondition(halfCarryFlag, (a&0xF)-(value&0xF)-carry < 0)
+	c.setFlagToCondition(halfCarryFlag, (int(a)&0xF)-(int(value)&0xF)-int(carry) < 0)
 }
 
 func (c *CPU) and(value uint8) {

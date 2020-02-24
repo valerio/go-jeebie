@@ -353,7 +353,6 @@ func TestCPU_sub(t *testing.T) {
 
 	testCases := []struct {
 		desc  string
-		carry bool
 		a     uint8
 		arg   uint8
 		want  uint8
@@ -367,9 +366,6 @@ func TestCPU_sub(t *testing.T) {
 	for _, tC := range testCases {
 		t.Run(tC.desc, func(t *testing.T) {
 			cpu.f = 0
-			if tC.carry {
-				cpu.setFlag(carryFlag)
-			}
 			cpu.a = tC.a
 			cpu.sub(tC.arg)
 			assert.Equal(t, tC.want, cpu.a)
@@ -379,6 +375,35 @@ func TestCPU_sub(t *testing.T) {
 }
 
 func TestCPU_sbc(t *testing.T) {
+	mmu := memory.New()
+	cpu := New(mmu)
+
+	testCases := []struct {
+		desc  string
+		carry bool
+		a     uint8
+		arg   uint8
+		want  uint8
+		flags Flag
+	}{
+		{desc: "subtracts from A", a: 0x3, arg: 0x01, want: 0x02, flags: subFlag},
+		{desc: "uses carry value", carry: true, a: 0x3, arg: 0x01, want: 0x01, flags: subFlag},
+		{desc: "sets carry", a: 0, arg: 0x01, want: 0xFF, flags: subFlag | carryFlag | halfCarryFlag},
+		{desc: "sets halfcarry", a: 0x10, arg: 0x01, want: 0x0F, flags: subFlag | halfCarryFlag},
+		{desc: "sets zero", a: 0x1, arg: 0x01, want: 0, flags: subFlag | zeroFlag},
+	}
+	for _, tC := range testCases {
+		t.Run(tC.desc, func(t *testing.T) {
+			cpu.f = 0
+			if tC.carry {
+				cpu.setFlag(carryFlag)
+			}
+			cpu.a = tC.a
+			cpu.sbc(tC.arg)
+			assert.Equal(t, tC.want, cpu.a)
+			assert.Equalf(t, uint8(tC.flags), cpu.f, "flags don't match")
+		})
+	}
 }
 
 func TestCPU_and(t *testing.T) {
