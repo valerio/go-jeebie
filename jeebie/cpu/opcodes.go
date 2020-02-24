@@ -356,8 +356,7 @@ func opcode0x2E(cpu *CPU) int {
 //CPL
 //#0x2F:
 func opcode0x2F(cpu *CPU) int {
-	value := cpu.a
-	cpu.a = value ^ 0xFF
+	cpu.a ^= 0xFF
 	cpu.setFlag(halfCarryFlag)
 	cpu.setFlag(subFlag)
 	return 4
