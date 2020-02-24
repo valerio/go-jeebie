@@ -519,7 +519,7 @@ func TestCPU_swap(t *testing.T) {
 	}{
 		{desc: "swaps the given register", reg: &cpu.c, arg: 0xAB, want: 0xBA},
 		{desc: "sets zero", reg: &cpu.b, arg: 0, want: 0, flags: zeroFlag},
-}
+	}
 	for _, tC := range testCases {
 		t.Run(tC.desc, func(t *testing.T) {
 			cpu.f = 0
@@ -532,6 +532,33 @@ func TestCPU_swap(t *testing.T) {
 }
 
 func TestCPU_daa(t *testing.T) {
+	mmu := memory.New()
+	cpu := New(mmu)
+
+	testCases := []struct {
+		desc         string
+		initialFlags Flag
+		a            uint8
+		want         uint8
+		flags        Flag
+	}{
+		{desc: "sets zero flag", a: 0, want: 0, flags: zeroFlag},
+		{desc: "(add) adds 0x06", a: 0x7d, want: 0x83},
+		{desc: "(add) adds 0x60", a: 0xa1, want: 0x01, flags: carryFlag},
+		{desc: "(add) adds 0x66", a: 0xaa, want: 0x10, flags: carryFlag},
+		{desc: "(sub+half) removes 0x06", initialFlags: subFlag | halfCarryFlag, a: 0x83, want: 0x7d, flags: subFlag},
+		{desc: "(sub+carry) removes 0x60", initialFlags: subFlag | carryFlag, a: 0xa1, want: 0x41, flags: subFlag | carryFlag},
+		{desc: "(sub+carry+half) removes 0x66", initialFlags: subFlag | carryFlag | halfCarryFlag, a: 0x10, want: 0xaa, flags: subFlag | carryFlag},
+	}
+	for _, tC := range testCases {
+		t.Run(tC.desc, func(t *testing.T) {
+			cpu.f = uint8(tC.initialFlags)
+			cpu.a = tC.a
+			cpu.daa()
+			assert.Equal(t, tC.want, cpu.a)
+			assert.Equalf(t, uint8(tC.flags), cpu.f, "flags don't match")
+		})
+	}
 }
 
 func TestCPU_cpl(t *testing.T) {

@@ -278,27 +278,31 @@ func (c *CPU) daa() {
 	a := uint16(c.a)
 
 	if c.isSetFlag(subFlag) {
-		if c.isSetFlag(halfCarryFlag) || (a&0x0F) > 9 {
-			a += 0x06
-		}
-		if c.isSetFlag(carryFlag) || a > 0x9F {
-			a += 0x60
-		}
-	} else {
 		if c.isSetFlag(halfCarryFlag) {
 			a = (a - 0x06) & 0xFF
 		}
 		if c.isSetFlag(carryFlag) {
 			a -= 0x60
 		}
+	} else {
+		if c.isSetFlag(halfCarryFlag) || (a&0x0F) > 9 {
+			a += 0x06
+		}
+		if c.isSetFlag(carryFlag) || a > 0x9F {
+			a += 0x60
+		}
+
 	}
 
+	c.resetFlag(halfCarryFlag)
 	c.setFlagToCondition(zeroFlag, a == 0)
+
 	// detect overflow
 	if (a & 0x100) == 0x100 {
 		c.setFlag(carryFlag)
 	}
-	c.resetFlag(halfCarryFlag)
+
+	a &= 0xFF
 
 	c.a = uint8(a)
 }
