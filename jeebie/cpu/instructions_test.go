@@ -507,6 +507,28 @@ func TestCPU_cp(t *testing.T) {
 }
 
 func TestCPU_swap(t *testing.T) {
+	mmu := memory.New()
+	cpu := New(mmu)
+
+	testCases := []struct {
+		desc  string
+		reg   *uint8
+		arg   uint8
+		want  uint8
+		flags Flag
+	}{
+		{desc: "swaps the given register", reg: &cpu.c, arg: 0xAB, want: 0xBA},
+		{desc: "sets zero", reg: &cpu.b, arg: 0, want: 0, flags: zeroFlag},
+}
+	for _, tC := range testCases {
+		t.Run(tC.desc, func(t *testing.T) {
+			cpu.f = 0
+			*tC.reg = tC.arg
+			cpu.swap(tC.reg)
+			assert.Equal(t, tC.want, *tC.reg)
+			assert.Equalf(t, uint8(tC.flags), cpu.f, "flags don't match")
+		})
+	}
 }
 
 func TestCPU_daa(t *testing.T) {
