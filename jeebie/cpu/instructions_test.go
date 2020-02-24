@@ -561,22 +561,79 @@ func TestCPU_daa(t *testing.T) {
 	}
 }
 
-func TestCPU_cpl(t *testing.T) {
-}
-
-func TestCPU_ccf(t *testing.T) {
-}
-
-func TestCPU_scf(t *testing.T) {
-}
-
 func TestCPU_bit(t *testing.T) {
+	mmu := memory.New()
+	cpu := New(mmu)
+
+	testCases := []struct {
+		desc    string
+		initial Flag
+		idx     uint8
+		arg     uint8
+		flags   Flag
+	}{
+		{desc: "sets zero flag", idx: 0, arg: 0xF0, flags: zeroFlag | halfCarryFlag},
+		{desc: "resets zero flag", initial: zeroFlag, idx: 7, arg: 0x80, flags: halfCarryFlag},
+	}
+	for _, tC := range testCases {
+		t.Run(tC.desc, func(t *testing.T) {
+			cpu.f = uint8(tC.initial)
+			cpu.bit(tC.idx, tC.arg)
+			assert.Equalf(t, uint8(tC.flags), cpu.f, "flags don't match")
+		})
+	}
 }
 
 func TestCPU_set(t *testing.T) {
+	mmu := memory.New()
+	cpu := New(mmu)
+
+	testCases := []struct {
+		desc string
+		reg  *uint8
+		idx  uint8
+		arg  uint8
+		want uint8
+	}{
+		{desc: "sets bit 0", reg: &cpu.a, idx: 0, arg: 0xf0, want: 0xf1},
+		{desc: "sets bit 3", reg: &cpu.c, idx: 3, arg: 0xaa, want: 0xaa},
+		{desc: "sets bit 4", reg: &cpu.c, idx: 4, arg: 0xaa, want: 0xba},
+		{desc: "sets bit 7", reg: &cpu.b, idx: 7, arg: 0, want: 0x80},
+	}
+	for _, tC := range testCases {
+		t.Run(tC.desc, func(t *testing.T) {
+			cpu.f = 0
+			*tC.reg = tC.arg
+			cpu.set(tC.idx, tC.reg)
+			assert.Equal(t, tC.want, *tC.reg)
+		})
+	}
 }
 
 func TestCPU_res(t *testing.T) {
+	mmu := memory.New()
+	cpu := New(mmu)
+
+	testCases := []struct {
+		desc string
+		reg  *uint8
+		idx  uint8
+		arg  uint8
+		want uint8
+	}{
+		{desc: "resets bit 0", reg: &cpu.a, idx: 0, arg: 0xf0, want: 0xf0},
+		{desc: "resets bit 3", reg: &cpu.c, idx: 3, arg: 0xaa, want: 0xa2},
+		{desc: "resets bit 4", reg: &cpu.c, idx: 4, arg: 0xba, want: 0xaa},
+		{desc: "resets bit 7", reg: &cpu.b, idx: 7, arg: 0x80, want: 0},
+	}
+	for _, tC := range testCases {
+		t.Run(tC.desc, func(t *testing.T) {
+			cpu.f = 0
+			*tC.reg = tC.arg
+			cpu.res(tC.idx, tC.reg)
+			assert.Equal(t, tC.want, *tC.reg)
+		})
+	}
 }
 
 func TestCPU_jr(t *testing.T) {
