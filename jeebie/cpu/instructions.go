@@ -325,6 +325,8 @@ func (c *CPU) res(b uint8, r *uint8) {
 }
 
 func (c *CPU) jr() {
-	addr := uint16(int(c.pc) + int(c.readSignedImmediate()))
-	c.pc = addr + 1
+	pc := int(c.pc)
+	n := int(c.peekSignedImmediate())
+	addr := uint16(pc + 1 + n)
+	c.pc = addr
 }

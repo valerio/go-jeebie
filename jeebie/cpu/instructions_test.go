@@ -637,4 +637,25 @@ func TestCPU_res(t *testing.T) {
 }
 
 func TestCPU_jr(t *testing.T) {
+	mmu := memory.New()
+	cpu := New(mmu)
+
+	testCases := []struct {
+		desc string
+		n    uint8
+		pc   uint16
+		want uint16
+	}{
+		{desc: "jumps back", n: 0xFE, pc: 0x100, want: 0x100 - 2 + 1},
+		{desc: "jumps back 16", n: 0xF0, pc: 0x100, want: 0x100 - 16 + 1},
+		{desc: "jumps forward", n: 0x10, pc: 0x100, want: 0x100 + 16 + 1},
+	}
+	for _, tC := range testCases {
+		t.Run(tC.desc, func(t *testing.T) {
+			cpu.pc = tC.pc
+			mmu.Write(cpu.pc, tC.n)
+			cpu.jr()
+			assert.Equal(t, tC.want, cpu.pc)
+		})
+	}
 }
