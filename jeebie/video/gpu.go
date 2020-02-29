@@ -59,13 +59,9 @@ func (g *GPU) Tick(cycles int) {
 		if g.cycles < hblankCycles {
 			break
 		}
-
-		g.cycles %= hblankCycles
+		g.cycles -= hblankCycles
 		g.setMode(oamReadMode)
-
-		g.line++
-		g.memory.Write(addr.LY, byte(g.line))
-		g.compareLYToLYC()
+		g.setLY(g.line + 1)
 
 		if g.line == 144 {
 			g.setMode(vblankMode)
@@ -73,21 +69,18 @@ func (g *GPU) Tick(cycles int) {
 			g.modeCounterAux = g.cycles
 			g.windowLine = 0
 
+			// Always trigger the VBlank interrupt when switching
+			g.memory.RequestInterrupt(addr.VBlankInterrupt)
+
 			// We're switching to VBlank Mode
 			// if enabled on STAT, trigger the LCDStat interrupt
 			if g.memory.ReadBit(statVblankIrq, addr.STAT) {
 				g.memory.RequestInterrupt(addr.LCDSTATInterrupt)
 			}
-
-			// always trigger the vblank interrupt when switching
-			g.memory.RequestInterrupt(addr.VBlankInterrupt)
-
-		} else {
+		} else if g.memory.ReadBit(statOamIrq, addr.STAT) {
 			// We're switching to OAM Read Mode
 			// if enabled on STAT, trigger the LCDStat interrupt
-			if g.memory.ReadBit(statOamIrq, addr.STAT) {
-				g.memory.RequestInterrupt(addr.LCDSTATInterrupt)
-			}
+			g.memory.RequestInterrupt(addr.LCDSTATInterrupt)
 		}
 
 		break
@@ -95,26 +88,21 @@ func (g *GPU) Tick(cycles int) {
 		g.modeCounterAux += cycles
 
 		if g.modeCounterAux >= scanlineCycles {
-			g.modeCounterAux %= scanlineCycles
+			g.modeCounterAux -= scanlineCycles
 			g.vBlankLine++
 
 			if g.vBlankLine <= 9 {
-				g.line++
-				g.memory.Write(addr.LY, byte(g.line))
-				g.compareLYToLYC()
+				g.setLY(g.line + 1)
 			}
 		}
 
 		if g.cycles >= 4104 && g.modeCounterAux >= 4 && g.line == 153 {
-			g.line = 0
-			g.memory.Write(addr.LY, byte(g.line))
-			g.compareLYToLYC()
+			g.setLY(0)
 		}
 
 		if g.cycles >= 4560 {
-			g.cycles %= 4560
+			g.cycles -= 4560
 			g.setMode(oamReadMode)
-
 			// We're switching to OAM Read Mode
 			// if enabled on STAT, trigger the LCDStat interrupt
 			if g.memory.ReadBit(statOamIrq, addr.STAT) {
@@ -125,7 +113,7 @@ func (g *GPU) Tick(cycles int) {
 		break
 	case oamReadMode:
 		if g.cycles >= oamScanlineCycles {
-			g.cycles %= oamScanlineCycles
+			g.cycles -= oamScanlineCycles
 			g.setMode(vramReadMode)
 			g.isScanLineTransfered = false
 		}
@@ -136,8 +124,7 @@ func (g *GPU) Tick(cycles int) {
 
 			if g.readLCDCVariable(lcdDisplayEnable) == 1 {
 				for g.tileCycleCounter >= 3 {
-					g.drawBackground(g.line, g.pixelCounter, 4)
-
+					g.drawBackground()
 					g.pixelCounter += 4
 					g.tileCycleCounter -= 3
 
@@ -145,18 +132,17 @@ func (g *GPU) Tick(cycles int) {
 						break
 					}
 				}
-
 			}
 		}
 
-		if g.cycles >= 160 && g.isScanLineTransfered {
-			g.drawScanline(g.line)
+		if g.cycles >= 160 && !g.isScanLineTransfered {
+			g.drawScanline()
 			g.isScanLineTransfered = true
 		}
 
 		if g.cycles >= vramScanlineCycles {
 			g.pixelCounter = 0
-			g.cycles %= vramScanlineCycles
+			g.cycles -= vramScanlineCycles
 			g.tileCycleCounter = 0
 			g.setMode(hblankMode)
 
@@ -168,25 +154,28 @@ func (g *GPU) Tick(cycles int) {
 		}
 		break
 	}
+
+	if g.cycles >= 70224 {
+		g.cycles -= 70224
+	}
 }
 
-func (g *GPU) drawScanline(line int) {
+func (g *GPU) drawScanline() {
 	lcdEnabled := g.readLCDCVariable(lcdDisplayEnable) == 1
 	if lcdEnabled {
-		g.drawWindow(line)
-		g.drawSprites(line)
+		g.drawWindow()
+		g.drawSprites()
 		return
 	}
 
 	g.framebuffer.Clear()
 }
 
-func (g *GPU) drawBackground(line, pixel, count int) {
-	// g.line, g.pixelCounter, 4
-	startXOffset := pixel % 8
-	endXOffset := startXOffset + count
-	screenTile := pixel / 8
-	lineWidth := line * width
+func (g *GPU) drawBackground() {
+	startXOffset := g.pixelCounter % 8
+	endXOffset := startXOffset + 4
+	screenTile := g.pixelCounter / 8
+	lineWidth := g.line * width
 
 	backgroundEnabled := g.readLCDCVariable(bgDisplay) == 1
 	if !backgroundEnabled {
@@ -210,7 +199,7 @@ func (g *GPU) drawBackground(line, pixel, count int) {
 
 	scrollX := g.memory.Read(addr.SCX)
 	scrollY := g.memory.Read(addr.SCY)
-	lineScrolled := line + int(scrollY)
+	lineScrolled := g.line + int(scrollY)
 	lineScrolled32 := (lineScrolled / 8) * 32
 	tilePixelY := lineScrolled % 8
 	tilePixelY2 := tilePixelY * 2
@@ -256,7 +245,7 @@ func (g *GPU) drawBackground(line, pixel, count int) {
 	}
 }
 
-func (g *GPU) drawWindow(line int) {
+func (g *GPU) drawWindow() {
 	if g.windowLine > 143 {
 		return
 	}
@@ -273,7 +262,7 @@ func (g *GPU) drawWindow(line int) {
 		return
 	}
 
-	if wy > 143 || int(wy) > line {
+	if wy > 143 || int(wy) > g.line {
 		return
 	}
 
@@ -296,7 +285,7 @@ func (g *GPU) drawWindow(line int) {
 	y32 := (lineAdj / 8) * 32
 	pixelY := lineAdj & 8
 	pixelY2 := pixelY * 2
-	lineWidth := line * width
+	lineWidth := g.line * width
 
 	for x := 0; x < 32; x++ {
 		tileIndexAddr := uint16(tileMapAddr + y32 + x)
@@ -327,10 +316,10 @@ func (g *GPU) drawWindow(line int) {
 			// the pixel is the bitwise OR of the low/high bit at
 			// the current X index (from 7 to 0)
 			pixel := 0
-			if bit.IsSet(7-uint8(pixelX), low) {
+			if bit.IsSet(uint8(7-pixelX), low) {
 				pixel |= 1
 			}
-			if bit.IsSet(7-uint8(pixelX), high) {
+			if bit.IsSet(uint8(7-pixelX), high) {
 				pixel |= 2
 			}
 
@@ -344,7 +333,7 @@ func (g *GPU) drawWindow(line int) {
 	g.windowLine++
 }
 
-func (g *GPU) drawSprites(line int) {
+func (g *GPU) drawSprites() {
 	if g.readLCDCVariable(spriteDisplayEnable) != 1 {
 		return
 	}
@@ -389,7 +378,7 @@ func (g *GPU) drawSprites(line int) {
 
 		tileAddr := 0x8000
 
-		pixelY := line - spriteY
+		pixelY := g.line - spriteY
 		if flipY {
 			pixelY = spriteHeight - 1 - pixelY
 		}
@@ -538,4 +527,10 @@ func (g *GPU) setMode(mode GpuMode) {
 	stat := g.memory.Read(addr.STAT)
 	stat = stat&0xFC | byte(g.mode)
 	g.memory.Write(addr.STAT, stat)
+}
+
+func (g *GPU) setLY(line int) {
+	g.line = line
+	g.memory.Write(addr.LY, byte(g.line))
+	g.compareLYToLYC()
 }
