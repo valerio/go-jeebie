@@ -24,7 +24,6 @@ const (
 
 type GPU struct {
 	memory      *memory.MMU
-	screen      *Screen
 	framebuffer *FrameBuffer
 
 	mode                 GpuMode
@@ -38,16 +37,19 @@ type GPU struct {
 	windowLine           int
 }
 
-func NewGpu(screen *Screen, memory *memory.MMU) *GPU {
+func NewGpu(memory *memory.MMU) *GPU {
 	fb := NewFrameBuffer()
 	return &GPU{
 		framebuffer: fb,
-		screen:      screen,
 		memory:      memory,
 		mode:        vblankMode,
 
 		line: 144,
 	}
+}
+
+func (g *GPU) GetFrameBuffer() *FrameBuffer {
+	return g.framebuffer
 }
 
 // Tick simulates gpu behaviour for a certain amount of clock cycles.
@@ -175,7 +177,7 @@ func (g *GPU) drawBackground() {
 	startXOffset := g.pixelCounter % 8
 	endXOffset := startXOffset + 4
 	screenTile := g.pixelCounter / 8
-	lineWidth := g.line * width
+	lineWidth := g.line * framebufferWidth
 
 	backgroundEnabled := g.readLCDCVariable(bgDisplay) == 1
 	if !backgroundEnabled {
@@ -285,7 +287,7 @@ func (g *GPU) drawWindow() {
 	y32 := (lineAdj / 8) * 32
 	pixelY := lineAdj & 8
 	pixelY2 := pixelY * 2
-	lineWidth := g.line * width
+	lineWidth := g.line * framebufferWidth
 
 	for x := 0; x < 32; x++ {
 		tileIndexAddr := uint16(tileMapAddr + y32 + x)
@@ -309,7 +311,7 @@ func (g *GPU) drawWindow() {
 		for pixelX := 0; pixelX < 8; pixelX++ {
 			bufferX := xOffset + pixelX + int(wx)
 
-			if bufferX < 0 || bufferX > width {
+			if bufferX < 0 || bufferX > framebufferWidth {
 				continue
 			}
 
@@ -343,7 +345,7 @@ func (g *GPU) drawSprites() {
 		spriteHeight = 16
 	}
 
-	lineWidth := g.line * width
+	lineWidth := g.line * framebufferWidth
 
 	for sprite := 39; sprite >= 0; sprite-- {
 		sprite4 := sprite * 4
@@ -354,7 +356,7 @@ func (g *GPU) drawSprites() {
 			continue
 		}
 
-		if spriteX < -7 || spriteX >= width {
+		if spriteX < -7 || spriteX >= framebufferWidth {
 			continue
 		}
 
@@ -420,7 +422,7 @@ func (g *GPU) drawSprites() {
 			}
 
 			bufferX := spriteX + pixelX
-			if bufferX < 0 || bufferX >= width {
+			if bufferX < 0 || bufferX >= framebufferWidth {
 				continue
 			}
 

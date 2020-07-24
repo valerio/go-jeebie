@@ -12,9 +12,9 @@ const (
 
 const (
 	WhiteColor     GBColor = 0xFFFFFFFF
-	LightGreyColor         = 0xFF989898
-	DarkGreyColor          = 0xFF4C4C4C
-	BlackColor             = 0xFF000000
+	LightGreyColor         = 0x989898FF
+	DarkGreyColor          = 0x4C4C4CFF
+	BlackColor             = 0x000000FF
 )
 
 func ByteToColor(value byte) GBColor {
@@ -42,8 +42,8 @@ func NewFrameBuffer() *FrameBuffer {
 	colorSlice := make([]uint32, framebufferSize, framebufferSize)
 
 	return &FrameBuffer{
-		width:  width,
-		height: height,
+		width:  framebufferWidth,
+		height: framebufferHeight,
 		buffer: colorSlice,
 	}
 }
