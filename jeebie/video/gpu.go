@@ -181,7 +181,9 @@ func (g *GPU) drawBackground() {
 
 	backgroundEnabled := g.readLCDCVariable(bgDisplay) == 1
 	if !backgroundEnabled {
-		// TODO: clear current line
+		for i := 0; i < framebufferWidth; i++ {
+			g.framebuffer.buffer[lineWidth+i] = 0
+		}
 		return
 	}
 
@@ -208,7 +210,12 @@ func (g *GPU) drawBackground() {
 
 	for xOffset := startXOffset; xOffset < endXOffset; xOffset++ {
 		screenPixelX := (screenTile * 8) + xOffset
-		mapPixelX := screenPixelX + int(scrollX)
+		// if the pixel is out of bounds, skip drawing it
+		if screenPixelX >= framebufferWidth {
+			continue
+		}
+
+		mapPixelX := (screenPixelX + int(scrollX)) & 0xFF
 		mapTileX := mapPixelX / 8
 		mapTileXOffset := mapPixelX % 8
 		mapTileAddr := uint16(tileMapAddr + lineScrolled32 + mapTileX)
