@@ -1,69 +1,149 @@
 package main
 
 import (
+	"errors"
 	"fmt"
-	"image/color"
+	"log/slog"
 	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
-	"github.com/hajimehoshi/ebiten"
+	"github.com/gdamore/tcell/v2"
 	"github.com/urfave/cli"
 	"github.com/valerio/go-jeebie/jeebie"
 )
 
 const (
-	renderScale = 3
-	width       = 160
-	height      = 144
+	// Game Boy screen dimensions
+	width  = 160
+	height = 144
+
+	// Since terminal characters are taller than wide, we'll scale the width more
+	// to maintain approximate aspect ratio
+	scaleX = 2 // Each pixel becomes 2 characters wide
+	scaleY = 1 // Each pixel becomes 1 character tall
+
+	// Frame timing (Game Boy runs at ~59.7 FPS)
+	frameTime = time.Second / 60
 )
 
-// Game implements ebiten.Game interface.
-type Game struct {
-	picture  []uint8
-	emulator jeebie.Emulator
+// Characters to represent different shades of gray
+// From darkest to lightest.
+var shadeChars = []rune{'█', '▓', '▒', '░'}
+
+type TerminalRenderer struct {
+	screen   tcell.Screen
+	emulator *jeebie.Emulator
+	running  bool
 }
 
-// Update proceeds the game state.
-// Update is called every tick (1/60 [s] by default).
-func (g *Game) Update(screen *ebiten.Image) error {
-	if ebiten.IsKeyPressed(ebiten.KeyEscape) {
-		return fmt.Errorf("quit")
+func NewTerminalRenderer(emu *jeebie.Emulator) (*TerminalRenderer, error) {
+	screen, err := tcell.NewScreen()
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize terminal: %v", err)
 	}
 
-	g.emulator.RunUntilFrame()
+	if err := screen.Init(); err != nil {
+		return nil, fmt.Errorf("failed to initialize terminal: %v", err)
+	}
+
+	return &TerminalRenderer{
+		screen:   screen,
+		emulator: emu,
+		running:  true,
+	}, nil
+}
+
+func (t *TerminalRenderer) Run() error {
+	defer func() {
+		slog.Info("Finishing terminal")
+		t.screen.Fini()
+	}()
+
+	// Set up screen
+	t.screen.SetStyle(tcell.StyleDefault.
+		Background(tcell.ColorBlack).
+		Foreground(tcell.ColorWhite))
+	t.screen.Clear()
+
+	// Handle input in a separate goroutine
+	go t.handleInput()
+
+	// Main render loop
+	ticker := time.NewTicker(frameTime)
+	defer ticker.Stop()
+
+	// catch SIGINT and SIGTERM
+	signals := make(chan os.Signal, 1)
+	signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM)
+
+	for t.running {
+		select {
+		case <-ticker.C:
+			t.emulator.RunUntilFrame()
+			t.render()
+			t.screen.Show()
+		case <-signals:
+			t.running = false
+			slog.Info("Received signal to stop")
+			return nil
+		}
+	}
+
 	return nil
 }
 
-// Draw draws the game screen.
-// Draw is called every frame (typically 1/60[s] for 60Hz display).
-func (g *Game) Draw(screen *ebiten.Image) {
-	screen.Clear()
-	fb := g.emulator.GetCurrentFrame()
-	frame := fb.ToSlice()
-
-	// Write your game's rendering.
-	for i := 0; i < width; i++ {
-		for j := 0; j < height; j++ {
-			pixel := frame[i*height+j]
-			c := color.RGBA{
-				uint8(pixel >> 24),
-				uint8(pixel >> 16),
-				uint8(pixel >> 8),
-				255,
+func (t *TerminalRenderer) handleInput() {
+	for t.running {
+		ev := t.screen.PollEvent()
+		switch ev := ev.(type) {
+		case *tcell.EventKey:
+			switch ev.Key() {
+			case tcell.KeyEscape:
+				t.running = false
+				return
 			}
-			screen.Set(i, j, c)
+		case *tcell.EventResize:
+			t.screen.Sync()
 		}
 	}
 }
 
-// Layout takes the outside size (e.g., the window size) and returns the (logical) screen size.
-// If you don't have to adjust the screen size with the outside size, just return a fixed size.
-func (g *Game) Layout(outsideWidth, outsideHeight int) (screenWidth, screenHeight int) {
-	return width, height
+func (t *TerminalRenderer) render() {
+	fb := t.emulator.GetCurrentFrame()
+	frame := fb.ToSlice()
+
+	// Clear screen with background color
+	t.screen.Clear()
+
+	// Render each pixel
+	for y := 0; y < height; y++ {
+		for x := 0; x < width; x++ {
+			// Get pixel value (assuming it's a 32-bit color where higher values = lighter)
+			pixel := frame[x*height+y]
+			// Convert to shade index (4 shades, so divide by 64 to get 0-3)
+			shade := 3 - (pixel>>24)/64 // Invert so higher values = darker
+			if shade > 3 {
+				shade = 3
+			}
+
+			// Draw scaled pixel
+			style := tcell.StyleDefault.Foreground(tcell.ColorWhite)
+			char := shadeChars[shade]
+
+			// Draw the character repeated scaleX times
+			screenX := x * scaleX
+			screenY := y * scaleY
+			for sx := 0; sx < scaleX; sx++ {
+				t.screen.SetContent(screenX+sx, screenY, char, nil, style)
+			}
+		}
+	}
 }
 
 func main() {
 	app := cli.NewApp()
-
 	app.Name = "Jeebie"
 	app.Description = "A simple gameboy emulator"
 	app.Action = runEmulator
@@ -73,25 +153,27 @@ func main() {
 
 func runEmulator(c *cli.Context) error {
 	path := ""
-
 	if c.NArg() > 0 {
 		path = c.Args().First()
 	}
 
-	game := &Game{emulator: *jeebie.New()}
+	var emu *jeebie.Emulator
+	var err error
 
-	ebiten.SetWindowSize(width*renderScale, height*renderScale)
-	ebiten.SetWindowTitle(c.App.Name)
-	ebiten.SetWindowResizable(true)
-
-	if path != "" {
-		emu, err := jeebie.NewWithFile(path)
-		if err != nil {
-			return err
-		}
-
-		game.emulator = *emu
+	if path == "" {
+		slog.Error("no ROM path provided")
+		return errors.New("no ROM path provided")
 	}
 
-	return ebiten.RunGame(game)
+	emu, err = jeebie.NewWithFile(path)
+	if err != nil {
+		return err
+	}
+
+	renderer, err := NewTerminalRenderer(emu)
+	if err != nil {
+		return err
+	}
+
+	return renderer.Run()
 }

@@ -2,7 +2,7 @@ package jeebie
 
 import (
 	"io/ioutil"
-	"log"
+	"log/slog"
 
 	"github.com/valerio/go-jeebie/jeebie/cpu"
 	"github.com/valerio/go-jeebie/jeebie/memory"
@@ -37,7 +37,7 @@ func NewWithFile(path string) (*Emulator, error) {
 		return nil, err
 	}
 
-	log.Printf("Loaded %v bytes of ROM data\n", len(data))
+	slog.Debug("Loaded ROM data", "size", len(data))
 
 	e := &Emulator{}
 	e.init(memory.NewWithCartridge(memory.NewCartridgeWithData(data)))

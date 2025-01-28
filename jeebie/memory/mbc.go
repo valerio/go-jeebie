@@ -79,7 +79,7 @@ func (m *MBC1) Read(addr uint16) uint8 {
 		offset := uint32(m.romBank) * 0x4000
 		if offset >= uint32(len(m.rom)) {
 			// If bank would be out of bounds, wrap around
-			offset = (offset % uint32(len(m.rom)))
+			offset = offset % uint32(len(m.rom))
 		}
 		return m.rom[offset+uint32(addr-0x4000)]
 	case addr >= 0xA000 && addr <= 0xBFFF:
@@ -90,7 +90,7 @@ func (m *MBC1) Read(addr uint16) uint8 {
 		offset := uint32(m.ramBank) * 0x2000
 		if offset >= uint32(len(m.ram)) {
 			// If bank would be out of bounds, wrap around
-			offset = (offset % uint32(len(m.ram)))
+			offset = offset % uint32(len(m.ram))
 		}
 		return m.ram[offset+uint32(addr-0xA000)]
 	default:

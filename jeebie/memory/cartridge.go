@@ -1,7 +1,7 @@
 package memory
 
 import (
-	"log"
+	"log/slog"
 
 	"github.com/valerio/go-jeebie/jeebie/bit"
 )
@@ -109,10 +109,11 @@ func NewCartridgeWithData(bytes []byte) *Cartridge {
 
 	isValid := isValidCheckSum(bytes[titleAddress:globalChecksumAddress])
 	if !isValid {
-		log.Fatalln("Cartridge has invalid checksum.")
+		slog.Error("Cartridge has invalid checksum", "globalChecksum", cart.globalChecksum, "headerChecksum", cart.headerChecksum)
+		panic("Cartridge has invalid checksum.")
 	}
 
-	log.Printf("Cartridge loaded: %s\n", cart.title)
+	slog.Info("Cartridge loaded", "title", cart.title)
 
 	return cart
 }

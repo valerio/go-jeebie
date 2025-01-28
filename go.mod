@@ -1,17 +1,26 @@
 module github.com/valerio/go-jeebie
 
-go 1.16
+go 1.22
 
 require (
-	github.com/cpuguy83/go-md2man/v2 v2.0.0 // indirect
+	github.com/gdamore/tcell/v2 v2.8.1
+	github.com/stretchr/testify v1.10.0
+	github.com/urfave/cli v1.22.16
+)
+
+require (
+	github.com/cpuguy83/go-md2man/v2 v2.0.6 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
-	github.com/go-gl/glfw/v3.3/glfw v0.0.0-20201108214237-06ea97f0c265 // indirect
-	github.com/hajimehoshi/ebiten v1.12.8
+	github.com/gdamore/encoding v1.0.1 // indirect
+	github.com/lucasb-eyer/go-colorful v1.2.0 // indirect
+	github.com/mattn/go-runewidth v0.0.16 // indirect
+	github.com/niemeyer/pretty v0.0.0-20200227124842-a10e7caefd8e // indirect
+	github.com/pmezard/go-difflib v1.0.0 // indirect
+	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
-	github.com/stretchr/testify v1.7.0
-	github.com/urfave/cli v1.22.5
-	golang.org/x/exp v0.0.0-20210212053707-62dc52270d37 // indirect
-	golang.org/x/image v0.0.0-20210216034530-4410531fe030 // indirect
-	golang.org/x/sys v0.0.0-20210219172841-57ea560cfca1 // indirect
-	gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b // indirect
+	golang.org/x/sys v0.29.0 // indirect
+	golang.org/x/term v0.28.0 // indirect
+	golang.org/x/text v0.21.0 // indirect
+	gopkg.in/check.v1 v1.0.0-20200902074654-038fdea0a05b // indirect
+	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
