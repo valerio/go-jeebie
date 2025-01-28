@@ -29,13 +29,13 @@ const (
 type MBCType int
 
 const (
-	NoMBC      MBCType = iota
-	MBC1               = iota
-	MBC2               = iota
-	MBC3               = iota
-	MBC5               = iota
-	MBC1Multi          = iota
-	MBCUnknown         = iota
+	NoMBCType      MBCType = iota
+	MBC1Type               = iota
+	MBC2Type               = iota
+	MBC3Type               = iota
+	MBC5Type               = iota
+	MBC1MultiType          = iota
+	MBCUnknownType         = iota
 )
 
 // Cartridge holds the data and metadata of a gameboy cartridge.
@@ -132,7 +132,7 @@ func (c *Cartridge) Write(addr uint16, value uint8) uint8 {
 func getRAMBankCount(ramSize uint8, mbcType MBCType) uint8 {
 	switch ramSize {
 	case 0x00:
-		if mbcType == MBC2 {
+		if mbcType == MBC2Type {
 			return 1
 		}
 		return 0
@@ -151,33 +151,33 @@ func getMBCType(cartType uint8) MBCType {
 	case 0x00:
 	case 0x08:
 	case 0x09:
-		return NoMBC
+		return NoMBCType
 	case 0x01:
 	case 0x02:
 	case 0x03:
 	case 0xEA:
 	case 0xFF:
-		return MBC1
+		return MBC1Type
 	case 0x05:
 	case 0x06:
-		return MBC2
+		return MBC2Type
 	case 0x0F:
 	case 0x10:
 	case 0x11:
 	case 0x12:
 	case 0x13:
 	case 0xFC:
-		return MBC3
+		return MBC3Type
 	case 0x19:
 	case 0x1A:
 	case 0x1B:
 	case 0x1C:
 	case 0x1D:
 	case 0x1E:
-		return MBC5
+		return MBC5Type
 	}
 
-	return MBCUnknown
+	return MBCUnknownType
 }
 
 func hasRumble(cartType uint8) bool {
