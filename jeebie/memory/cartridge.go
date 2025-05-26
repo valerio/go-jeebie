@@ -66,8 +66,9 @@ func NewCartridge() *Cartridge {
 
 // NewCartridgeWithData initializes a new Cartridge from a slice of bytes.
 func NewCartridgeWithData(bytes []byte) *Cartridge {
-	// load cartridge title
-	title := string(bytes[titleAddress : titleAddress+titleLength])
+	// load cartridge title and clean it up (remove null bytes and other non-printable chars)
+	titleBytes := bytes[titleAddress : titleAddress+titleLength]
+	title := cleanGameboyTitle(titleBytes)
 
 	// determine if cart is for gameboy color (CGB)
 	isCGB := bytes[cgbFlagAddress] == 0x80 || bytes[cgbFlagAddress] == 0xC0

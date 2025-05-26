@@ -1,5 +1,7 @@
 package memory
 
+import "time"
+
 // MBC represents a Memory Bank Controller interface that all MBC types must implement
 type MBC interface {
 	// Read reads a byte from the specified address
@@ -166,6 +168,72 @@ func NewMBC2(romData []uint8) *MBC2 {
 	}
 }
 
+func (m *MBC2) Read(addr uint16) uint8 {
+	switch {
+	case addr <= 0x3FFF:
+		// ROM Bank 0
+		return m.rom[addr]
+	case addr >= 0x4000 && addr <= 0x7FFF:
+		// Switchable ROM Bank
+		offset := uint32(m.romBank) * 0x4000
+		if offset >= uint32(len(m.rom)) {
+			offset = offset % uint32(len(m.rom))
+		}
+		return m.rom[offset+uint32(addr-0x4000)]
+	case addr >= 0xA000 && addr <= 0xA1FF:
+		// Built-in RAM
+		if !m.ramEnabled {
+			return 0xFF
+		}
+		offset := uint32(addr-0xA000) / 2
+		return m.ram[offset]
+	default:
+		return 0xFF
+	}
+}
+
+func (m *MBC2) Write(addr uint16, value uint8) uint8 {
+	switch {
+	case addr <= 0x1FFF:
+		// RAM Enable
+		if addr&0x0100 == 0 {
+			// Only the lower 4 bits of the address are used
+			m.ramEnabled = (value & 0x0F) == 0x0A
+		}
+	case addr >= 0x2000 && addr <= 0x3FFF:
+		// ROM Bank Number
+		if addr&0x0100 == 1 {
+			// Only the lower 4 bits of the address are used
+			m.romBank = value & 0x0F
+			if m.romBank == 0 {
+				m.romBank = 1
+			}
+		}
+	case addr >= 0xA000 && addr <= 0xA1FF:
+		// Built-in RAM
+		// It's a 512x4 bits RAM, so only the lower 4 bits are used
+		if !m.ramEnabled {
+			return 0xFF
+		}
+		offset := uint32(addr-0xA000) / 2
+		m.ram[offset] = value & 0x0F
+	case addr >= 0x1A00 && addr <= 0x1FFF:
+		// Commands $1A to $1F are stubs
+		// These commands are used to control the RTC, but MBC2 does not have RTC support
+	}
+	return value
+}
+
+type Clock interface {
+	Now() time.Time
+}
+
+type systemClockFunc func() time.Time
+
+func (s systemClockFunc) Now() time.Time {
+	return s()
+}
+
 // MBC3 is an advanced MBC chip with RTC support. Features include:
 // - Supports up to 2MB ROM (128 16KB banks)
 // - Up to 32KB RAM (4 8KB banks)
@@ -182,10 +250,18 @@ type MBC3 struct {
 	ramBank    uint8
 	ramEnabled bool
 	hasRTC     bool
+	rtcLatch   bool      // Flag to indicate if RTC data is latched
+	clock      Clock     // Clock interface for RTC functionality
+	rtcTime    time.Time // Time when RTC was last updated
 }
 
 // NewMBC3 creates a new MBC3 controller
-func NewMBC3(romData []uint8, hasRTC bool, ramBankCount uint8) *MBC3 {
+func NewMBC3(romData []uint8, ramBankCount uint8, hasRTC bool, clock Clock) *MBC3 {
+	if hasRTC && clock == nil {
+		// default to system clock if no clock is provided
+		clock = systemClockFunc(time.Now)
+	}
+
 	ramSize := uint32(ramBankCount) * 0x2000
 	return &MBC3{
 		rom:        romData,
@@ -193,7 +269,102 @@ func NewMBC3(romData []uint8, hasRTC bool, ramBankCount uint8) *MBC3 {
 		romBank:    1,
 		ramEnabled: false,
 		hasRTC:     hasRTC,
+		rtcLatch:   false,
+		clock:      clock,
+		rtcTime:    clock.Now(),
 	}
+}
+
+func (m *MBC3) Read(addr uint16) uint8 {
+	switch {
+	case addr <= 0x3FFF:
+		return m.rom[addr]
+	case addr >= 0x4000 && addr <= 0x7FFF:
+		offset := uint32(m.romBank) * 0x4000
+		if offset >= uint32(len(m.rom)) {
+			offset = offset % uint32(len(m.rom))
+		}
+		return m.rom[offset+uint32(addr-0x4000)]
+	case addr >= 0xA000 && addr <= 0xBFFF:
+		if !m.ramEnabled {
+			return 0xFF
+		}
+		if m.ramBank <= 0x03 {
+			offset := uint32(m.ramBank) * 0x2000
+			if offset >= uint32(len(m.ram)) {
+				offset = offset % uint32(len(m.ram))
+			}
+			return m.ram[offset+uint32(addr-0xA000)]
+		} else if m.hasRTC && m.ramBank >= 0x08 && m.ramBank <= 0x0C {
+			if m.rtcLatch {
+				m.updateRTC()
+				m.rtcLatch = false
+			}
+			return m.rtc[m.ramBank-0x08]
+		}
+		return 0xFF
+	default:
+		return 0xFF
+	}
+}
+
+func (m *MBC3) Write(addr uint16, value uint8) uint8 {
+	switch {
+	case addr <= 0x1FFF:
+		m.ramEnabled = (value & 0x0F) == 0x0A
+	case addr >= 0x2000 && addr <= 0x3FFF:
+		bank := value & 0x7F
+		if bank == 0 {
+			bank = 1
+		}
+		m.romBank = bank
+	case addr >= 0x4000 && addr <= 0x5FFF:
+		m.ramBank = value
+	case addr >= 0x6000 && addr <= 0x7FFF:
+		if value == 0x00 {
+			m.rtcLatch = true
+		}
+	case addr >= 0xA000 && addr <= 0xBFFF:
+		if !m.ramEnabled {
+			return 0xFF
+		}
+		if m.ramBank <= 0x03 {
+			offset := uint32(m.ramBank) * 0x2000
+			if offset >= uint32(len(m.ram)) {
+				offset = offset % uint32(len(m.ram))
+			}
+			m.ram[offset+uint32(addr-0xA000)] = value
+		} else if m.hasRTC && m.ramBank >= 0x08 && m.ramBank <= 0x0C {
+			m.rtc[m.ramBank-0x08] = value
+		}
+	case addr >= 0x1A00 && addr <= 0x1FFF:
+		// Commands $1A to $1F are stubs
+	}
+	return value
+}
+
+func (m *MBC3) updateRTC() {
+	now := m.clock.Now()
+	duration := now.Sub(m.rtcTime)
+	m.rtcTime = now
+
+	seconds := m.rtc[0] + uint8(duration.Seconds())
+	minutes := m.rtc[1] + uint8(duration.Minutes())
+	hours := m.rtc[2] + uint8(duration.Hours())
+
+	m.rtc[0] = seconds % 60
+	m.rtc[1] = minutes % 60
+	m.rtc[2] = hours % 24
+	// Days are split into two bytes
+	// Handle days overflow
+	daysLow := m.rtc[3] + uint8(duration.Hours()/24)
+	daysHigh := m.rtc[4]
+
+	daysHigh += daysLow / 255
+	daysLow %= 255
+
+	m.rtc[3] = daysLow
+	m.rtc[4] = daysHigh
 }
 
 // MBC5 is the most advanced MBC chip. Features include:

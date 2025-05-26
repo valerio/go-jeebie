@@ -146,26 +146,35 @@ func main() {
 	app := cli.NewApp()
 	app.Name = "Jeebie"
 	app.Description = "A simple gameboy emulator"
+	app.Usage = "jeebie [options] <ROM file>"
+	app.Version = "1.0.0"
+	app.Flags = []cli.Flag{
+		cli.StringFlag{
+			Name:  "rom",
+			Usage: "Path to the ROM file",
+		},
+	}
 	app.Action = runEmulator
 
-	app.Run(os.Args)
+	err := app.Run(os.Args)
+	if err != nil {
+		slog.Error("Error running emulator", "error", err)
+		os.Exit(1)
+	}
 }
 
 func runEmulator(c *cli.Context) error {
-	path := ""
-	if c.NArg() > 0 {
-		path = c.Args().First()
+	romPath := c.String("rom")
+	if romPath == "" {
+		if c.NArg() > 0 {
+			romPath = c.Args().Get(0)
+		} else {
+			cli.ShowAppHelp(c)
+			return errors.New("no ROM path provided")
+		}
 	}
 
-	var emu *jeebie.Emulator
-	var err error
-
-	if path == "" {
-		slog.Error("no ROM path provided")
-		return errors.New("no ROM path provided")
-	}
-
-	emu, err = jeebie.NewWithFile(path)
+	emu, err := jeebie.NewWithFile(romPath)
 	if err != nil {
 		return err
 	}
