@@ -3,10 +3,10 @@ bootstrap:
 	go mod download
 
 build:
-	go build -o bin/jeebie main.go
+	go build -o bin/jeebie ./cmd/jeebie
 
 run:
-	go run main.go test-roms/01-special.gb
+	go run ./cmd/jeebie test-roms/01-special.gb
 
 test:
 	go test -v ./...

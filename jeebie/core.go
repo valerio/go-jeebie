@@ -62,3 +62,11 @@ func (e *Emulator) RunUntilFrame() {
 func (e *Emulator) GetCurrentFrame() *video.FrameBuffer {
 	return e.gpu.GetFrameBuffer()
 }
+
+func (e *Emulator) HandleKeyPress(key memory.JoypadKey) {
+	e.mem.HandleKeyPress(key)
+}
+
+func (e *Emulator) HandleKeyRelease(key memory.JoypadKey) {
+	e.mem.HandleKeyRelease(key)
+}

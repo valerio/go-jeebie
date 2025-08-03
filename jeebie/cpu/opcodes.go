@@ -869,7 +869,7 @@ func opcode0x75(cpu *CPU) int {
 //HALT
 //#0x76:
 func opcode0x76(cpu *CPU) int {
-	unimplemented(cpu)
+	cpu.halted = true
 	return 4
 }
 

@@ -395,3 +395,50 @@ func NewMBC5(romData []uint8, hasRumble bool, ramBankCount uint8) *MBC5 {
 		hasRumble:  hasRumble,
 	}
 }
+
+func (m *MBC5) Read(addr uint16) uint8 {
+	switch {
+	case addr <= 0x3FFF:
+		return m.rom[addr]
+	case addr >= 0x4000 && addr <= 0x7FFF:
+		offset := uint32(m.romBank) * 0x4000
+		if offset >= uint32(len(m.rom)) {
+			offset = offset % uint32(len(m.rom))
+		}
+		return m.rom[offset+uint32(addr-0x4000)]
+	case addr >= 0xA000 && addr <= 0xBFFF:
+		if !m.ramEnabled {
+			return 0xFF
+		}
+		offset := uint32(m.ramBank) * 0x2000
+		if offset >= uint32(len(m.ram)) {
+			offset = offset % uint32(len(m.ram))
+		}
+		return m.ram[offset+uint32(addr-0xA000)]
+	default:
+		return 0xFF
+	}
+}
+
+func (m *MBC5) Write(addr uint16, value uint8) uint8 {
+	switch {
+	case addr <= 0x1FFF:
+		m.ramEnabled = (value & 0x0F) == 0x0A
+	case addr >= 0x2000 && addr <= 0x2FFF:
+		m.romBank = (m.romBank & 0x100) | uint16(value)
+	case addr >= 0x3000 && addr <= 0x3FFF:
+		m.romBank = (m.romBank & 0xFF) | (uint16(value&0x01) << 8)
+	case addr >= 0x4000 && addr <= 0x5FFF:
+		m.ramBank = value & 0x0F
+	case addr >= 0xA000 && addr <= 0xBFFF:
+		if !m.ramEnabled {
+			return 0xFF
+		}
+		offset := uint32(m.ramBank) * 0x2000
+		if offset >= uint32(len(m.ram)) {
+			offset = offset % uint32(len(m.ram))
+		}
+		m.ram[offset+uint32(addr-0xA000)] = value
+	}
+	return value
+}

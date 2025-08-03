@@ -9,8 +9,11 @@ import (
 
 // MMU allows access to all memory mapped I/O and data/registers
 type MMU struct {
-	cart   *Cartridge
-	memory []byte
+	cart        *Cartridge
+	mbc         MBC
+	memory      []byte
+	joypad      *Joypad
+	joypadState uint8
 }
 
 // New creates a new memory unity with default data, i.e. nothing cartridge loaded.
@@ -19,6 +22,7 @@ func New() *MMU {
 	return &MMU{
 		memory: make([]byte, 0x10000),
 		cart:   NewCartridge(),
+		joypad: NewJoypad(),
 	}
 }
 
@@ -27,6 +31,26 @@ func New() *MMU {
 func NewWithCartridge(cart *Cartridge) *MMU {
 	mmu := New()
 	mmu.cart = cart
+
+	switch cart.mbcType {
+	case NoMBCType:
+		mmu.mbc = NewNoMBC(cart.data)
+	case MBC1Type:
+		mmu.mbc = NewMBC1(cart.data, cart.hasBattery, cart.ramBankCount)
+	case MBC1MultiType:
+		mmu.mbc = NewMBC1(cart.data, cart.hasBattery, cart.ramBankCount) // FIXME: add support for multicart
+	case MBC2Type:
+		mmu.mbc = NewMBC2(cart.data)
+	case MBC3Type:
+		mmu.mbc = NewMBC3(cart.data, cart.ramBankCount, cart.hasRTC, nil)
+	case MBC5Type:
+		mmu.mbc = NewMBC5(cart.data, cart.hasRumble, cart.ramBankCount)
+	case MBCUnknownType:
+		panic("unsupported MBC type: unknown")
+	default:
+		panic(fmt.Sprintf("unsupported MBC type: %d", cart.mbcType))
+	}
+
 	return mmu
 }
 
@@ -55,18 +79,13 @@ func (m *MMU) SetBit(index uint8, addr uint16, set bool) {
 }
 
 func (m *MMU) Read(addr uint16) byte {
-	// ROM
-	if isBetween(addr, 0, 0x7FFF) {
-		return m.cart.Read(addr)
+	// ROM / RAM
+	if isBetween(addr, 0, 0x7FFF) || isBetween(addr, 0xA000, 0xBFFF) {
+		return m.mbc.Read(addr)
 	}
 
 	// VRAM
 	if isBetween(addr, 0x8000, 0x9FFF) {
-		return m.memory[addr]
-	}
-
-	// external RAM
-	if isBetween(addr, 0xA000, 0xBFFF) {
 		return m.memory[addr]
 	}
 
@@ -93,6 +112,9 @@ func (m *MMU) Read(addr uint16) byte {
 
 	// IO registers
 	if isBetween(addr, 0xFF00, 0xFF7F) {
+		if addr == 0xFF00 {
+			return m.joypad.Read()
+		}
 		return m.memory[addr]
 	}
 
@@ -108,7 +130,7 @@ func (m *MMU) Write(addr uint16, value byte) {
 
 	// ROM
 	if isBetween(addr, 0, 0x7FFF) {
-		m.cart.Write(addr, value)
+		m.mbc.Write(addr, value)
 		return
 	}
 
@@ -120,7 +142,7 @@ func (m *MMU) Write(addr uint16, value byte) {
 
 	// external RAM
 	if isBetween(addr, 0xA000, 0xBFFF) {
-		m.memory[addr] = value
+		m.mbc.Write(addr, value)
 		return
 	}
 
@@ -151,6 +173,10 @@ func (m *MMU) Write(addr uint16, value byte) {
 
 	// IO registers
 	if isBetween(addr, 0xFF00, 0xFF7F) {
+		if addr == 0xFF00 {
+			m.joypad.Write(value)
+			return
+		}
 		m.memory[addr] = value
 		return
 	}
@@ -162,4 +188,12 @@ func (m *MMU) Write(addr uint16, value byte) {
 	}
 
 	panic(fmt.Sprintf("Attempted write at unused/unmapped address: 0x%X", addr))
+}
+
+func (m *MMU) HandleKeyPress(key JoypadKey) {
+	m.joypad.Press(key)
+}
+
+func (m *MMU) HandleKeyRelease(key JoypadKey) {
+	m.joypad.Release(key)
 }

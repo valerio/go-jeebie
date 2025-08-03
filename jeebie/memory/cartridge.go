@@ -119,17 +119,7 @@ func NewCartridgeWithData(bytes []byte) *Cartridge {
 	return cart
 }
 
-// ReadByte reads a byte at the specified address. Does not check bounds, so the caller must make sure the
-// address is valid for the cartridge.
-func (c *Cartridge) Read(addr uint16) uint8 {
-	return c.data[addr]
-}
 
-// WriteByte attempts a write to the specified address. Writing to a cartridge has sense if the cartridge
-// has extra RAM or for some special operations, like switching ROM banks.
-func (c *Cartridge) Write(addr uint16, value uint8) uint8 {
-	return c.data[addr]
-}
 
 func getRAMBankCount(ramSize uint8, mbcType MBCType) uint8 {
 	switch ramSize {
@@ -150,32 +140,15 @@ func getRAMBankCount(ramSize uint8, mbcType MBCType) uint8 {
 
 func getMBCType(cartType uint8) MBCType {
 	switch cartType {
-	case 0x00:
-	case 0x08:
-	case 0x09:
+	case 0x00, 0x08, 0x09:
 		return NoMBCType
-	case 0x01:
-	case 0x02:
-	case 0x03:
-	case 0xEA:
-	case 0xFF:
+	case 0x01, 0x02, 0x03, 0xEA, 0xFF:
 		return MBC1Type
-	case 0x05:
-	case 0x06:
+	case 0x05, 0x06:
 		return MBC2Type
-	case 0x0F:
-	case 0x10:
-	case 0x11:
-	case 0x12:
-	case 0x13:
-	case 0xFC:
+	case 0x0F, 0x10, 0x11, 0x12, 0x13, 0xFC:
 		return MBC3Type
-	case 0x19:
-	case 0x1A:
-	case 0x1B:
-	case 0x1C:
-	case 0x1D:
-	case 0x1E:
+	case 0x19, 0x1A, 0x1B, 0x1C, 0x1D, 0x1E:
 		return MBC5Type
 	}
 

@@ -16,6 +16,13 @@ const (
 	carryFlag          = 0x10
 )
 
+var timerFrequencies = map[uint8]int{
+	0: 1024,
+	1: 16,
+	2: 64,
+	3: 256,
+}
+
 const (
 	baseInterruptAddress uint16 = 0x40
 )
@@ -38,7 +45,10 @@ type CPU struct {
 	interruptsEnabled bool
 	currentOpcode     uint16
 	stopped           bool
+	halted            bool
 	cycles            uint64
+	divCycles         int
+	timaCycles        int
 
 	memory *memory.MMU
 }
@@ -102,9 +112,15 @@ func New(memory *memory.MMU) *CPU {
 func (c *CPU) Tick() int {
 	c.handleInterrupts()
 
+	if c.halted {
+		return 4
+	}
+
 	instruction := Decode(c)
 	cycles := instruction(c)
 	c.cycles += uint64(cycles)
+
+	c.updateTimers(cycles)
 
 	return cycles
 }
@@ -238,7 +254,7 @@ func (c *CPU) setDE(value uint16) {
 }
 
 func (c CPU) getDE() uint16 {
-	return bit.Combine(c.d, c.d)
+	return bit.Combine(c.d, c.e)
 }
 
 func (c *CPU) setHL(value uint16) {
@@ -257,4 +273,31 @@ func (c *CPU) setAF(value uint16) {
 
 func (c CPU) getAF() uint16 {
 	return bit.Combine(c.a, c.f)
+}
+
+func (c *CPU) updateTimers(cycles int) {
+	c.divCycles += cycles
+	if c.divCycles >= 256 {
+		c.divCycles -= 256
+		c.memory.Write(addr.DIV, c.memory.Read(addr.DIV)+1)
+	}
+
+	tac := c.memory.Read(addr.TAC)
+	if !bit.IsSet(2, tac) {
+		return
+	}
+
+	c.timaCycles += cycles
+	frequency := timerFrequencies[tac&0x03]
+
+	for c.timaCycles >= frequency {
+		c.timaCycles -= frequency
+		tima := c.memory.Read(addr.TIMA)
+		if tima == 0xFF {
+			c.memory.Write(addr.TIMA, c.memory.Read(addr.TMA))
+			c.memory.RequestInterrupt(addr.TimerInterrupt)
+		} else {
+			c.memory.Write(addr.TIMA, tima+1)
+		}
+	}
 }
