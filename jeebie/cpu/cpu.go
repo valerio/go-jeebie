@@ -301,3 +301,42 @@ func (c *CPU) updateTimers(cycles int) {
 		}
 	}
 }
+
+// Debug getter methods for register display
+func (c *CPU) GetA() uint8 { return c.a }
+func (c *CPU) GetF() uint8 { return c.f }
+func (c *CPU) GetB() uint8 { return c.b }
+func (c *CPU) GetC() uint8 { return c.c }
+func (c *CPU) GetD() uint8 { return c.d }
+func (c *CPU) GetE() uint8 { return c.e }
+func (c *CPU) GetH() uint8 { return c.h }
+func (c *CPU) GetL() uint8 { return c.l }
+func (c *CPU) GetSP() uint16 { return c.sp }
+func (c *CPU) GetPC() uint16 { return c.pc }
+func (c *CPU) GetCycles() uint64 { return c.cycles }
+
+// GetFlagString returns a human-readable representation of the flag register
+func (c *CPU) GetFlagString() string {
+	flags := ""
+	if c.f&uint8(zeroFlag) != 0 {
+		flags += "Z"
+	} else {
+		flags += "-"
+	}
+	if c.f&uint8(subFlag) != 0 {
+		flags += "N"
+	} else {
+		flags += "-"
+	}
+	if c.f&uint8(halfCarryFlag) != 0 {
+		flags += "H"
+	} else {
+		flags += "-"
+	}
+	if c.f&uint8(carryFlag) != 0 {
+		flags += "C"
+	} else {
+		flags += "-"
+	}
+	return flags
+}
