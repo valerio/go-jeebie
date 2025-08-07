@@ -292,7 +292,7 @@ func (g *GPU) drawWindow() {
 	lineAdj := g.windowLine
 
 	y32 := (lineAdj / 8) * 32
-	pixelY := lineAdj & 8
+	pixelY := lineAdj & 7
 	pixelY2 := pixelY * 2
 	lineWidth := g.line * framebufferWidth
 
