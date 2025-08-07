@@ -646,9 +646,9 @@ func TestCPU_jr(t *testing.T) {
 		pc   uint16
 		want uint16
 	}{
-		{desc: "jumps back", n: 0xFE, pc: 0x100, want: 0x100 - 2 + 1},
-		{desc: "jumps back 16", n: 0xF0, pc: 0x100, want: 0x100 - 16 + 1},
-		{desc: "jumps forward", n: 0x10, pc: 0x100, want: 0x100 + 16 + 1},
+		{desc: "jumps back", n: 0xFE, pc: 0xC000, want: 0xC000 - 2 + 1},
+		{desc: "jumps back 16", n: 0xF0, pc: 0xC000, want: 0xC000 - 16 + 1},
+		{desc: "jumps forward", n: 0x10, pc: 0xC000, want: 0xC000 + 16 + 1},
 	}
 	for _, tC := range testCases {
 		t.Run(tC.desc, func(t *testing.T) {

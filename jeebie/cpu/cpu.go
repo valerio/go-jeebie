@@ -43,9 +43,11 @@ type CPU struct {
 
 	// metadata
 	interruptsEnabled bool
+	eiPending         bool   // EI delay: interrupts enable after next instruction
 	currentOpcode     uint16
 	stopped           bool
 	halted            bool
+	haltBug           bool   // HALT bug: PC doesn't increment properly
 	cycles            uint64
 	divCycles         int
 	timaCycles        int
@@ -110,15 +112,39 @@ func New(memory *memory.MMU) *CPU {
 // Tick emulates a single step during the main loop for the cpu.
 // Returns the amount of cycles that execution has taken.
 func (c *CPU) Tick() int {
-	c.handleInterrupts()
+	// Check for interrupts - this may wake from HALT
+	interruptPending := c.handleInterrupts()
 
 	if c.halted {
-		return 4
+		// Check if we should wake from HALT (IE & IF != 0)
+		if interruptPending {
+			c.halted = false
+			// If IME=0 and interrupt pending, we have the HALT bug scenario
+			if !c.interruptsEnabled {
+				c.haltBug = true
+			}
+		} else {
+			// Still halted, consume cycles
+			return 4
+		}
+	}
+
+	// Handle HALT bug: don't increment PC for next instruction
+	if c.haltBug {
+		c.haltBug = false
+		// Execute instruction without incrementing PC first
+		// This causes the instruction after HALT to be read twice
 	}
 
 	instruction := Decode(c)
 	cycles := instruction(c)
 	c.cycles += uint64(cycles)
+
+	// Handle EI delay: enable interrupts after this instruction
+	if c.eiPending {
+		c.eiPending = false
+		c.interruptsEnabled = true
+	}
 
 	c.updateTimers(cycles)
 
@@ -126,22 +152,26 @@ func (c *CPU) Tick() int {
 }
 
 // handleInterrupts checks for an interrupt and handles it if necessary.
-func (c *CPU) handleInterrupts() {
-	if c.interruptsEnabled == false {
-		return
-	}
-
+// Returns true if there are pending interrupts (IE & IF != 0).
+func (c *CPU) handleInterrupts() bool {
 	// retrieve the two masks
 	enabledInterruptsMask := c.memory.Read(addr.IE)
 	firedInterrupts := c.memory.Read(addr.IF)
 
-	// if zero, no interrupts that are enabled were fired
-	if (enabledInterruptsMask & firedInterrupts) == 0 {
-		return
+	// check if any enabled interrupts are pending
+	pendingInterrupts := (enabledInterruptsMask & firedInterrupts) != 0
+
+	if !c.interruptsEnabled {
+		return pendingInterrupts
 	}
 
+	if !pendingInterrupts {
+		return false
+	}
+
+	// service interrupts in priority order (bit 0 = highest)
 	for i := uint8(0); i < 5; i++ {
-		if bit.IsSet(i, firedInterrupts) {
+		if bit.IsSet(i, firedInterrupts) && bit.IsSet(i, enabledInterruptsMask) {
 			// interrupt handlers are offset by 8
 			// 0x40 - 0x48 - 0x50 - 0x58 - 0x60
 			address := uint16(i)*8 + baseInterruptAddress
@@ -160,10 +190,11 @@ func (c *CPU) handleInterrupts() {
 			c.interruptsEnabled = false
 
 			// return on the first served interrupt.
-			// will serve the next when interrupts are enabled again.
-			return
+			return true
 		}
 	}
+
+	return pendingInterrupts
 }
 
 // peekImmediate returns the byte at the memory address pointed by the PC

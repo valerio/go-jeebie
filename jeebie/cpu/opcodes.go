@@ -1878,7 +1878,7 @@ func opcode0xFA(cpu *CPU) int {
 //EI
 //#0xFB:
 func opcode0xFB(cpu *CPU) int {
-	cpu.interruptsEnabled = true
+	cpu.eiPending = true
 	return 4
 }
 

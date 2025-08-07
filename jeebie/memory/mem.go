@@ -2,6 +2,7 @@ package memory
 
 import (
 	"fmt"
+	"log/slog"
 
 	"github.com/valerio/go-jeebie/jeebie/addr"
 	"github.com/valerio/go-jeebie/jeebie/bit"
@@ -81,6 +82,10 @@ func (m *MMU) SetBit(index uint8, addr uint16, set bool) {
 func (m *MMU) Read(addr uint16) byte {
 	// ROM / RAM
 	if isBetween(addr, 0, 0x7FFF) || isBetween(addr, 0xA000, 0xBFFF) {
+		if m.mbc == nil {
+			slog.Warn("Reading from ROM/external RAM with no cartridge", "addr", fmt.Sprintf("0x%04X", addr))
+			return 0xFF // simulate no cartridge behavior
+		}
 		return m.mbc.Read(addr)
 	}
 
@@ -130,6 +135,10 @@ func (m *MMU) Write(addr uint16, value byte) {
 
 	// ROM
 	if isBetween(addr, 0, 0x7FFF) {
+		if m.mbc == nil {
+			slog.Warn("Writing to ROM with no cartridge", "addr", fmt.Sprintf("0x%04X", addr), "value", fmt.Sprintf("0x%02X", value))
+			return
+		}
 		m.mbc.Write(addr, value)
 		return
 	}
@@ -142,6 +151,10 @@ func (m *MMU) Write(addr uint16, value byte) {
 
 	// external RAM
 	if isBetween(addr, 0xA000, 0xBFFF) {
+		if m.mbc == nil {
+			slog.Warn("Writing to external RAM with no cartridge", "addr", fmt.Sprintf("0x%04X", addr), "value", fmt.Sprintf("0x%02X", value))
+			return
+		}
 		m.mbc.Write(addr, value)
 		return
 	}
