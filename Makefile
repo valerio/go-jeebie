@@ -2,7 +2,10 @@ bootstrap:
 	brew install sdl2
 	go mod download
 
-build:
+generate:
+	cd jeebie/disasm && go generate
+
+build: generate
 	go build -o bin/jeebie ./cmd/jeebie
 
 run:
