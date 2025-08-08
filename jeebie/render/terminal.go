@@ -17,34 +17,26 @@ import (
 const (
 	width     = 160
 	height    = 144
-	scaleX    = 1  // Reduce from 2 to 1 for more compact display
+	scaleX    = 1 // Reduce from 2 to 1 for more compact display
 	scaleY    = 1
 	frameTime = time.Second / 60
-	
-	// Layout constants
-	gameAreaWidth  = width * scaleX  // 160
-	gameAreaHeight = height * scaleY // 144
-	registerHeight = 7               // Lines for CPU registers + status
-	disasmHeight   = 9               // Lines for disassembly (4 before + 1 current + 4 after)
-	minTermWidth   = 100             // Very compact mode for small terminals  
-	minTermHeight  = 35              // Increase to accommodate disasm window
+
+	gameAreaWidth  = width * scaleX
+	gameAreaHeight = height * scaleY
+	registerHeight = 12
+	disasmHeight   = 9
+	minTermWidth   = 80
+	minTermHeight  = 24
 )
 
 var shadeChars = []rune{'█', '▓', '▒', '░'}
 
-// min returns the smaller of two integers
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
-
 type TerminalRenderer struct {
-	screen   tcell.Screen
-	emulator *jeebie.Emulator
-	running  bool
+	screen    tcell.Screen
+	emulator  *jeebie.Emulator
+	running   bool
 	logBuffer *LogBuffer
+	logLevel  slog.Level
 }
 
 func NewTerminalRenderer(emu *jeebie.Emulator) (*TerminalRenderer, error) {
@@ -59,12 +51,12 @@ func NewTerminalRenderer(emu *jeebie.Emulator) (*TerminalRenderer, error) {
 
 	// Create log buffer and set up logging
 	logBuffer := NewLogBuffer(100)
-	
+
 	// Set up the log handler to capture logs
 	handler := NewLogBufferHandler(logBuffer, slog.LevelDebug)
 	logger := slog.New(handler)
 	slog.SetDefault(logger)
-	
+
 	// Add some initial test logs
 	slog.Info("Terminal renderer initialized")
 	slog.Debug("Split-screen layout ready")
@@ -74,6 +66,7 @@ func NewTerminalRenderer(emu *jeebie.Emulator) (*TerminalRenderer, error) {
 		emulator:  emu,
 		running:   true,
 		logBuffer: logBuffer,
+		logLevel:  slog.LevelInfo,
 	}, nil
 }
 
@@ -100,7 +93,7 @@ func (t *TerminalRenderer) Run() error {
 			t.emulator.RunUntilFrame()
 			t.render()
 			t.screen.Show()
-			
+
 		case <-signals:
 			t.running = false
 			slog.Info("Received signal to stop")
@@ -138,23 +131,55 @@ func (t *TerminalRenderer) handleInput() {
 					t.emulator.HandleKeyPress(memory.JoypadB)
 				case 'q':
 					t.emulator.HandleKeyPress(memory.JoypadSelect)
-				
+
 				// Debugger controls
 				case ' ': // Spacebar - pause/resume toggle
 					debugState := t.emulator.GetDebuggerState()
 					if debugState == 1 { // DebuggerPaused
+						slog.Info("Debugger: Resuming execution")
 						t.emulator.DebuggerResume()
 					} else {
+						slog.Info("Debugger: Pausing execution")
 						t.emulator.DebuggerPause()
 					}
 				case 'n': // Next instruction (step)
+					slog.Info("Debugger: Step instruction")
 					t.emulator.DebuggerStepInstruction()
 				case 'f': // Next frame (step frame)
+					slog.Info("Debugger: Step frame")
 					t.emulator.DebuggerStepFrame()
 				case 'r': // Resume from any state
+					slog.Info("Debugger: Resume")
 					t.emulator.DebuggerResume()
 				case 'p': // Pause
+					slog.Info("Debugger: Pause")
 					t.emulator.DebuggerPause()
+				case '-', '_': // Decrease log verbosity (show fewer logs)
+					oldLevel := t.logLevel
+					switch t.logLevel {
+					case slog.LevelDebug:
+						t.logLevel = slog.LevelInfo
+					case slog.LevelInfo:
+						t.logLevel = slog.LevelWarn
+					case slog.LevelWarn:
+						t.logLevel = slog.LevelError
+					}
+					if oldLevel != t.logLevel {
+						slog.Info("Log filter changed", "from", oldLevel, "to", t.logLevel)
+					}
+				case '+', '=': // Increase log verbosity (show more logs)
+					oldLevel := t.logLevel
+					switch t.logLevel {
+					case slog.LevelError:
+						t.logLevel = slog.LevelWarn
+					case slog.LevelWarn:
+						t.logLevel = slog.LevelInfo
+					case slog.LevelInfo:
+						t.logLevel = slog.LevelDebug
+					}
+					if oldLevel != t.logLevel {
+						slog.Info("Log filter changed", "from", oldLevel, "to", t.logLevel)
+					}
 				}
 			}
 		case *tcell.EventResize:
@@ -165,7 +190,7 @@ func (t *TerminalRenderer) handleInput() {
 
 func (t *TerminalRenderer) render() {
 	termWidth, termHeight := t.screen.Size()
-	
+
 	// Check minimum terminal size
 	if termWidth < minTermWidth || termHeight < minTermHeight {
 		t.screen.Clear()
@@ -181,92 +206,96 @@ func (t *TerminalRenderer) render() {
 
 	// Draw borders and sections
 	t.drawBorders(termWidth, termHeight)
-	
+
 	// Draw Game Boy screen (left side)
 	t.drawGameBoy()
-	
+
 	// Draw CPU registers (top-right)
 	t.drawRegisters(termWidth, termHeight)
-	
+
 	// Draw disassembly (middle-right)
 	t.drawDisassembly(termWidth, termHeight)
-	
-	// Draw logs (bottom-right)  
+
+	// Draw logs (bottom-right)
 	t.drawLogs(termWidth, termHeight)
 }
 
 func (t *TerminalRenderer) drawBorders(termWidth, termHeight int) {
 	borderStyle := tcell.StyleDefault.Foreground(tcell.ColorWhite)
-	
-	// Adaptive border position - use available space
-	borderX := min(gameAreaWidth + 1, termWidth/2)
-	if borderX >= termWidth-10 {
-		borderX = termWidth - 10 // Leave at least 10 chars for right panel
+
+	borderX := termWidth / 2
+	if termWidth > 100 {
+		borderX = min(gameAreaWidth+1, termWidth*2/3)
 	}
-	
+
 	// Vertical border between game area and right panel
 	for y := 0; y < termHeight; y++ {
 		if borderX < termWidth {
 			t.screen.SetContent(borderX, y, '│', nil, borderStyle)
 		}
 	}
-	
-	// Horizontal border between registers and disassembly
-	registerEndY := registerHeight + 1
+
+	registerEndY := min(registerHeight+1, termHeight/3)
+	disasmEndY := min(registerEndY+disasmHeight+1, termHeight*2/3)
+
 	if registerEndY < termHeight {
 		for x := borderX + 1; x < termWidth; x++ {
 			t.screen.SetContent(x, registerEndY, '─', nil, borderStyle)
 		}
-		// Corner piece
 		t.screen.SetContent(borderX, registerEndY, '├', nil, borderStyle)
 	}
-	
-	// Horizontal border between disassembly and logs
-	disasmEndY := registerEndY + disasmHeight + 1
-	if disasmEndY < termHeight {
+
+	if disasmEndY < termHeight-1 {
 		for x := borderX + 1; x < termWidth; x++ {
 			t.screen.SetContent(x, disasmEndY, '─', nil, borderStyle)
 		}
-		// Corner piece
 		t.screen.SetContent(borderX, disasmEndY, '├', nil, borderStyle)
 	}
-	
-	// Title headers
+
 	titleStyle := tcell.StyleDefault.Foreground(tcell.ColorYellow)
-	
-	// Game Boy title
+
 	title := " Game Boy "
 	for i, ch := range title {
 		t.screen.SetContent(1+i, 0, ch, nil, titleStyle)
 	}
-	
-	// CPU Registers title  
+
 	title = " CPU Registers "
 	for i, ch := range title {
-		t.screen.SetContent(borderX+2+i, 0, ch, nil, titleStyle)
+		if borderX+2+i < termWidth {
+			t.screen.SetContent(borderX+2+i, 0, ch, nil, titleStyle)
+		}
 	}
-	
-	// Disassembly title
+
 	if registerEndY+1 < termHeight {
 		title = " Disassembly "
 		for i, ch := range title {
-			t.screen.SetContent(borderX+2+i, registerEndY+1, ch, nil, titleStyle)
+			if borderX+2+i < termWidth {
+				t.screen.SetContent(borderX+2+i, registerEndY+1, ch, nil, titleStyle)
+			}
 		}
 	}
-	
-	// Logs title
-	disasmEndY = registerEndY + disasmHeight + 1
+
 	if disasmEndY+1 < termHeight {
-		title = " Logs "
+		levelStr := "INFO"
+		switch t.logLevel {
+		case slog.LevelDebug:
+			levelStr = "DEBUG"
+		case slog.LevelWarn:
+			levelStr = "WARN"
+		case slog.LevelError:
+			levelStr = "ERROR"
+		}
+		title = fmt.Sprintf(" Logs [%s] (-/+ filter) ", levelStr)
 		for i, ch := range title {
-			t.screen.SetContent(borderX+2+i, disasmEndY+1, ch, nil, titleStyle)
+			if borderX+2+i < termWidth {
+				t.screen.SetContent(borderX+2+i, disasmEndY+1, ch, nil, titleStyle)
+			}
 		}
 	}
-	
-	// Debug help text at bottom
+
 	if termHeight > 10 {
 		helpStyle := tcell.StyleDefault.Foreground(tcell.ColorWhite)
-		helpText := "Debug: SPACE=pause/resume N=step P=pause R=resume F=step-frame"
+		helpText := "Debug: SPACE=pause/resume N=step F=frame | Logs: +/- filter"
 		startX := 1
 		maxWidth := min(len(helpText), termWidth-2)
 		for i, ch := range helpText[:maxWidth] {
@@ -282,28 +311,26 @@ func (t *TerminalRenderer) drawGameBoy() {
 	for y := 0; y < height; y++ {
 		for x := 0; x < width; x++ {
 			pixel := frame[y*width+x]
-			
-			// Convert Game Boy color to shade
+
 			shade := 0
 			switch pixel {
-			case 0x000000FF: // BlackColor
+			case 0x000000FF:
 				shade = 0
-			case 0x4C4C4CFF: // DarkGreyColor
+			case 0x4C4C4CFF:
 				shade = 1
-			case 0x989898FF: // LightGreyColor
+			case 0x989898FF:
 				shade = 2
-			case 0xFFFFFFFF: // WhiteColor
+			case 0xFFFFFFFF:
 				shade = 3
 			default:
 				shade = 0
 			}
-			
+
 			style := tcell.StyleDefault.Foreground(tcell.ColorWhite)
 			char := shadeChars[shade]
 			screenX := x * scaleX
-			screenY := y * scaleY + 1 // Offset for title
-			
-			// Only draw within game area bounds
+			screenY := y*scaleY + 1
+
 			for sx := 0; sx < scaleX; sx++ {
 				if screenX+sx < gameAreaWidth {
 					t.screen.SetContent(screenX+sx, screenY, char, nil, style)
@@ -315,52 +342,126 @@ func (t *TerminalRenderer) drawGameBoy() {
 
 func (t *TerminalRenderer) drawRegisters(termWidth, termHeight int) {
 	cpu := t.emulator.GetCPU()
-	startX := gameAreaWidth + 3
+	mmu := t.emulator.GetMMU()
+	borderX := termWidth / 2
+	if termWidth > 100 {
+		borderX = min(gameAreaWidth+1, termWidth*2/3)
+	}
+	startX := borderX + 2
 	startY := 1
-	
+
 	regStyle := tcell.StyleDefault.Foreground(tcell.ColorGreen)
-	
-	// Get debugger state and format status
+
 	debugState := t.emulator.GetDebuggerState()
 	debugStatus := ""
 	debugStyle := regStyle
 	switch debugState {
-	case 0: // DebuggerRunning
+	case 0:
 		debugStatus = "RUNNING"
 		debugStyle = tcell.StyleDefault.Foreground(tcell.ColorGreen)
-	case 1: // DebuggerPaused
+	case 1:
 		debugStatus = "PAUSED"
 		debugStyle = tcell.StyleDefault.Foreground(tcell.ColorYellow)
-	case 2: // DebuggerStep
+	case 2:
 		debugStatus = "STEP"
 		debugStyle = tcell.StyleDefault.Foreground(tcell.ColorBlue)
-	case 3: // DebuggerStepFrame
+	case 3:
 		debugStatus = "FRAME"
 		debugStyle = tcell.StyleDefault.Foreground(tcell.ColorRed)
 	}
-	
-	// Format and display CPU registers
+
+	// Format interrupt information
+	ime := "OFF"
+	if cpu.GetIME() {
+		ime = "ON"
+	}
+	halted := ""
+	if cpu.IsHalted() {
+		halted = " HALT"
+	}
+
+	// Decode pending interrupts
+	pending := cpu.GetPendingInterrupts()
+	pendingStr := ""
+	if pending&0x01 != 0 {
+		pendingStr += "VBL "
+	}
+	if pending&0x02 != 0 {
+		pendingStr += "LCD "
+	}
+	if pending&0x04 != 0 {
+		pendingStr += "TMR "
+	}
+	if pending&0x08 != 0 {
+		pendingStr += "SER "
+	}
+	if pending&0x10 != 0 {
+		pendingStr += "JOY "
+	}
+	if pendingStr == "" {
+		pendingStr = "none"
+	}
+
 	registers := []string{
-		fmt.Sprintf("Status: %s", debugStatus),
+		fmt.Sprintf("Status: %s%s", debugStatus, halted),
 		fmt.Sprintf("A: 0x%02X  F: 0x%02X [%s]", cpu.GetA(), cpu.GetF(), cpu.GetFlagString()),
 		fmt.Sprintf("B: 0x%02X  C: 0x%02X", cpu.GetB(), cpu.GetC()),
 		fmt.Sprintf("D: 0x%02X  E: 0x%02X", cpu.GetD(), cpu.GetE()),
 		fmt.Sprintf("H: 0x%02X  L: 0x%02X", cpu.GetH(), cpu.GetL()),
 		fmt.Sprintf("SP: 0x%04X  PC: 0x%04X", cpu.GetSP(), cpu.GetPC()),
-		fmt.Sprintf("Frame: %d  Instr: %d", t.emulator.GetFrameCount(), t.emulator.GetInstructionCount()),
+		fmt.Sprintf("IME: %s  IE: 0x%02X  IF: 0x%02X", ime, cpu.GetIE(), cpu.GetIF()),
+		fmt.Sprintf("Pending: %s", pendingStr),
+		fmt.Sprintf("Joypad: 0x%02X", mmu.Read(0xFF00)),
 	}
-	
+
+	// Decode joypad state (0 = pressed, 1 = not pressed)
+	buttons, directions := mmu.GetJoypadState()
+	joypadStr := ""
+	if buttons&0x01 == 0 {
+		joypadStr += "A "
+	}
+	if buttons&0x02 == 0 {
+		joypadStr += "B "
+	}
+	if buttons&0x04 == 0 {
+		joypadStr += "SEL "
+	}
+	if buttons&0x08 == 0 {
+		joypadStr += "START "
+	}
+	if directions&0x01 == 0 {
+		joypadStr += "RIGHT "
+	}
+	if directions&0x02 == 0 {
+		joypadStr += "LEFT "
+	}
+	if directions&0x04 == 0 {
+		joypadStr += "UP "
+	}
+	if directions&0x08 == 0 {
+		joypadStr += "DOWN "
+	}
+	if joypadStr == "" {
+		joypadStr = "none"
+	}
+
+	// Add joypad and frame info to registers  
+	registers = append(registers,
+		fmt.Sprintf("Joypad: %s", joypadStr),
+		fmt.Sprintf("Frame: %d  Instr: %d", t.emulator.GetFrameCount(), t.emulator.GetInstructionCount()))
+
+	registerEndY := min(registerHeight+1, termHeight/3)
+
 	for i, reg := range registers {
-		if startY+i >= registerHeight+1 || startY+i >= termHeight {
+		if startY+i >= registerEndY || startY+i >= termHeight {
 			break
 		}
-		
-		// Use debug style for status line, regular style for others
+
 		style := regStyle
-		if i == 0 { // Status line
+		if i == 0 {
 			style = debugStyle
 		}
-		
+
 		x := startX
 		for _, ch := range reg {
 			if x >= termWidth {
@@ -373,45 +474,74 @@ func (t *TerminalRenderer) drawRegisters(termWidth, termHeight int) {
 }
 
 func (t *TerminalRenderer) drawDisassembly(termWidth, termHeight int) {
-	startX := gameAreaWidth + 3
-	startY := registerHeight + 3
-	
-	// Get current PC and MMU from emulator
+	borderX := termWidth / 2
+	if termWidth > 100 {
+		borderX = min(gameAreaWidth+1, termWidth*2/3)
+	}
+	startX := borderX + 2
+
+	registerEndY := min(registerHeight+1, termHeight/3)
+	startY := registerEndY + 2
+
 	cpu := t.emulator.GetCPU()
 	mmu := t.emulator.GetMMU()
 	currentPC := cpu.GetPC()
-	
-	// Get disassembly around current PC (4 before, 4 after)
-	lines := disasm.DisassembleAround(currentPC, 4, 4, mmu)
-	
+
+	lines := disasm.DisassembleAround(currentPC, 3, 3, mmu)
+
 	disasmStyle := tcell.StyleDefault.Foreground(tcell.ColorGreen)
 	currentPCStyle := tcell.StyleDefault.Foreground(tcell.ColorWhite).Background(tcell.ColorBlue)
-	
-	// Display up to disasmHeight lines
-	maxLines := min(len(lines), disasmHeight)
-	for i := 0; i < maxLines; i++ {
-		if startY+i >= termHeight {
+
+	disasmEndY := min(registerEndY+disasmHeight+1, termHeight*2/3)
+	availableLines := disasmEndY - startY
+	if availableLines <= 0 {
+		return
+	}
+
+	maxLines := min(len(lines), availableLines)
+
+	// Find the current PC index to center it
+	currentIndex := -1
+	for i, line := range lines {
+		if line.Address == currentPC {
+			currentIndex = i
 			break
 		}
-		
-		line := lines[i]
+	}
+
+	// Center the current instruction if possible
+	displayOffset := 0
+	if currentIndex >= 0 && availableLines > 0 {
+		desiredCenter := availableLines / 2
+		if currentIndex > desiredCenter {
+			displayOffset = currentIndex - desiredCenter
+			if displayOffset+availableLines > len(lines) {
+				displayOffset = max(0, len(lines)-availableLines)
+			}
+		}
+	}
+
+	for i := 0; i < maxLines && displayOffset+i < len(lines); i++ {
+		if startY+i >= disasmEndY-1 || startY+i >= termHeight {
+			break
+		}
+
+		line := lines[displayOffset+i]
 		isCurrentPC := line.Address == currentPC
-		
-		// Format the disassembly line
+
 		text := disasm.FormatDisassemblyLine(line, isCurrentPC)
-		
-		// Choose style based on whether this is the current PC
+
 		style := disasmStyle
 		if isCurrentPC {
 			style = currentPCStyle
 		}
-		
+
 		x := startX
 		maxWidth := termWidth - startX - 1
 		if len(text) > maxWidth {
 			text = text[:maxWidth-3] + "..."
 		}
-		
+
 		for _, ch := range text {
 			if x >= termWidth {
 				break
@@ -423,45 +553,62 @@ func (t *TerminalRenderer) drawDisassembly(termWidth, termHeight int) {
 }
 
 func (t *TerminalRenderer) drawLogs(termWidth, termHeight int) {
-	startX := gameAreaWidth + 3
-	startY := registerHeight + 3 + disasmHeight + 1 // Account for disassembly section
-	availableHeight := termHeight - startY
-	
+	borderX := termWidth / 2
+	if termWidth > 100 {
+		borderX = min(gameAreaWidth+1, termWidth*2/3)
+	}
+	startX := borderX + 2
+
+	registerEndY := min(registerHeight+1, termHeight/3)
+	disasmEndY := min(registerEndY+disasmHeight+1, termHeight*2/3)
+	startY := disasmEndY + 2
+	availableHeight := termHeight - startY - 1
+
 	if availableHeight <= 0 {
 		return
 	}
-	
-	// Get recent logs
-	logs := t.logBuffer.GetRecent(availableHeight)
-	
-	logStyle := tcell.StyleDefault.Foreground(tcell.ColorBlue)
+
+	// Get recent logs and filter by level
+	allLogs := t.logBuffer.GetRecent(availableHeight * 2) // Get more logs to filter
+	logs := make([]LogEntry, 0, availableHeight)
+	for _, entry := range allLogs {
+		if entry.Level >= t.logLevel {
+			logs = append(logs, entry)
+			if len(logs) >= availableHeight {
+				break
+			}
+		}
+	}
+
+	debugStyle := tcell.StyleDefault.Foreground(tcell.ColorGray)
+	infoStyle := tcell.StyleDefault.Foreground(tcell.ColorBlue)
 	warnStyle := tcell.StyleDefault.Foreground(tcell.ColorYellow)
-	errStyle := tcell.StyleDefault.Foreground(tcell.ColorRed)
-	
+	errStyle := tcell.StyleDefault.Foreground(tcell.ColorRed).Bold(true)
+
 	for i, logEntry := range logs {
 		if i >= availableHeight {
 			break
 		}
-		
-		// Choose style based on log level
-		style := logStyle
+
+		style := infoStyle
 		switch logEntry.Level {
+		case slog.LevelDebug:
+			style = debugStyle
 		case slog.LevelWarn:
 			style = warnStyle
 		case slog.LevelError:
 			style = errStyle
 		}
-		
+
 		logText := FormatLogEntry(logEntry)
 		y := startY + i
 		x := startX
-		
-		// Truncate log line if too long
+
 		maxWidth := termWidth - startX - 1
-		if len(logText) > maxWidth {
+		if len(logText) > maxWidth && maxWidth > 3 {
 			logText = logText[:maxWidth-3] + "..."
 		}
-		
+
 		for _, ch := range logText {
 			if x >= termWidth {
 				break

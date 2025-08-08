@@ -15,10 +15,10 @@ import (
 type DebuggerState int
 
 const (
-	DebuggerRunning DebuggerState = iota // Normal execution
-	DebuggerPaused                       // Paused, waiting for commands
-	DebuggerStep                         // Execute one instruction then pause
-	DebuggerStepFrame                    // Execute one frame then pause
+	DebuggerRunning   DebuggerState = iota // Normal execution
+	DebuggerPaused                         // Paused, waiting for commands
+	DebuggerStep                           // Execute one instruction then pause
+	DebuggerStepFrame                      // Execute one frame then pause
 )
 
 // Emulator represents the root struct and entry point for running the emulation
@@ -26,7 +26,7 @@ type Emulator struct {
 	cpu *cpu.CPU
 	gpu *video.GPU
 	mem *memory.MMU
-	
+
 	// Debugger state
 	debuggerState    DebuggerState
 	debuggerMutex    sync.RWMutex
@@ -69,28 +69,28 @@ func (e *Emulator) RunUntilFrame() {
 	e.debuggerMutex.RLock()
 	state := e.debuggerState
 	e.debuggerMutex.RUnlock()
-	
+
 	// Handle paused state - don't execute anything
 	if state == DebuggerPaused {
 		return
 	}
-	
+
 	// Handle step instruction - execute one instruction then pause
 	if state == DebuggerStep {
 		e.debuggerMutex.Lock()
 		if e.stepRequested {
 			e.stepRequested = false
 			e.debuggerMutex.Unlock()
-			
+
 			// Execute one CPU instruction
 			oldPC := e.cpu.GetPC()
 			cycles := e.cpu.Tick()
 			e.gpu.Tick(cycles)
 			e.instructionCount++
-			
+
 			// Log the executed instruction
 			slog.Debug("Step executed", "pc", fmt.Sprintf("0x%04X", oldPC), "new_pc", fmt.Sprintf("0x%04X", e.cpu.GetPC()))
-			
+
 			// Pause after execution
 			e.SetDebuggerState(DebuggerPaused)
 		} else {
@@ -98,7 +98,7 @@ func (e *Emulator) RunUntilFrame() {
 		}
 		return
 	}
-	
+
 	// Handle step frame - execute one frame then pause
 	if state == DebuggerStepFrame {
 		e.debuggerMutex.Lock()
@@ -107,7 +107,7 @@ func (e *Emulator) RunUntilFrame() {
 			e.frameRequested = false
 		}
 		e.debuggerMutex.Unlock()
-		
+
 		if frameRequested {
 			// Execute one full frame
 			total := 0
@@ -122,12 +122,12 @@ func (e *Emulator) RunUntilFrame() {
 				}
 			}
 			e.frameCount++
-			slog.Info("Frame step completed", "frame", e.frameCount, "instructions", e.instructionCount)
+			slog.Debug("Frame step completed", "frame", e.frameCount, "instructions", e.instructionCount)
 			e.SetDebuggerState(DebuggerPaused)
 		}
 		return
 	}
-	
+
 	// Normal execution (DebuggerRunning)
 	total := 0
 	for {
@@ -141,7 +141,7 @@ func (e *Emulator) RunUntilFrame() {
 			e.frameCount++
 			// Log every 60 frames (once per second at 60 FPS) only when running
 			if e.frameCount%60 == 0 {
-				slog.Info("Frame completed", "frame", e.frameCount, "pc", fmt.Sprintf("0x%04X", e.cpu.GetPC()))
+				slog.Debug("Frame completed", "frame", e.frameCount, "pc", fmt.Sprintf("0x%04X", e.cpu.GetPC()))
 			}
 			return
 		}

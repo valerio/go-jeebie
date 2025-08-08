@@ -210,3 +210,8 @@ func (m *MMU) HandleKeyPress(key JoypadKey) {
 func (m *MMU) HandleKeyRelease(key JoypadKey) {
 	m.joypad.Release(key)
 }
+
+// GetJoypadState returns the raw joypad state for debugging
+func (m *MMU) GetJoypadState() (uint8, uint8) {
+	return m.joypad.buttons, m.joypad.dpad
+}

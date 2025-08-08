@@ -346,6 +346,19 @@ func (c *CPU) GetSP() uint16 { return c.sp }
 func (c *CPU) GetPC() uint16 { return c.pc }
 func (c *CPU) GetCycles() uint64 { return c.cycles }
 
+// Interrupt state getters
+func (c *CPU) GetIME() bool { return c.interruptsEnabled }
+func (c *CPU) IsHalted() bool { return c.halted }
+func (c *CPU) GetIE() uint8 { return c.memory.Read(0xFFFF) }
+func (c *CPU) GetIF() uint8 { return c.memory.Read(0xFF0F) }
+
+// GetPendingInterrupts returns which interrupts are both enabled and requested
+func (c *CPU) GetPendingInterrupts() uint8 {
+	ie := c.GetIE()
+	iFlag := c.GetIF()
+	return ie & iFlag & 0x1F
+}
+
 // GetFlagString returns a human-readable representation of the flag register
 func (c *CPU) GetFlagString() string {
 	flags := ""
