@@ -131,24 +131,11 @@ func (g *GPU) Tick(cycles int) {
 		}
 		break
 	case vramReadMode:
-		if g.pixelCounter < 160 {
-			g.tileCycleCounter += cycles
-
+		// Render the entire scanline once when entering VRAM mode
+		if !g.isScanLineTransfered {
 			if g.readLCDCVariable(lcdDisplayEnable) == 1 {
-				for g.tileCycleCounter >= 3 {
-					g.drawBackground()
-					g.pixelCounter += 4
-					g.tileCycleCounter -= 3
-
-					if g.pixelCounter >= 160 {
-						break
-					}
-				}
+				g.drawScanline()
 			}
-		}
-
-		if g.cycles >= 160 && !g.isScanLineTransfered {
-			g.drawScanline()
 			g.isScanLineTransfered = true
 		}
 
@@ -176,20 +163,21 @@ func (g *GPU) drawScanline() {
 	lcdEnabled := g.readLCDCVariable(lcdDisplayEnable) == 1
 
 	if !lcdEnabled {
-		g.framebuffer.Clear()
+		// Clear the current line when LCD is disabled
+		lineWidth := g.line * FramebufferWidth
+		for i := 0; i < FramebufferWidth; i++ {
+			g.framebuffer.buffer[lineWidth+i] = 0xFFFFFFFF // White
+		}
 		return
 	}
 
-	// Draw all layers when LCD is enabled
+	// Draw all layers in correct order: Background -> Window -> Sprites
 	g.drawBackground()
 	g.drawWindow()
 	g.drawSprites()
 }
 
 func (g *GPU) drawBackground() {
-	startXOffset := g.pixelCounter % 8
-	endXOffset := startXOffset + 4
-	screenTile := g.pixelCounter / 8
 	lineWidth := g.line * FramebufferWidth
 
 	backgroundEnabled := g.readLCDCVariable(bgDisplay) == 1
@@ -217,18 +205,13 @@ func (g *GPU) drawBackground() {
 
 	scrollX := g.memory.Read(addr.SCX)
 	scrollY := g.memory.Read(addr.SCY)
-	lineScrolled := g.line + int(scrollY)
+	lineScrolled := (g.line + int(scrollY)) & 0xFF  // Y coordinate wraps at 256
 	lineScrolled32 := (lineScrolled / 8) * 32
 	tilePixelY := lineScrolled % 8
 	tilePixelY2 := tilePixelY * 2
 
-	for xOffset := startXOffset; xOffset < endXOffset; xOffset++ {
-		screenPixelX := (screenTile * 8) + xOffset
-		// if the pixel is out of bounds, skip drawing it
-		if screenPixelX >= FramebufferWidth {
-			continue
-		}
-
+	// Render the entire scanline (160 pixels)
+	for screenPixelX := 0; screenPixelX < FramebufferWidth; screenPixelX++ {
 		mapPixelX := (screenPixelX + int(scrollX)) & 0xFF
 		mapTileX := mapPixelX / 8
 		mapTileXOffset := mapPixelX % 8
@@ -263,11 +246,6 @@ func (g *GPU) drawBackground() {
 
 		pixelPosition := lineWidth + screenPixelX
 		
-		// Safety check to prevent buffer overflow
-		if pixelPosition >= len(g.framebuffer.buffer) {
-			continue
-		}
-
 		palette := g.memory.Read(addr.BGP)
 		color := (palette >> (pixel * 2)) & 0x03
 		finalColor := uint32(ByteToColor(color))
@@ -297,6 +275,11 @@ func (g *GPU) drawWindow() {
 		return
 	}
 
+	// Debug window rendering
+	if g.line < 5 { // Only log first few lines to avoid spam
+		slog.Debug("Window rendering", "line", g.line, "windowLine", g.windowLine, "wx", wx, "wy", wy)
+	}
+
 	useTileSetZero := g.readLCDCVariable(bgWindowTileDataSelect) == 0
 	useTileMapZero := g.readLCDCVariable(windowTileMapSelect) == 0
 
@@ -318,7 +301,17 @@ func (g *GPU) drawWindow() {
 	pixelY2 := pixelY * 2
 	lineWidth := g.line * FramebufferWidth
 
-	for x := 0; x < 32; x++ {
+	// Only render tiles where the window is actually visible
+	startTileX := 0
+	if wx > 0 {
+		startTileX = 0  // Window starts from tile 0 in window space
+	}
+	endTileX := (FramebufferWidth - int(wx) + 7) / 8  // Calculate how many tiles are visible
+	if endTileX > 32 {
+		endTileX = 32
+	}
+
+	for x := startTileX; x < endTileX; x++ {
 		tileIndexAddr := uint16(tileMapAddr + y32 + x)
 		tile := 0
 
@@ -340,7 +333,8 @@ func (g *GPU) drawWindow() {
 		for pixelX := 0; pixelX < 8; pixelX++ {
 			bufferX := xOffset + pixelX + int(wx)
 
-			if bufferX < 0 || bufferX >= FramebufferWidth {
+			// Only draw pixels that are within the window area and on screen
+			if bufferX < int(wx) || bufferX >= FramebufferWidth {
 				continue
 			}
 

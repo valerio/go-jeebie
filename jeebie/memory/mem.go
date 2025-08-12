@@ -199,6 +199,12 @@ func (m *MMU) Write(addr uint16, value byte) {
 				slog.Debug("LCD state changed", "enabled", lcdNowEnabled, "LCDC", fmt.Sprintf("0x%02X", value))
 			}
 		}
+		if addr == 0xFF4B { // Window X position (WX)
+			slog.Debug("Window X register", "WX", fmt.Sprintf("0x%02X", value), "actual_x", int(value)-7)
+		}
+		if addr == 0xFF4A { // Window Y position (WY)  
+			slog.Debug("Window Y register", "WY", fmt.Sprintf("0x%02X", value))
+		}
 		m.memory[addr] = value
 		return
 	}
