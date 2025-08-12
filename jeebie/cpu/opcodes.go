@@ -1423,8 +1423,9 @@ func opcode0xC3(cpu *CPU) int {
 //#0xC4:
 func opcode0xC4(cpu *CPU) int {
 	if !cpu.isSetFlag(zeroFlag) {
-		cpu.pc = cpu.readImmediateWord()
+		addr := cpu.readImmediateWord()
 		cpu.pushStack(cpu.pc)
+		cpu.pc = addr
 		return 24
 	}
 
@@ -1493,8 +1494,9 @@ func opcode0xCB(cpu *CPU) int {
 //#0xCC:
 func opcode0xCC(cpu *CPU) int {
 	if cpu.isSetFlag(zeroFlag) {
-		cpu.pc = cpu.readImmediateWord()
+		addr := cpu.readImmediateWord()
 		cpu.pushStack(cpu.pc)
+		cpu.pc = addr
 		return 24
 	}
 
@@ -1505,8 +1507,9 @@ func opcode0xCC(cpu *CPU) int {
 //CALL nn
 //#0xCD:
 func opcode0xCD(cpu *CPU) int {
-	cpu.pc = cpu.readImmediateWord()
+	addr := cpu.readImmediateWord()
 	cpu.pushStack(cpu.pc)
+	cpu.pc = addr
 	return 24
 }
 
@@ -1564,8 +1567,9 @@ func opcode0xD3(cpu *CPU) int {
 //#0xD4:
 func opcode0xD4(cpu *CPU) int {
 	if !cpu.isSetFlag(carryFlag) {
-		cpu.pc = cpu.readImmediateWord()
+		addr := cpu.readImmediateWord()
 		cpu.pushStack(cpu.pc)
+		cpu.pc = addr
 		return 24
 	}
 
@@ -1636,8 +1640,9 @@ func opcode0xDB(cpu *CPU) int {
 //#0xDC:
 func opcode0xDC(cpu *CPU) int {
 	if cpu.isSetFlag(carryFlag) {
-		cpu.pc = cpu.readImmediateWord()
+		addr := cpu.readImmediateWord()
 		cpu.pushStack(cpu.pc)
+		cpu.pc = addr
 		return 24
 	}
 

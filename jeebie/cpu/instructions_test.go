@@ -659,3 +659,325 @@ func TestCPU_jr(t *testing.T) {
 		})
 	}
 }
+
+func TestCallRetInstructions(t *testing.T) {
+	t.Run("CALL pushes return address and jumps", func(t *testing.T) {
+		mmu := memory.New()
+		cpu := New(mmu)
+		
+		cpu.pc = 0xC001  // PC should point to first operand (after decode)
+		cpu.sp = 0xFFFE
+		
+		// Setup CALL nn operand bytes: 34 12 (CALL 0x1234)
+		mmu.Write(0xC001, 0x34) // low byte
+		mmu.Write(0xC002, 0x12) // high byte
+		
+		cycles := opcode0xCD(cpu)
+		
+		// Check that PC jumped to destination
+		assert.Equal(t, uint16(0x1234), cpu.pc)
+		
+		// Check that return address (0xC003) was pushed to stack
+		assert.Equal(t, uint16(0xFFFC), cpu.sp)  
+		assert.Equal(t, uint8(0x03), mmu.Read(0xFFFC)) // low byte of return address  
+		assert.Equal(t, uint8(0xC0), mmu.Read(0xFFFD)) // high byte of return address
+		
+		// Check cycle count
+		assert.Equal(t, 24, cycles)
+	})
+
+	t.Run("RET pops address and returns", func(t *testing.T) {
+		mmu := memory.New()
+		cpu := New(mmu)
+		
+		// Setup stack with return address 0x2000
+		cpu.sp = 0xFFFC
+		mmu.Write(0xFFFC, 0x00) // low byte
+		mmu.Write(0xFFFD, 0x20) // high byte
+		
+		cpu.pc = 0x1500  // Current PC (irrelevant for RET)
+		
+		cycles := opcode0xC9(cpu)
+		
+		// Check that PC was set to popped value
+		assert.Equal(t, uint16(0x2000), cpu.pc)
+		
+		// Check that SP was restored
+		assert.Equal(t, uint16(0xFFFE), cpu.sp)
+		
+		// Check cycle count
+		assert.Equal(t, 16, cycles)
+	})
+
+	t.Run("CALL NZ conditional - flag not set", func(t *testing.T) {
+		mmu := memory.New()
+		cpu := New(mmu)
+		
+		cpu.pc = 0x1000
+		cpu.sp = 0xFFFE
+		cpu.f = 0 // Zero flag not set
+		
+		// Setup CALL NZ,nn instruction: C4 78 56 (CALL NZ,0x5678)
+		mmu.Write(0x1000, 0xC4)
+		mmu.Write(0x1001, 0x78) // low byte
+		mmu.Write(0x1002, 0x56) // high byte
+		
+		cycles := opcode0xC4(cpu)
+		
+		// Should execute the call
+		assert.Equal(t, uint16(0x5678), cpu.pc)
+		assert.Equal(t, uint16(0xFFFC), cpu.sp)
+		assert.Equal(t, uint8(0x03), mmu.Read(0xFFFC)) // return address low
+		assert.Equal(t, uint8(0x10), mmu.Read(0xFFFD)) // return address high
+		assert.Equal(t, 24, cycles)
+	})
+
+	t.Run("CALL NZ conditional - flag set", func(t *testing.T) {
+		mmu := memory.New()
+		cpu := New(mmu)
+		
+		cpu.pc = 0x1000
+		cpu.sp = 0xFFFE
+		cpu.f = uint8(zeroFlag) // Zero flag set
+		
+		// Setup CALL NZ,nn instruction: C4 78 56 (CALL NZ,0x5678)
+		mmu.Write(0x1000, 0xC4)
+		mmu.Write(0x1001, 0x78) // low byte
+		mmu.Write(0x1002, 0x56) // high byte
+		
+		cycles := opcode0xC4(cpu)
+		
+		// Should NOT execute the call, just skip operand
+		assert.Equal(t, uint16(0x1003), cpu.pc) // PC advanced by 3
+		assert.Equal(t, uint16(0xFFFE), cpu.sp) // SP unchanged
+		assert.Equal(t, 12, cycles)
+	})
+
+	t.Run("CALL Z conditional - flag set", func(t *testing.T) {
+		mmu := memory.New()
+		cpu := New(mmu)
+		
+		cpu.pc = 0x1000
+		cpu.sp = 0xFFFE
+		cpu.f = uint8(zeroFlag) // Zero flag set
+		
+		// Setup CALL Z,nn instruction: CC 78 56 (CALL Z,0x5678)
+		mmu.Write(0x1000, 0xCC)
+		mmu.Write(0x1001, 0x78)
+		mmu.Write(0x1002, 0x56)
+		
+		cycles := opcode0xCC(cpu)
+		
+		// Should execute the call
+		assert.Equal(t, uint16(0x5678), cpu.pc)
+		assert.Equal(t, uint16(0xFFFC), cpu.sp)
+		assert.Equal(t, uint8(0x03), mmu.Read(0xFFFC))
+		assert.Equal(t, uint8(0x10), mmu.Read(0xFFFD))
+		assert.Equal(t, 24, cycles)
+	})
+
+	t.Run("CALL NC conditional - carry not set", func(t *testing.T) {
+		mmu := memory.New()
+		cpu := New(mmu)
+		
+		cpu.pc = 0x1000
+		cpu.sp = 0xFFFE
+		cpu.f = 0 // Carry flag not set
+		
+		// Setup CALL NC,nn instruction: D4 AB CD
+		mmu.Write(0x1000, 0xD4)
+		mmu.Write(0x1001, 0xAB)
+		mmu.Write(0x1002, 0xCD)
+		
+		cycles := opcode0xD4(cpu)
+		
+		// Should execute the call
+		assert.Equal(t, uint16(0xCDAB), cpu.pc)
+		assert.Equal(t, uint16(0xFFFC), cpu.sp)
+		assert.Equal(t, 24, cycles)
+	})
+
+	t.Run("CALL C conditional - carry set", func(t *testing.T) {
+		mmu := memory.New()
+		cpu := New(mmu)
+		
+		cpu.pc = 0x1000
+		cpu.sp = 0xFFFE
+		cpu.f = uint8(carryFlag) // Carry flag set
+		
+		// Setup CALL C,nn instruction: DC EF BE
+		mmu.Write(0x1000, 0xDC)
+		mmu.Write(0x1001, 0xEF)
+		mmu.Write(0x1002, 0xBE)
+		
+		cycles := opcode0xDC(cpu)
+		
+		// Should execute the call
+		assert.Equal(t, uint16(0xBEEF), cpu.pc)
+		assert.Equal(t, uint16(0xFFFC), cpu.sp)
+		assert.Equal(t, 24, cycles)
+	})
+
+	t.Run("Full CALL/RET cycle", func(t *testing.T) {
+		mmu := memory.New()
+		cpu := New(mmu)
+		
+		cpu.pc = 0x0100
+		cpu.sp = 0xFFFE
+		
+		// Setup CALL 0x0200 at 0x0100
+		mmu.Write(0x0100, 0xCD)
+		mmu.Write(0x0101, 0x00)
+		mmu.Write(0x0102, 0x02)
+		
+		// Setup RET at 0x0200  
+		mmu.Write(0x0200, 0xC9)
+		
+		// Execute CALL
+		opcode0xCD(cpu)
+		assert.Equal(t, uint16(0x0200), cpu.pc)
+		assert.Equal(t, uint16(0xFFFC), cpu.sp)
+		
+		// Execute RET
+		opcode0xC9(cpu)
+		assert.Equal(t, uint16(0x0103), cpu.pc) // Should return to instruction after CALL
+		assert.Equal(t, uint16(0xFFFE), cpu.sp)
+	})
+}
+
+func TestJRInstructions(t *testing.T) {
+	t.Run("JR unconditional - forward jump", func(t *testing.T) {
+		mmu := memory.New()
+		cpu := New(mmu)
+		
+		cpu.pc = 0xC000  // PC points to operand (after decode)
+		cpu.sp = 0xFFFE
+		
+		// JR +5 (0x05)
+		mmu.Write(0xC000, 0x05) 
+		
+		cycles := opcode0x18(cpu)
+		
+		// Should jump to 0xC000 + 1 + 5 = 0xC006
+		assert.Equal(t, uint16(0xC006), cpu.pc)
+		assert.Equal(t, 12, cycles)
+	})
+
+	t.Run("JR unconditional - backward jump", func(t *testing.T) {
+		mmu := memory.New()
+		cpu := New(mmu)
+		
+		cpu.pc = 0xC010  // PC points to operand
+		
+		// JR -5 (0xFB = -5 in two's complement)
+		mmu.Write(0xC010, 0xFB) 
+		
+		cycles := opcode0x18(cpu)
+		
+		// Should jump to 0xC010 + 1 + (-5) = 0xC00C
+		assert.Equal(t, uint16(0xC00C), cpu.pc)
+		assert.Equal(t, 12, cycles)
+	})
+
+	t.Run("JR unconditional - infinite loop (JR 0xFE)", func(t *testing.T) {
+		mmu := memory.New()
+		cpu := New(mmu)
+		
+		cpu.pc = 0xCC5F  // The problematic case from your ROM
+		
+		// JR -2 (0xFE = -2 in two's complement)
+		mmu.Write(0xCC5F, 0xFE)
+		
+		cycles := opcode0x18(cpu)
+		
+		// Should jump to 0xCC5F + 1 + (-2) = 0xCC5E  
+		// This would be an infinite loop if 0xCC5E contains the JR instruction
+		assert.Equal(t, uint16(0xCC5E), cpu.pc)
+		assert.Equal(t, 12, cycles)
+	})
+
+	t.Run("JR NZ - condition false", func(t *testing.T) {
+		mmu := memory.New()
+		cpu := New(mmu)
+		
+		cpu.pc = 0xC000
+		cpu.f = uint8(zeroFlag)  // Zero flag set, so NZ condition is false
+		
+		// JR NZ, +10
+		mmu.Write(0xC000, 0x0A)
+		
+		cycles := opcode0x20(cpu)
+		
+		// Should NOT jump, just advance PC by 1
+		assert.Equal(t, uint16(0xC001), cpu.pc)
+		assert.Equal(t, 8, cycles)
+	})
+
+	t.Run("JR NZ - condition true", func(t *testing.T) {
+		mmu := memory.New()
+		cpu := New(mmu)
+		
+		cpu.pc = 0xC000
+		cpu.f = 0  // Zero flag not set, so NZ condition is true
+		
+		// JR NZ, +10
+		mmu.Write(0xC000, 0x0A)
+		
+		cycles := opcode0x20(cpu)
+		
+		// Should jump to 0xC000 + 1 + 10 = 0xC00B
+		assert.Equal(t, uint16(0xC00B), cpu.pc)
+		assert.Equal(t, 12, cycles)
+	})
+
+	t.Run("JR Z - condition true", func(t *testing.T) {
+		mmu := memory.New()
+		cpu := New(mmu)
+		
+		cpu.pc = 0xC000
+		cpu.f = uint8(zeroFlag)  // Zero flag set, so Z condition is true
+		
+		// JR Z, -3
+		mmu.Write(0xC000, 0xFD) // -3 in two's complement
+		
+		cycles := opcode0x28(cpu)
+		
+		// Should jump to 0xC000 + 1 + (-3) = 0xBFFE
+		assert.Equal(t, uint16(0xBFFE), cpu.pc)
+		assert.Equal(t, 12, cycles)
+	})
+
+	t.Run("JR NC - condition true", func(t *testing.T) {
+		mmu := memory.New()
+		cpu := New(mmu)
+		
+		cpu.pc = 0xC000
+		cpu.f = 0  // Carry flag not set, so NC condition is true
+		
+		// JR NC, +8
+		mmu.Write(0xC000, 0x08)
+		
+		cycles := opcode0x30(cpu)
+		
+		// Should jump to 0xC000 + 1 + 8 = 0xC009
+		assert.Equal(t, uint16(0xC009), cpu.pc)
+		assert.Equal(t, 12, cycles)
+	})
+
+	t.Run("JR C - condition true", func(t *testing.T) {
+		mmu := memory.New()
+		cpu := New(mmu)
+		
+		cpu.pc = 0xC000
+		cpu.f = uint8(carryFlag)  // Carry flag set, so C condition is true
+		
+		// JR C, -1
+		mmu.Write(0xC000, 0xFF) // -1 in two's complement
+		
+		cycles := opcode0x38(cpu)
+		
+		// Should jump to 0xC000 + 1 + (-1) = 0xC000 (stays at same place)
+		assert.Equal(t, uint16(0xC000), cpu.pc)
+		assert.Equal(t, 12, cycles)
+	})
+}
