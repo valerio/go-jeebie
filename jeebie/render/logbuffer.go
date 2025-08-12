@@ -104,14 +104,22 @@ func (h *LogBufferHandler) Handle(_ context.Context, record slog.Record) error {
 	// Extract source information if available
 	source := ""
 	if record.PC != 0 {
-		// We could extract more detailed source info here if needed
 		source = "app"
 	}
+	
+	// Build message with attributes
+	message := record.Message
+	
+	// Add structured attributes to the message
+	record.Attrs(func(a slog.Attr) bool {
+		message += fmt.Sprintf(" %s=%v", a.Key, a.Value)
+		return true
+	})
 	
 	entry := LogEntry{
 		Time:    record.Time,
 		Level:   record.Level,
-		Message: record.Message,
+		Message: message,
 		Source:  source,
 	}
 	

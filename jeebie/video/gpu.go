@@ -1,6 +1,7 @@
 package video
 
 import (
+	"fmt"
 	"log/slog"
 
 	"github.com/valerio/go-jeebie/jeebie/addr"
@@ -51,7 +52,8 @@ func NewGpu(memory *memory.MMU) *GPU {
 
 	// Log initial LCD state
 	lcdc := memory.Read(0xFF40)
-	slog.Debug("GPU initialized", "LCDC", lcdc, "LCD_enabled", (lcdc&0x80) != 0)
+	bgp := memory.Read(0xFF47) // Background palette
+	slog.Debug("GPU initialized", "LCDC", fmt.Sprintf("0x%02X", lcdc), "LCD_enabled", (lcdc&0x80) != 0, "BGP", fmt.Sprintf("0x%02X", bgp))
 
 	return gpu
 }
@@ -172,7 +174,14 @@ func (g *GPU) Tick(cycles int) {
 
 func (g *GPU) drawScanline() {
 	lcdEnabled := g.readLCDCVariable(lcdDisplayEnable) == 1
+	if g.line <= 5 {  // Log first few scanlines
+		slog.Debug("drawScanline called", "line", g.line, "lcdEnabled", lcdEnabled)
+	}
+
 	if !lcdEnabled {
+		if g.line == 0 {
+			slog.Debug("LCD disabled, clearing framebuffer")
+		}
 		g.framebuffer.Clear()
 		return
 	}
@@ -190,7 +199,14 @@ func (g *GPU) drawBackground() {
 	lineWidth := g.line * FramebufferWidth
 
 	backgroundEnabled := g.readLCDCVariable(bgDisplay) == 1
+	if g.line <= 2 && g.pixelCounter == 0 {  // Log first few lines
+		slog.Debug("drawBackground called", "line", g.line, "pixelCounter", g.pixelCounter, "bgEnabled", backgroundEnabled)
+	}
+
 	if !backgroundEnabled {
+		if g.line == 0 && g.pixelCounter == 0 {
+			slog.Debug("Background disabled, clearing line", "line", g.line)
+		}
 		for i := 0; i < FramebufferWidth; i++ {
 			g.framebuffer.buffer[lineWidth+i] = 0
 		}
@@ -260,7 +276,14 @@ func (g *GPU) drawBackground() {
 
 		palette := g.memory.Read(addr.BGP)
 		color := (palette >> (pixel * 2)) & 0x03
-		g.framebuffer.buffer[pixelPosition] = uint32(ByteToColor(color))
+		finalColor := uint32(ByteToColor(color))
+
+		// Debug first few pixels of first few lines
+		if g.line <= 1 && screenPixelX < 4 {  // Just first 4 pixels of first 2 lines
+			slog.Debug("Pixel drawn", "line", g.line, "x", screenPixelX, "pixel", pixel, "palette", fmt.Sprintf("0x%02X", palette), "color", color, "finalColor", fmt.Sprintf("0x%08X", finalColor), "tileData", fmt.Sprintf("low=0x%02X high=0x%02X", low, high))
+		}
+
+		g.framebuffer.buffer[pixelPosition] = finalColor
 	}
 }
 
@@ -542,6 +565,10 @@ func (g *GPU) compareLYToLYC() {
 // setMode sets the two bits (1,0) in the STAT register
 // according to the selected GPU mode.
 func (g *GPU) setMode(mode GpuMode) {
+	if g.mode != mode {
+		modeNames := []string{"HBlank", "VBlank", "OAM", "VRAM"}
+		slog.Debug("PPU mode change", "from", modeNames[g.mode], "to", modeNames[mode], "line", g.line)
+	}
 	g.mode = mode
 	stat := g.memory.Read(addr.STAT)
 	stat = stat&0xFC | byte(g.mode)
@@ -549,6 +576,9 @@ func (g *GPU) setMode(mode GpuMode) {
 }
 
 func (g *GPU) setLY(line int) {
+	if line != g.line && line <= 5 {  // Log first few line changes
+		slog.Debug("Line changed", "from", g.line, "to", line)
+	}
 	g.line = line
 	g.memory.Write(addr.LY, byte(g.line))
 	g.compareLYToLYC()

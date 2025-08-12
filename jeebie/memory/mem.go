@@ -145,6 +145,7 @@ func (m *MMU) Write(addr uint16, value byte) {
 
 	// VRAM
 	if isBetween(addr, 0x8000, 0x9FFF) {
+		slog.Debug("VRAM write", "addr", fmt.Sprintf("0x%04X", addr), "value", fmt.Sprintf("0x%02X", value))
 		m.memory[addr] = value
 		return
 	}
@@ -189,6 +190,14 @@ func (m *MMU) Write(addr uint16, value byte) {
 		if addr == 0xFF00 {
 			m.joypad.Write(value)
 			return
+		}
+		if addr == 0xFF40 {
+			oldLcdc := m.memory[addr]
+			lcdWasEnabled := (oldLcdc & 0x80) != 0
+			lcdNowEnabled := (value & 0x80) != 0
+			if lcdWasEnabled != lcdNowEnabled {
+				slog.Debug("LCD state changed", "enabled", lcdNowEnabled, "LCDC", fmt.Sprintf("0x%02X", value))
+			}
 		}
 		m.memory[addr] = value
 		return

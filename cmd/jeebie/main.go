@@ -25,6 +25,11 @@ func main() {
 			Name:  "headless",
 			Usage: "Run the emulator without a graphical interface",
 		},
+		cli.IntFlag{
+			Name:  "frames",
+			Usage: "Number of frames to run in headless mode (required for headless)",
+			Value: 0,
+		},
 		cli.BoolFlag{
 			Name:  "test-pattern",
 			Usage: "Display a test pattern instead of emulation (for debugging display)",
@@ -62,9 +67,27 @@ func runEmulator(c *cli.Context) error {
 	}
 
 	if c.Bool("headless") {
-		for {
-			emu.RunUntilFrame()
+		frames := c.Int("frames")
+		if frames <= 0 {
+			return errors.New("headless mode requires --frames option with a positive value")
 		}
+		
+		// Set up debug logging for headless mode
+		handler := slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
+			Level: slog.LevelDebug,
+		})
+		logger := slog.New(handler)
+		slog.SetDefault(logger)
+		
+		slog.Info("Running headless mode", "frames", frames)
+		for i := 0; i < frames; i++ {
+			emu.RunUntilFrame()
+			if i%10 == 0 {  // Log progress every 10 frames
+				slog.Info("Frame progress", "completed", i+1, "total", frames)
+			}
+		}
+		slog.Info("Headless execution completed", "frames", frames)
+		return nil
 	} else {
 		renderer, err := render.NewTerminalRenderer(emu)
 		if err != nil {
