@@ -174,14 +174,8 @@ func (g *GPU) Tick(cycles int) {
 
 func (g *GPU) drawScanline() {
 	lcdEnabled := g.readLCDCVariable(lcdDisplayEnable) == 1
-	if g.line <= 5 {  // Log first few scanlines
-		slog.Debug("drawScanline called", "line", g.line, "lcdEnabled", lcdEnabled)
-	}
 
 	if !lcdEnabled {
-		if g.line == 0 {
-			slog.Debug("LCD disabled, clearing framebuffer")
-		}
 		g.framebuffer.Clear()
 		return
 	}
@@ -199,14 +193,8 @@ func (g *GPU) drawBackground() {
 	lineWidth := g.line * FramebufferWidth
 
 	backgroundEnabled := g.readLCDCVariable(bgDisplay) == 1
-	if g.line <= 2 && g.pixelCounter == 0 {  // Log first few lines
-		slog.Debug("drawBackground called", "line", g.line, "pixelCounter", g.pixelCounter, "bgEnabled", backgroundEnabled)
-	}
 
 	if !backgroundEnabled {
-		if g.line == 0 && g.pixelCounter == 0 {
-			slog.Debug("Background disabled, clearing line", "line", g.line)
-		}
 		for i := 0; i < FramebufferWidth; i++ {
 			g.framebuffer.buffer[lineWidth+i] = 0
 		}
@@ -219,7 +207,7 @@ func (g *GPU) drawBackground() {
 	// select the correct starting address based on which tileMap/tileSet is set
 	tilesAddr := uint16(0x8000)
 	if useTileSetZero {
-		tilesAddr = 0x8800
+		tilesAddr = 0x9000  // Signed mode uses base 0x9000
 	}
 
 	tileMapAddr := 0x9C00
@@ -247,12 +235,13 @@ func (g *GPU) drawBackground() {
 		mapTileAddr := uint16(tileMapAddr + lineScrolled32 + mapTileX)
 
 		mapTile := 0
+		mapTileValue := g.memory.Read(mapTileAddr)
 
 		if useTileSetZero {
-			offset := int8(g.memory.Read(mapTileAddr))
+			offset := int8(mapTileValue)
 			mapTile = int(offset) + 128
 		} else {
-			mapTile = int(g.memory.Read(mapTileAddr))
+			mapTile = int(mapTileValue)
 		}
 
 		mapTile16 := mapTile * 16
@@ -273,15 +262,15 @@ func (g *GPU) drawBackground() {
 		}
 
 		pixelPosition := lineWidth + screenPixelX
+		
+		// Safety check to prevent buffer overflow
+		if pixelPosition >= len(g.framebuffer.buffer) {
+			continue
+		}
 
 		palette := g.memory.Read(addr.BGP)
 		color := (palette >> (pixel * 2)) & 0x03
 		finalColor := uint32(ByteToColor(color))
-
-		// Debug first few pixels of first few lines
-		if g.line <= 1 && screenPixelX < 4 {  // Just first 4 pixels of first 2 lines
-			slog.Debug("Pixel drawn", "line", g.line, "x", screenPixelX, "pixel", pixel, "palette", fmt.Sprintf("0x%02X", palette), "color", color, "finalColor", fmt.Sprintf("0x%08X", finalColor), "tileData", fmt.Sprintf("low=0x%02X high=0x%02X", low, high))
-		}
 
 		g.framebuffer.buffer[pixelPosition] = finalColor
 	}
@@ -314,7 +303,7 @@ func (g *GPU) drawWindow() {
 	// select the correct starting address based on which tileMap/tileSet is set
 	tilesAddr := uint16(0x8000)
 	if useTileSetZero {
-		tilesAddr = 0x8800
+		tilesAddr = 0x9000  // Signed mode uses base 0x9000
 	}
 
 	tileMapAddr := 0x9C00
@@ -351,7 +340,7 @@ func (g *GPU) drawWindow() {
 		for pixelX := 0; pixelX < 8; pixelX++ {
 			bufferX := xOffset + pixelX + int(wx)
 
-			if bufferX < 0 || bufferX > FramebufferWidth {
+			if bufferX < 0 || bufferX >= FramebufferWidth {
 				continue
 			}
 
@@ -366,6 +355,11 @@ func (g *GPU) drawWindow() {
 			}
 
 			position := lineWidth + bufferX
+			
+			// Safety check to prevent buffer overflow
+			if position >= len(g.framebuffer.buffer) {
+				continue
+			}
 
 			palette := g.memory.Read(addr.BGP)
 			color := (palette >> (pixel * 2)) & 0x03
@@ -386,6 +380,8 @@ func (g *GPU) drawSprites() {
 	}
 
 	lineWidth := g.line * FramebufferWidth
+	spritesOnLine := 0
+	maxSpritesPerLine := 10
 
 	for sprite := 39; sprite >= 0; sprite-- {
 		sprite4 := sprite * 4
@@ -399,6 +395,12 @@ func (g *GPU) drawSprites() {
 		if spriteX < -7 || spriteX >= FramebufferWidth {
 			continue
 		}
+
+		// Game Boy hardware limit: maximum 10 sprites per scanline
+		if spritesOnLine >= maxSpritesPerLine {
+			continue
+		}
+		spritesOnLine++
 
 		spriteTile := g.memory.Read(0xFE00 + uint16(sprite4) + 2)
 
@@ -467,9 +469,18 @@ func (g *GPU) drawSprites() {
 			}
 
 			position := lineWidth + bufferX
-
-			if !aboveBG {
+			
+			// Safety check to prevent buffer overflow
+			if position >= len(g.framebuffer.buffer) {
 				continue
+			}
+
+			// Sprite priority: if aboveBG is false, sprite is behind background
+			// Only draw sprite pixel if aboveBG is true OR background pixel is color 0 (transparent)
+			if !aboveBG {
+				// Check if the background pixel at this position is transparent (color 0)
+				// We need to re-calculate the background pixel value here
+				continue  // For now, just skip behind-background sprites (simplified)
 			}
 
 			palette := g.memory.Read(objPaletteAddr)
@@ -565,10 +576,6 @@ func (g *GPU) compareLYToLYC() {
 // setMode sets the two bits (1,0) in the STAT register
 // according to the selected GPU mode.
 func (g *GPU) setMode(mode GpuMode) {
-	if g.mode != mode {
-		modeNames := []string{"HBlank", "VBlank", "OAM", "VRAM"}
-		slog.Debug("PPU mode change", "from", modeNames[g.mode], "to", modeNames[mode], "line", g.line)
-	}
 	g.mode = mode
 	stat := g.memory.Read(addr.STAT)
 	stat = stat&0xFC | byte(g.mode)
@@ -576,9 +583,6 @@ func (g *GPU) setMode(mode GpuMode) {
 }
 
 func (g *GPU) setLY(line int) {
-	if line != g.line && line <= 5 {  // Log first few line changes
-		slog.Debug("Line changed", "from", g.line, "to", line)
-	}
 	g.line = line
 	g.memory.Write(addr.LY, byte(g.line))
 	g.compareLYToLYC()
