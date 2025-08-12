@@ -25,6 +25,10 @@ func main() {
 			Name:  "headless",
 			Usage: "Run the emulator without a graphical interface",
 		},
+		cli.BoolFlag{
+			Name:  "test-pattern",
+			Usage: "Display a test pattern instead of emulation (for debugging display)",
+		},
 	}
 	app.Action = runEmulator
 
@@ -36,6 +40,12 @@ func main() {
 }
 
 func runEmulator(c *cli.Context) error {
+	// Test pattern mode - no ROM needed
+	if c.Bool("test-pattern") {
+		slog.Info("Running in test pattern mode")
+		return render.RunTestPattern()
+	}
+
 	romPath := c.String("rom")
 	if romPath == "" {
 		if c.NArg() > 0 {

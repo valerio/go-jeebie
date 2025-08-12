@@ -5,9 +5,9 @@ import "math/rand"
 type GBColor uint32
 
 const (
-	framebufferWidth  = 160
-	framebufferHeight = 144
-	framebufferSize   = framebufferWidth * framebufferHeight
+	FramebufferWidth  = 160
+	FramebufferHeight = 144
+	FramebufferSize   = FramebufferWidth * FramebufferHeight
 )
 
 const (
@@ -39,11 +39,11 @@ type FrameBuffer struct {
 }
 
 func NewFrameBuffer() *FrameBuffer {
-	colorSlice := make([]uint32, framebufferSize, framebufferSize)
+	colorSlice := make([]uint32, FramebufferSize, FramebufferSize)
 
 	return &FrameBuffer{
-		width:  framebufferWidth,
-		height: framebufferHeight,
+		width:  FramebufferWidth,
+		height: FramebufferHeight,
 		buffer: colorSlice,
 	}
 }

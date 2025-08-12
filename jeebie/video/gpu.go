@@ -1,6 +1,8 @@
 package video
 
 import (
+	"log/slog"
+
 	"github.com/valerio/go-jeebie/jeebie/addr"
 	"github.com/valerio/go-jeebie/jeebie/bit"
 	"github.com/valerio/go-jeebie/jeebie/memory"
@@ -39,13 +41,19 @@ type GPU struct {
 
 func NewGpu(memory *memory.MMU) *GPU {
 	fb := NewFrameBuffer()
-	return &GPU{
+	gpu := &GPU{
 		framebuffer: fb,
 		memory:      memory,
 		mode:        vblankMode,
 
 		line: 144,
 	}
+
+	// Log initial LCD state
+	lcdc := memory.Read(0xFF40)
+	slog.Debug("GPU initialized", "LCDC", lcdc, "LCD_enabled", (lcdc&0x80) != 0)
+
+	return gpu
 }
 
 func (g *GPU) GetFrameBuffer() *FrameBuffer {
@@ -164,24 +172,26 @@ func (g *GPU) Tick(cycles int) {
 
 func (g *GPU) drawScanline() {
 	lcdEnabled := g.readLCDCVariable(lcdDisplayEnable) == 1
-	if lcdEnabled {
-		g.drawWindow()
-		g.drawSprites()
+	if !lcdEnabled {
+		g.framebuffer.Clear()
 		return
 	}
 
-	g.framebuffer.Clear()
+	// Draw all layers when LCD is enabled
+	g.drawBackground()
+	g.drawWindow()
+	g.drawSprites()
 }
 
 func (g *GPU) drawBackground() {
 	startXOffset := g.pixelCounter % 8
 	endXOffset := startXOffset + 4
 	screenTile := g.pixelCounter / 8
-	lineWidth := g.line * framebufferWidth
+	lineWidth := g.line * FramebufferWidth
 
 	backgroundEnabled := g.readLCDCVariable(bgDisplay) == 1
 	if !backgroundEnabled {
-		for i := 0; i < framebufferWidth; i++ {
+		for i := 0; i < FramebufferWidth; i++ {
 			g.framebuffer.buffer[lineWidth+i] = 0
 		}
 		return
@@ -211,7 +221,7 @@ func (g *GPU) drawBackground() {
 	for xOffset := startXOffset; xOffset < endXOffset; xOffset++ {
 		screenPixelX := (screenTile * 8) + xOffset
 		// if the pixel is out of bounds, skip drawing it
-		if screenPixelX >= framebufferWidth {
+		if screenPixelX >= FramebufferWidth {
 			continue
 		}
 
@@ -294,7 +304,7 @@ func (g *GPU) drawWindow() {
 	y32 := (lineAdj / 8) * 32
 	pixelY := lineAdj & 7
 	pixelY2 := pixelY * 2
-	lineWidth := g.line * framebufferWidth
+	lineWidth := g.line * FramebufferWidth
 
 	for x := 0; x < 32; x++ {
 		tileIndexAddr := uint16(tileMapAddr + y32 + x)
@@ -318,7 +328,7 @@ func (g *GPU) drawWindow() {
 		for pixelX := 0; pixelX < 8; pixelX++ {
 			bufferX := xOffset + pixelX + int(wx)
 
-			if bufferX < 0 || bufferX > framebufferWidth {
+			if bufferX < 0 || bufferX > FramebufferWidth {
 				continue
 			}
 
@@ -352,7 +362,7 @@ func (g *GPU) drawSprites() {
 		spriteHeight = 16
 	}
 
-	lineWidth := g.line * framebufferWidth
+	lineWidth := g.line * FramebufferWidth
 
 	for sprite := 39; sprite >= 0; sprite-- {
 		sprite4 := sprite * 4
@@ -363,7 +373,7 @@ func (g *GPU) drawSprites() {
 			continue
 		}
 
-		if spriteX < -7 || spriteX >= framebufferWidth {
+		if spriteX < -7 || spriteX >= FramebufferWidth {
 			continue
 		}
 
@@ -429,7 +439,7 @@ func (g *GPU) drawSprites() {
 			}
 
 			bufferX := spriteX + pixelX
-			if bufferX < 0 || bufferX >= framebufferWidth {
+			if bufferX < 0 || bufferX >= FramebufferWidth {
 				continue
 			}
 
