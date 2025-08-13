@@ -299,7 +299,8 @@ func (c CPU) getHL() uint16 {
 
 func (c *CPU) setAF(value uint16) {
 	c.a = bit.High(value)
-	c.f = bit.Low(value)
+	// F register lower 4 bits must be 0
+	c.f = bit.Low(value) & 0xF0
 }
 
 func (c CPU) getAF() uint16 {
