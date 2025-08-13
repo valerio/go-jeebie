@@ -347,9 +347,9 @@ func (t *TerminalRenderer) drawGameBoyHalfBlock() {
 				bottomPixel = frame[(y+1)*width+x]
 			}
 
-			// Convert pixels to shade values
-			topShade := pixelToShade(topPixel)
-			bottomShade := pixelToShade(bottomPixel)
+			// Convert pixels to shade values using shared utility
+			topShade := PixelToShade(topPixel)
+			bottomShade := PixelToShade(bottomPixel)
 
 			// Determine character and colors based on shade combination
 			char, fg, bg := getHalfBlockChar(topShade, bottomShade)
@@ -363,23 +363,7 @@ func (t *TerminalRenderer) drawGameBoyHalfBlock() {
 	}
 }
 
-// pixelToShade converts a pixel value to a shade level (0-3)
-func pixelToShade(pixel uint32) int {
-	switch pixel {
-	case 0x000000FF:
-		return 0 // Black
-	case 0x4C4C4CFF:
-		return 1 // Dark gray
-	case 0x989898FF:
-		return 2 // Light gray
-	case 0xFFFFFFFF:
-		return 3 // White
-	default:
-		return 0
-	}
-}
-
-// getHalfBlockChar returns the appropriate half-block character and colors
+// getHalfBlockChar returns the appropriate half-block character and colors for terminal
 func getHalfBlockChar(topShade, bottomShade int) (rune, tcell.Color, tcell.Color) {
 	// Map Game Boy shades to terminal colors
 	shadeColors := []tcell.Color{
@@ -392,18 +376,21 @@ func getHalfBlockChar(topShade, bottomShade int) (rune, tcell.Color, tcell.Color
 	topColor := shadeColors[topShade]
 	bottomColor := shadeColors[bottomShade]
 
+	// Get the character using shared utility
+	char := GetHalfBlockChar(topShade, bottomShade)
+
 	if topShade == bottomShade {
-		// Both pixels same shade - use full block
-		return '█', topColor, tcell.ColorDefault
+		// Both pixels same shade - use full block with foreground color
+		return char, topColor, tcell.ColorDefault
 	} else if topShade == 3 && bottomShade != 3 {
 		// Top white, bottom not - use lower half block
-		return '▄', bottomColor, topColor
+		return char, bottomColor, topColor
 	} else if topShade != 3 && bottomShade == 3 {
 		// Top not white, bottom white - use upper half block
-		return '▀', topColor, bottomColor
+		return char, topColor, bottomColor
 	} else {
 		// Mixed shades - use upper half block with appropriate colors
-		return '▀', topColor, bottomColor
+		return char, topColor, bottomColor
 	}
 }
 
