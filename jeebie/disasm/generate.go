@@ -184,6 +184,10 @@ func formatOperand(operand string) string {
 		return "0x%04X" // 16-bit value
 	case "d8", "r8", "a8":
 		return "0x%02X" // 8-bit value
+	case "(a8)":
+		return "(0x%02X)" // 8-bit address in parentheses (for LDH)
+	case "(a16)":
+		return "(0x%04X)" // 16-bit address in parentheses
 	case "s8":
 		return "%+d" // signed 8-bit value
 	default:

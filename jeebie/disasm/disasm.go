@@ -100,11 +100,22 @@ func DisassembleAround(currentPC uint16, beforeCount, afterCount int, mmu *memor
 	startPC := currentPC
 	instructionsFound := 0
 
+	// Handle edge case at address 0
+	if currentPC == 0 {
+		// Can't go backwards from 0, just show forward
+		return DisassembleRange(0, beforeCount+1+afterCount, mmu)
+	}
+
 	// Simple approach: try different starting points and see which gives us the right number of instructions
 	// This is needed because we can't easily go backwards in variable-length instruction sets
-	for offset := beforeCount * 3; offset >= 0 && startPC > uint16(offset); offset-- {
+	maxOffset := beforeCount * 3
+	if uint16(maxOffset) > currentPC {
+		maxOffset = int(currentPC)
+	}
+
+	for offset := maxOffset; offset >= 0; offset-- {
 		testPC := currentPC - uint16(offset)
-		if testPC >= currentPC {
+		if testPC >= currentPC && currentPC != 0 {
 			break
 		}
 
@@ -140,6 +151,41 @@ func DisassembleAround(currentPC uint16, beforeCount, afterCount int, mmu *memor
 	// Disassemble from the found starting point
 	totalCount := instructionsFound + 1 + afterCount // before + current + after
 	lines := DisassembleRange(startPC, totalCount, mmu)
+
+	// Handle edge case near 0xFFFF
+	// If we're near the end of memory and don't have enough instructions after,
+	// try to get more instructions before
+	if len(lines) < beforeCount+1+afterCount && currentPC > 0x8000 {
+		// Try to get more context before if we're running out of space after
+		additionalBefore := (beforeCount + 1 + afterCount) - len(lines)
+		if additionalBefore > 0 && startPC > uint16(additionalBefore*3) {
+			// Try to add more instructions before
+			newStartPC := startPC - uint16(additionalBefore*3)
+			lines = DisassembleRange(newStartPC, totalCount+additionalBefore, mmu)
+
+			// Find and trim to center around currentPC if possible
+			currentIndex := -1
+			for i, line := range lines {
+				if line.Address == currentPC {
+					currentIndex = i
+					break
+				}
+			}
+
+			if currentIndex >= 0 {
+				// Try to center, but keep within bounds
+				idealStart := currentIndex - beforeCount
+				if idealStart < 0 {
+					idealStart = 0
+				}
+				idealEnd := idealStart + beforeCount + 1 + afterCount
+				if idealEnd > len(lines) {
+					idealEnd = len(lines)
+				}
+				lines = lines[idealStart:idealEnd]
+			}
+		}
+	}
 
 	return lines
 }

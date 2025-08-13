@@ -272,7 +272,7 @@ var InstructionTemplates = [256]string{
 	"DEC B",           // 0x05
 	"LD B, 0x%02X",    // 0x06
 	"RLCA",            // 0x07
-	"LD (a16), SP",    // 0x08
+	"LD (0x%04X), SP", // 0x08
 	"ADD HL, BC",      // 0x09
 	"LD A, (BC)",      // 0x0a
 	"DEC BC",          // 0x0b
@@ -488,7 +488,7 @@ var InstructionTemplates = [256]string{
 	"UNDEFINED",       // 0xdd
 	"SBC A, 0x%02X",   // 0xde
 	"RST 18H",         // 0xdf
-	"LDH (a8), A",     // 0xe0
+	"LDH (0x%02X), A", // 0xe0
 	"POP HL",          // 0xe1
 	"LD (C), A",       // 0xe2
 	"UNDEFINED",       // 0xe3
@@ -498,13 +498,13 @@ var InstructionTemplates = [256]string{
 	"RST 20H",         // 0xe7
 	"ADD SP, 0x%02X",  // 0xe8
 	"JP (HL)",         // 0xe9
-	"LD (a16), A",     // 0xea
+	"LD (0x%04X), A",  // 0xea
 	"UNDEFINED",       // 0xeb
 	"UNDEFINED",       // 0xec
 	"UNDEFINED",       // 0xed
 	"XOR 0x%02X",      // 0xee
 	"RST 28H",         // 0xef
-	"LDH A, (a8)",     // 0xf0
+	"LDH A, (0x%02X)", // 0xf0
 	"POP AF",          // 0xf1
 	"LD A, (C)",       // 0xf2
 	"DI",              // 0xf3
@@ -514,7 +514,7 @@ var InstructionTemplates = [256]string{
 	"RST 30H",         // 0xf7
 	"LD HL, SP+r8",    // 0xf8
 	"LD SP, HL",       // 0xf9
-	"LD A, (a16)",     // 0xfa
+	"LD A, (0x%04X)",  // 0xfa
 	"EI",              // 0xfb
 	"UNDEFINED",       // 0xfc
 	"UNDEFINED",       // 0xfd
