@@ -13,23 +13,23 @@ const (
 	testPatternCount = 4
 	targetFPS        = 60
 	animationFrames  = 30
-	
+
 	// Pattern generation constants
 	checkerboardTileSize = 8
 	stripeWidth          = 4
 	diagonalTileSize     = 8
-	
+
 	// Display positioning
 	displayOffsetX = 5
 	displayOffsetY = 2
-	verticalScale  = 2  // Skip every other line
-	
+	verticalScale  = 2 // Skip every other line
+
 	// Color thresholds for shade mapping
 	shade1Threshold = 64
 	shade2Threshold = 128
 	shade3Threshold = 192
 	maxColorValue   = 255
-	
+
 	// Animation speeds
 	stripeAnimationSpeed   = 2
 	diagonalAnimationSpeed = 4
@@ -54,7 +54,7 @@ func RunTestPattern() error {
 
 	// Create a test framebuffer
 	fb := video.NewFrameBuffer()
-	
+
 	// Fill with checkerboard pattern
 	for y := 0; y < video.FramebufferHeight; y++ {
 		for x := 0; x < video.FramebufferWidth; x++ {
@@ -72,7 +72,7 @@ func RunTestPattern() error {
 	running := true
 	patternType := 0
 	frameCount := 0
-	
+
 	go func() {
 		for running {
 			ev := screen.PollEvent()
@@ -103,15 +103,15 @@ func RunTestPattern() error {
 		select {
 		case <-ticker.C:
 			frameCount++
-			
+
 			// Animate the pattern
 			if frameCount%animationFrames == 0 {
 				animatePattern(fb, patternType, frameCount/animationFrames)
 			}
-			
+
 			// Draw the framebuffer
 			drawTestFramebuffer(screen, fb)
-			
+
 			// Draw info text
 			termWidth, termHeight := screen.Size()
 			info := "Test Pattern Mode - Press SPACE to change pattern, ESC to exit"
@@ -120,7 +120,7 @@ func RunTestPattern() error {
 					screen.SetContent(i, termHeight-1, ch, nil, tcell.StyleDefault.Foreground(tcell.ColorYellow))
 				}
 			}
-			
+
 			patternName := []string{"Checkerboard", "Gradient", "Stripes", "Noise"}[patternType]
 			status := "Pattern: " + patternName + " | Frame: " + string(rune(frameCount))
 			for i, ch := range status {
@@ -128,7 +128,7 @@ func RunTestPattern() error {
 					screen.SetContent(i, 0, ch, nil, tcell.StyleDefault.Foreground(tcell.ColorGreen))
 				}
 			}
-			
+
 			screen.Show()
 		}
 	}
@@ -138,11 +138,11 @@ func RunTestPattern() error {
 
 func drawTestFramebuffer(screen tcell.Screen, fb *video.FrameBuffer) {
 	frame := fb.ToSlice()
-	
+
 	for y := 0; y < video.FramebufferHeight; y++ {
 		for x := 0; x < video.FramebufferWidth; x++ {
 			pixel := frame[y*video.FramebufferWidth+x]
-			
+
 			// Convert to shade character
 			shade := 0
 			switch pixel {
@@ -167,14 +167,14 @@ func drawTestFramebuffer(screen tcell.Screen, fb *video.FrameBuffer) {
 					shade = 3
 				}
 			}
-			
+
 			char := shadeChars[shade]
 			style := tcell.StyleDefault.Foreground(tcell.ColorWhite)
-			
+
 			// Draw at position with some offset for visibility
 			screenX := x + displayOffsetX
 			screenY := y/verticalScale + displayOffsetY // Compress vertically for terminal
-			
+
 			if y%verticalScale == 0 { // Skip every other line for terminal aspect ratio
 				screen.SetContent(screenX, screenY, char, nil, style)
 			}

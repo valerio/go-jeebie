@@ -37,7 +37,7 @@ func NewLogBuffer(size int) *LogBuffer {
 func (lb *LogBuffer) Add(entry LogEntry) {
 	lb.mutex.Lock()
 	defer lb.mutex.Unlock()
-	
+
 	lb.entries[lb.index] = entry
 	lb.index = (lb.index + 1) % lb.size
 	if lb.count < lb.size {
@@ -49,25 +49,25 @@ func (lb *LogBuffer) Add(entry LogEntry) {
 func (lb *LogBuffer) GetRecent(maxCount int) []LogEntry {
 	lb.mutex.RLock()
 	defer lb.mutex.RUnlock()
-	
+
 	if lb.count == 0 {
 		return nil
 	}
-	
+
 	count := lb.count
 	if maxCount > 0 && maxCount < count {
 		count = maxCount
 	}
-	
+
 	result := make([]LogEntry, count)
-	
+
 	// Start from the most recent entry and work backwards
 	for i := 0; i < count; i++ {
 		// Calculate the index of the entry (count-1-i) entries ago
 		entryIndex := (lb.index - 1 - i + lb.size) % lb.size
 		result[i] = lb.entries[entryIndex]
 	}
-	
+
 	return result
 }
 
@@ -75,7 +75,7 @@ func (lb *LogBuffer) GetRecent(maxCount int) []LogEntry {
 func (lb *LogBuffer) Clear() {
 	lb.mutex.Lock()
 	defer lb.mutex.Unlock()
-	
+
 	lb.count = 0
 	lb.index = 0
 }
@@ -106,23 +106,23 @@ func (h *LogBufferHandler) Handle(_ context.Context, record slog.Record) error {
 	if record.PC != 0 {
 		source = "app"
 	}
-	
+
 	// Build message with attributes
 	message := record.Message
-	
+
 	// Add structured attributes to the message
 	record.Attrs(func(a slog.Attr) bool {
 		message += fmt.Sprintf(" %s=%v", a.Key, a.Value)
 		return true
 	})
-	
+
 	entry := LogEntry{
 		Time:    record.Time,
 		Level:   record.Level,
 		Message: message,
 		Source:  source,
 	}
-	
+
 	h.buffer.Add(entry)
 	return nil
 }
@@ -155,7 +155,7 @@ func FormatLogEntry(entry LogEntry) string {
 	default:
 		levelStr = "???"
 	}
-	
+
 	timeStr := entry.Time.Format("15:04:05")
 	return fmt.Sprintf("%s [%s] %s", timeStr, levelStr, entry.Message)
 }

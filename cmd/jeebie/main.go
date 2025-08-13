@@ -83,10 +83,10 @@ func runEmulator(c *cli.Context) error {
 		if frames <= 0 {
 			return errors.New("headless mode requires --frames option with a positive value")
 		}
-		
+
 		snapshotInterval := c.Int("snapshot-interval")
 		snapshotDir := c.String("snapshot-dir")
-		
+
 		// Set up snapshot directory
 		if snapshotInterval > 0 {
 			if snapshotDir == "" {
@@ -103,23 +103,23 @@ func runEmulator(c *cli.Context) error {
 				}
 			}
 		}
-		
+
 		// Set up debug logging for headless mode
 		handler := slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
 			Level: slog.LevelDebug,
 		})
 		logger := slog.New(handler)
 		slog.SetDefault(logger)
-		
+
 		// Extract ROM name for snapshot filenames
 		romName := filepath.Base(romPath)
 		romName = strings.TrimSuffix(romName, filepath.Ext(romName))
-		
+
 		slog.Info("Running headless mode", "frames", frames, "snapshot_interval", snapshotInterval, "snapshot_dir", snapshotDir)
-		
+
 		for i := 0; i < frames; i++ {
 			emu.RunUntilFrame()
-			
+
 			// Save snapshot if needed
 			if snapshotInterval > 0 && (i+1)%snapshotInterval == 0 {
 				snapshotPath := filepath.Join(snapshotDir, fmt.Sprintf("%s_frame_%d.txt", romName, i+1))
@@ -129,12 +129,12 @@ func runEmulator(c *cli.Context) error {
 					slog.Info("Saved frame snapshot", "frame", i+1, "path", snapshotPath)
 				}
 			}
-			
-			if i%10 == 0 {  // Log progress every 10 frames
+
+			if i%10 == 0 { // Log progress every 10 frames
 				slog.Info("Frame progress", "completed", i+1, "total", frames)
 			}
 		}
-		
+
 		if snapshotInterval > 0 {
 			slog.Info("Headless execution completed", "frames", frames, "snapshots_saved_to", snapshotDir)
 		} else {
@@ -154,32 +154,32 @@ func runEmulator(c *cli.Context) error {
 func saveFrameSnapshot(emu *jeebie.Emulator, filename string) error {
 	fb := emu.GetCurrentFrame()
 	frame := fb.ToSlice()
-	
+
 	file, err := os.Create(filename)
 	if err != nil {
 		return err
 	}
 	defer file.Close()
-	
+
 	// Write header with metadata
 	fmt.Fprintf(file, "# Game Boy Frame Snapshot\n")
 	fmt.Fprintf(file, "# Frame: %d, Instructions: %d\n", emu.GetFrameCount(), emu.GetInstructionCount())
 	fmt.Fprintf(file, "# Resolution: 160x144 pixels\n")
 	fmt.Fprintf(file, "# Legend: █=black ▓=dark ▒=light ░=white\n")
 	fmt.Fprintf(file, "#\n")
-	
+
 	// Character mapping for different shades
 	shadeChars := []rune{'█', '▓', '▒', '░'}
-	
+
 	for y := 0; y < 144; y++ {
 		for x := 0; x < 160; x++ {
 			pixel := frame[y*160+x]
-			
+
 			shade := 0
 			switch pixel {
 			case 0x000000FF: // Black
 				shade = 0
-			case 0x4C4C4CFF: // Dark gray  
+			case 0x4C4C4CFF: // Dark gray
 				shade = 1
 			case 0x989898FF: // Light gray
 				shade = 2
@@ -188,11 +188,11 @@ func saveFrameSnapshot(emu *jeebie.Emulator, filename string) error {
 			default:
 				shade = 3 // Default to white for unknown colors
 			}
-			
+
 			fmt.Fprintf(file, "%c", shadeChars[shade])
 		}
 		fmt.Fprintf(file, "\n")
 	}
-	
+
 	return nil
 }

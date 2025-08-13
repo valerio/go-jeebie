@@ -1,11 +1,7 @@
-bootstrap:
-	brew install sdl2
-	go mod download
-
-generate:
+generate: fmt
 	cd jeebie/disasm && go generate
 
-build: generate
+build: generate fmt
 	go build -o bin/jeebie ./cmd/jeebie
 
 run:
@@ -13,3 +9,6 @@ run:
 
 test:
 	go test -v ./...
+
+fmt:
+	go fmt ./...

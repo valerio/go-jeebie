@@ -445,7 +445,7 @@ func (t *TerminalRenderer) drawRegisters(termWidth, termHeight int) {
 		joypadStr = "none"
 	}
 
-	// Add joypad and frame info to registers  
+	// Add joypad and frame info to registers
 	registers = append(registers,
 		fmt.Sprintf("Joypad: %s", joypadStr),
 		fmt.Sprintf("Frame: %d  Instr: %d", t.emulator.GetFrameCount(), t.emulator.GetInstructionCount()))

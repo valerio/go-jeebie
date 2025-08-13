@@ -19,7 +19,7 @@ type DisassemblyLine struct {
 // DisassembleAt disassembles the instruction at the given program counter
 func DisassembleAt(pc uint16, mmu *memory.MMU) DisassemblyLine {
 	opcode := mmu.Read(pc)
-	
+
 	if opcode == 0xCB {
 		// Handle CB-prefixed instructions
 		if pc == 0xFFFF {
@@ -29,26 +29,26 @@ func DisassembleAt(pc uint16, mmu *memory.MMU) DisassemblyLine {
 				Length:      2,
 			}
 		}
-		
+
 		cbOpcode := mmu.Read(pc + 1)
 		length := CBInstructionLengths[cbOpcode]
 		template := CBInstructionTemplates[cbOpcode]
-		
+
 		instruction := fmt.Sprintf(template)
-		
+
 		return DisassemblyLine{
 			Address:     pc,
 			Instruction: instruction,
 			Length:      length,
 		}
 	}
-	
+
 	// Handle regular instructions
 	length := InstructionLengths[opcode]
 	template := InstructionTemplates[opcode]
-	
+
 	var instruction string
-	
+
 	// Format with immediate values based on length
 	switch length {
 	case 1:
@@ -71,7 +71,7 @@ func DisassembleAt(pc uint16, mmu *memory.MMU) DisassemblyLine {
 	default:
 		instruction = fmt.Sprintf(template)
 	}
-	
+
 	return DisassemblyLine{
 		Address:     pc,
 		Instruction: instruction,
@@ -83,13 +83,13 @@ func DisassembleAt(pc uint16, mmu *memory.MMU) DisassemblyLine {
 func DisassembleRange(startPC uint16, count int, mmu *memory.MMU) []DisassemblyLine {
 	lines := make([]DisassemblyLine, 0, count)
 	pc := startPC
-	
+
 	for i := 0; i < count && pc <= 0xFFFF; i++ {
 		line := DisassembleAt(pc, mmu)
 		lines = append(lines, line)
 		pc += uint16(line.Length)
 	}
-	
+
 	return lines
 }
 
@@ -99,7 +99,7 @@ func DisassembleAround(currentPC uint16, beforeCount, afterCount int, mmu *memor
 	// Find the starting PC by working backwards
 	startPC := currentPC
 	instructionsFound := 0
-	
+
 	// Simple approach: try different starting points and see which gives us the right number of instructions
 	// This is needed because we can't easily go backwards in variable-length instruction sets
 	for offset := beforeCount * 3; offset >= 0 && startPC > uint16(offset); offset-- {
@@ -107,11 +107,11 @@ func DisassembleAround(currentPC uint16, beforeCount, afterCount int, mmu *memor
 		if testPC >= currentPC {
 			break
 		}
-		
+
 		// Try disassembling from this point and see if we hit currentPC
 		pc := testPC
 		count := 0
-		
+
 		for count < beforeCount*2 && pc <= currentPC {
 			if pc == currentPC {
 				// Found the right starting point
@@ -121,26 +121,26 @@ func DisassembleAround(currentPC uint16, beforeCount, afterCount int, mmu *memor
 					break
 				}
 			}
-			
+
 			line := DisassembleAt(pc, mmu)
 			pc += uint16(line.Length)
 			count++
 		}
-		
+
 		if startPC != currentPC {
 			break
 		}
 	}
-	
+
 	// If we couldn't find a good starting point, just start from currentPC
 	if startPC == currentPC {
 		instructionsFound = 0
 	}
-	
+
 	// Disassemble from the found starting point
 	totalCount := instructionsFound + 1 + afterCount // before + current + after
 	lines := DisassembleRange(startPC, totalCount, mmu)
-	
+
 	return lines
 }
 
@@ -150,6 +150,6 @@ func FormatDisassemblyLine(line DisassemblyLine, isCurrentPC bool) string {
 	if isCurrentPC {
 		prefix = "→"
 	}
-	
+
 	return fmt.Sprintf("%s0x%04X: %s", prefix, line.Address, line.Instruction)
 }

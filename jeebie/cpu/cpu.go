@@ -43,11 +43,11 @@ type CPU struct {
 
 	// metadata
 	interruptsEnabled bool
-	eiPending         bool   // EI delay: interrupts enable after next instruction
+	eiPending         bool // EI delay: interrupts enable after next instruction
 	currentOpcode     uint16
 	stopped           bool
 	halted            bool
-	haltBug           bool   // HALT bug: PC doesn't increment properly
+	haltBug           bool // HALT bug: PC doesn't increment properly
 	cycles            uint64
 	divCycles         int
 	timaCycles        int
@@ -335,23 +335,23 @@ func (c *CPU) updateTimers(cycles int) {
 }
 
 // Debug getter methods for register display
-func (c *CPU) GetA() uint8 { return c.a }
-func (c *CPU) GetF() uint8 { return c.f }
-func (c *CPU) GetB() uint8 { return c.b }
-func (c *CPU) GetC() uint8 { return c.c }
-func (c *CPU) GetD() uint8 { return c.d }
-func (c *CPU) GetE() uint8 { return c.e }
-func (c *CPU) GetH() uint8 { return c.h }
-func (c *CPU) GetL() uint8 { return c.l }
-func (c *CPU) GetSP() uint16 { return c.sp }
-func (c *CPU) GetPC() uint16 { return c.pc }
+func (c *CPU) GetA() uint8       { return c.a }
+func (c *CPU) GetF() uint8       { return c.f }
+func (c *CPU) GetB() uint8       { return c.b }
+func (c *CPU) GetC() uint8       { return c.c }
+func (c *CPU) GetD() uint8       { return c.d }
+func (c *CPU) GetE() uint8       { return c.e }
+func (c *CPU) GetH() uint8       { return c.h }
+func (c *CPU) GetL() uint8       { return c.l }
+func (c *CPU) GetSP() uint16     { return c.sp }
+func (c *CPU) GetPC() uint16     { return c.pc }
 func (c *CPU) GetCycles() uint64 { return c.cycles }
 
 // Interrupt state getters
-func (c *CPU) GetIME() bool { return c.interruptsEnabled }
+func (c *CPU) GetIME() bool   { return c.interruptsEnabled }
 func (c *CPU) IsHalted() bool { return c.halted }
-func (c *CPU) GetIE() uint8 { return c.memory.Read(0xFFFF) }
-func (c *CPU) GetIF() uint8 { return c.memory.Read(0xFF0F) }
+func (c *CPU) GetIE() uint8   { return c.memory.Read(0xFFFF) }
+func (c *CPU) GetIF() uint8   { return c.memory.Read(0xFF0F) }
 
 // GetPendingInterrupts returns which interrupts are both enabled and requested
 func (c *CPU) GetPendingInterrupts() uint8 {

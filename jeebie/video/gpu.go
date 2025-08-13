@@ -195,7 +195,7 @@ func (g *GPU) drawBackground() {
 	// select the correct starting address based on which tileMap/tileSet is set
 	tilesAddr := uint16(0x8000)
 	if useTileSetZero {
-		tilesAddr = 0x9000  // Signed mode uses base 0x9000
+		tilesAddr = 0x9000 // Signed mode uses base 0x9000
 	}
 
 	tileMapAddr := 0x9C00
@@ -205,7 +205,7 @@ func (g *GPU) drawBackground() {
 
 	scrollX := g.memory.Read(addr.SCX)
 	scrollY := g.memory.Read(addr.SCY)
-	lineScrolled := (g.line + int(scrollY)) & 0xFF  // Y coordinate wraps at 256
+	lineScrolled := (g.line + int(scrollY)) & 0xFF // Y coordinate wraps at 256
 	lineScrolled32 := (lineScrolled / 8) * 32
 	tilePixelY := lineScrolled % 8
 	tilePixelY2 := tilePixelY * 2
@@ -245,7 +245,7 @@ func (g *GPU) drawBackground() {
 		}
 
 		pixelPosition := lineWidth + screenPixelX
-		
+
 		palette := g.memory.Read(addr.BGP)
 		color := (palette >> (pixel * 2)) & 0x03
 		finalColor := uint32(ByteToColor(color))
@@ -286,7 +286,7 @@ func (g *GPU) drawWindow() {
 	// select the correct starting address based on which tileMap/tileSet is set
 	tilesAddr := uint16(0x8000)
 	if useTileSetZero {
-		tilesAddr = 0x9000  // Signed mode uses base 0x9000
+		tilesAddr = 0x9000 // Signed mode uses base 0x9000
 	}
 
 	tileMapAddr := 0x9C00
@@ -304,9 +304,9 @@ func (g *GPU) drawWindow() {
 	// Only render tiles where the window is actually visible
 	startTileX := 0
 	if wx > 0 {
-		startTileX = 0  // Window starts from tile 0 in window space
+		startTileX = 0 // Window starts from tile 0 in window space
 	}
-	endTileX := (FramebufferWidth - int(wx) + 7) / 8  // Calculate how many tiles are visible
+	endTileX := (FramebufferWidth - int(wx) + 7) / 8 // Calculate how many tiles are visible
 	if endTileX > 32 {
 		endTileX = 32
 	}
@@ -349,7 +349,7 @@ func (g *GPU) drawWindow() {
 			}
 
 			position := lineWidth + bufferX
-			
+
 			// Safety check to prevent buffer overflow
 			if position >= len(g.framebuffer.buffer) {
 				continue
@@ -463,7 +463,7 @@ func (g *GPU) drawSprites() {
 			}
 
 			position := lineWidth + bufferX
-			
+
 			// Safety check to prevent buffer overflow
 			if position >= len(g.framebuffer.buffer) {
 				continue
@@ -474,7 +474,7 @@ func (g *GPU) drawSprites() {
 			if !aboveBG {
 				// Check if the background pixel at this position is transparent (color 0)
 				// We need to re-calculate the background pixel value here
-				continue  // For now, just skip behind-background sprites (simplified)
+				continue // For now, just skip behind-background sprites (simplified)
 			}
 
 			palette := g.memory.Read(objPaletteAddr)

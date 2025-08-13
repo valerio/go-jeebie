@@ -119,8 +119,6 @@ func NewCartridgeWithData(bytes []byte) *Cartridge {
 	return cart
 }
 
-
-
 func getRAMBankCount(ramSize uint8, mbcType MBCType) uint8 {
 	switch ramSize {
 	case 0x00:

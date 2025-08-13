@@ -153,7 +153,7 @@ func TestInterruptTiming(t *testing.T) {
 
 		startCycles := cpu.cycles
 		cpu.handleInterrupts()
-		
+
 		assert.Equal(t, uint64(20), cpu.cycles-startCycles)
 	})
 }

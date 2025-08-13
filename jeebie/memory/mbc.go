@@ -44,6 +44,7 @@ func (m *NoMBC) Write(addr uint16, value uint8) uint8 {
 // - Two banking modes:
 //   - Mode 0 (ROM): Allows access to full ROM but only 8KB RAM
 //   - Mode 1 (RAM): Restricts ROM banking but allows full RAM access
+//
 // - Optional battery backup for RAM persistence
 type MBC1 struct {
 	rom          []uint8
@@ -143,14 +144,14 @@ func (m *MBC1) Write(addr uint16, value uint8) uint8 {
 }
 
 // MBC2 is a simpler MBC chip with built-in RAM. Features include:
-// - Supports up to 256KB ROM (16 16KB banks)
-// - Built-in 512x4 bits RAM (not external)
-// - RAM does not require enabling (always accessible)
-// - ROM banking similar to MBC1 but simpler
-// - The least significant bit of the upper address byte selects between
-//   ROM banking and RAM access
-// - RAM is limited to 4-bit values (upper 4 bits are ignored)
-// - Optional battery backup for the built-in RAM
+//   - Supports up to 256KB ROM (16 16KB banks)
+//   - Built-in 512x4 bits RAM (not external)
+//   - RAM does not require enabling (always accessible)
+//   - ROM banking similar to MBC1 but simpler
+//   - The least significant bit of the upper address byte selects between
+//     ROM banking and RAM access
+//   - RAM is limited to 4-bit values (upper 4 bits are ignored)
+//   - Optional battery backup for the built-in RAM
 type MBC2 struct {
 	rom        []uint8
 	ram        []uint8 // 512x4 bits RAM

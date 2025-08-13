@@ -51,7 +51,7 @@ func main() {
 func loadOpcodes() (*OpcodeSet, error) {
 	// Load opcodes from local data file
 	opcodeFile := "../../data/opcodes.json"
-	
+
 	fmt.Printf("Loading opcodes from %s...\n", opcodeFile)
 	data, err := os.ReadFile(opcodeFile)
 	if err != nil {
@@ -162,7 +162,7 @@ func formatInstruction(opcode Opcode) string {
 
 func createTemplate(opcode Opcode) string {
 	instruction := opcode.Mnemonic
-	
+
 	operands := []string{}
 	if opcode.Operand1 != "" {
 		operands = append(operands, formatOperand(opcode.Operand1))
@@ -170,11 +170,11 @@ func createTemplate(opcode Opcode) string {
 	if opcode.Operand2 != "" {
 		operands = append(operands, formatOperand(opcode.Operand2))
 	}
-	
+
 	if len(operands) > 0 {
 		instruction += " " + strings.Join(operands, ", ")
 	}
-	
+
 	return instruction
 }
 
