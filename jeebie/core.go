@@ -41,10 +41,6 @@ func (e *Emulator) init(mem *memory.MMU) {
 	e.gpu = video.NewGpu(mem)
 	e.mem = mem
 
-	// Set up timer callback to reset cycles when TIMA is written
-	e.mem.SetTimaWriteCallback(func() {
-		e.cpu.ResetTimerCycles()
-	})
 }
 
 // New creates a new emulator instance
