@@ -62,7 +62,7 @@ func opcode0x06(cpu *CPU) int {
 // RLCA
 // #0x07:
 func opcode0x07(cpu *CPU) int {
-	cpu.rlc(&cpu.a)
+	cpu.rlcaNonCB()
 	return 4
 }
 
@@ -120,7 +120,7 @@ func opcode0x0E(cpu *CPU) int {
 // RRCA
 // #0x0F:
 func opcode0x0F(cpu *CPU) int {
-	cpu.rrc(&cpu.a)
+	cpu.rrcaNonCB()
 	return 4
 }
 
@@ -176,7 +176,7 @@ func opcode0x16(cpu *CPU) int {
 // RLA
 // #0x17:
 func opcode0x17(cpu *CPU) int {
-	cpu.rl(&cpu.a)
+	cpu.rlaNonCB()
 	return 4
 }
 
@@ -204,7 +204,7 @@ func opcode0x1A(cpu *CPU) int {
 // DEC DE
 // #0x1B:
 func opcode0x1B(cpu *CPU) int {
-	cpu.setDE(cpu.getDE())
+	cpu.setDE(cpu.getDE() - 1)
 	return 8
 }
 
@@ -232,7 +232,7 @@ func opcode0x1E(cpu *CPU) int {
 // RRA
 // #0x1F:
 func opcode0x1F(cpu *CPU) int {
-	cpu.rr(&cpu.a)
+	cpu.rraNonCB()
 	return 4
 }
 
@@ -401,7 +401,8 @@ func opcode0x33(cpu *CPU) int {
 func opcode0x34(cpu *CPU) int {
 	addr := cpu.getHL()
 	value := cpu.memory.Read(addr)
-	cpu.memory.Write(addr, value+1)
+	cpu.inc(&value)
+	cpu.memory.Write(addr, value)
 	return 12
 }
 
@@ -410,7 +411,8 @@ func opcode0x34(cpu *CPU) int {
 func opcode0x35(cpu *CPU) int {
 	addr := cpu.getHL()
 	value := cpu.memory.Read(addr)
-	cpu.memory.Write(addr, value-1)
+	cpu.dec(&value)
+	cpu.memory.Write(addr, value)
 	return 12
 }
 

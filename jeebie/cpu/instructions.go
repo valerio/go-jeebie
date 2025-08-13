@@ -45,16 +45,13 @@ func (c *CPU) rlc(r *uint8) {
 
 	// set carry if bit 7 was set
 	c.setFlagToCondition(carryFlag, bit.IsSet(7, value))
-	c.resetFlag(zeroFlag)
 	c.resetFlag(subFlag)
 	c.resetFlag(halfCarryFlag)
 
 	value = bits.RotateLeft8(value, 1)
 
-	// if rotating the A register, don't set the zero flag.
-	if r != &c.a {
-		c.setFlagToCondition(zeroFlag, value == 0)
-	}
+	// CB-prefixed instructions always set zero flag normally
+	c.setFlagToCondition(zeroFlag, value == 0)
 
 	*r = value
 }
@@ -64,16 +61,13 @@ func (c *CPU) rl(r *uint8) {
 	carry := c.flagToBit(carryFlag)
 
 	c.setFlagToCondition(carryFlag, value > 0x7F)
-	c.resetFlag(zeroFlag)
 	c.resetFlag(subFlag)
 	c.resetFlag(halfCarryFlag)
 
 	value = (value << 1) | carry
 
-	// if rotating the A register, don't set the zero flag.
-	if r != &c.a {
-		c.setFlagToCondition(zeroFlag, value == 0)
-	}
+	// CB-prefixed instructions always set zero flag normally
+	c.setFlagToCondition(zeroFlag, value == 0)
 
 	*r = value
 }
@@ -83,16 +77,13 @@ func (c *CPU) rrc(r *uint8) {
 
 	// set carry if bit 0 was set
 	c.setFlagToCondition(carryFlag, bit.IsSet(0, value))
-	c.resetFlag(zeroFlag)
 	c.resetFlag(subFlag)
 	c.resetFlag(halfCarryFlag)
 
 	value = bits.RotateLeft8(value, -1)
 
-	// if rotating the A register, don't set the zero flag.
-	if r != &c.a {
-		c.setFlagToCondition(zeroFlag, value == 0)
-	}
+	// CB-prefixed instructions always set zero flag normally
+	c.setFlagToCondition(zeroFlag, value == 0)
 
 	*r = value
 }
@@ -102,18 +93,54 @@ func (c *CPU) rr(r *uint8) {
 	carry := c.flagToBit(carryFlag) << 7
 
 	c.setFlagToCondition(carryFlag, bit.IsSet(0, value))
-	c.resetFlag(zeroFlag)
 	c.resetFlag(subFlag)
 	c.resetFlag(halfCarryFlag)
 
 	value = (value >> 1) | carry
 
-	// if rotating the A register, don't set the zero flag.
-	if r != &c.a {
-		c.setFlagToCondition(zeroFlag, value == 0)
-	}
+	// CB-prefixed instructions always set zero flag normally
+	c.setFlagToCondition(zeroFlag, value == 0)
 
 	*r = value
+}
+
+// Non-CB rotate functions (RLCA, RRCA, RLA, RRA) - always reset zero flag
+func (c *CPU) rlcaNonCB() {
+	value := c.a
+	c.setFlagToCondition(carryFlag, bit.IsSet(7, value))
+	c.resetFlag(zeroFlag) // Always reset for non-CB
+	c.resetFlag(subFlag)
+	c.resetFlag(halfCarryFlag)
+	c.a = bits.RotateLeft8(value, 1)
+}
+
+func (c *CPU) rrcaNonCB() {
+	value := c.a
+	c.setFlagToCondition(carryFlag, bit.IsSet(0, value))
+	c.resetFlag(zeroFlag) // Always reset for non-CB
+	c.resetFlag(subFlag)
+	c.resetFlag(halfCarryFlag)
+	c.a = bits.RotateLeft8(value, -1)
+}
+
+func (c *CPU) rlaNonCB() {
+	value := c.a
+	carry := c.flagToBit(carryFlag)
+	c.setFlagToCondition(carryFlag, value > 0x7F)
+	c.resetFlag(zeroFlag) // Always reset for non-CB
+	c.resetFlag(subFlag)
+	c.resetFlag(halfCarryFlag)
+	c.a = (value << 1) | carry
+}
+
+func (c *CPU) rraNonCB() {
+	value := c.a
+	carry := c.flagToBit(carryFlag) << 7
+	c.setFlagToCondition(carryFlag, bit.IsSet(0, value))
+	c.resetFlag(zeroFlag) // Always reset for non-CB
+	c.resetFlag(subFlag)
+	c.resetFlag(halfCarryFlag)
+	c.a = (value >> 1) | carry
 }
 
 func (c *CPU) sla(r *uint8) {
@@ -232,7 +259,9 @@ func (c *CPU) sbc(value uint8) {
 func (c *CPU) and(value uint8) {
 	c.a &= value
 	c.setFlagToCondition(zeroFlag, c.a == 0)
-	c.setFlag(halfCarryFlag)
+	c.resetFlag(subFlag)     // N flag always 0 for AND
+	c.setFlag(halfCarryFlag) // H flag always 1 for AND
+	c.resetFlag(carryFlag)   // C flag always 0 for AND
 }
 
 func (c *CPU) or(value uint8) {
