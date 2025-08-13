@@ -274,37 +274,37 @@ func (c *CPU) swap(r *uint8) {
 // Implements DAA (Decimal Adjust Accumulator).
 // It adjusts the A register so that it is valid Binary Coded Decimal (BCD).
 func (c *CPU) daa() {
-	// use a 16-bit integer to detect overflows and set carry accordingly
-	a := uint16(c.a)
+	correction := 0
 
-	if c.isSetFlag(subFlag) {
-		if c.isSetFlag(halfCarryFlag) {
-			a = (a - 0x06) & 0xFF
+	if !c.isSetFlag(subFlag) {
+		if c.isSetFlag(halfCarryFlag) || (c.a&0x0F) > 9 {
+			correction += 0x06
 		}
-		if c.isSetFlag(carryFlag) {
-			a -= 0x60
+		if c.isSetFlag(carryFlag) || c.a > 0x99 {
+			correction += 0x60
 		}
 	} else {
-		if c.isSetFlag(halfCarryFlag) || (a&0x0F) > 9 {
-			a += 0x06
+		// sub is set - last op was subtraction
+		if c.isSetFlag(halfCarryFlag) {
+			correction -= 0x06
 		}
-		if c.isSetFlag(carryFlag) || a > 0x9F {
-			a += 0x60
+		if c.isSetFlag(carryFlag) {
+			correction -= 0x60
 		}
-
 	}
 
+	regA := int(c.a) + correction
 	c.resetFlag(halfCarryFlag)
-	c.setFlagToCondition(zeroFlag, a == 0)
 
-	// detect overflow
-	if (a & 0x100) == 0x100 {
-		c.setFlag(carryFlag)
+	if !c.isSetFlag(subFlag) {
+		// set carry if we had overflow
+		if regA+correction > 0xFF {
+			c.setFlag(carryFlag)
+		}
 	}
 
-	a &= 0xFF
-
-	c.a = uint8(a)
+	c.setFlagToCondition(zeroFlag, regA&0xFF == 0)
+	c.a = uint8(regA & 0xFF)
 }
 
 // bit (BIT) tests if the bit b in register r is set or not.
