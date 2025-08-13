@@ -10,11 +10,12 @@ import (
 
 // MMU allows access to all memory mapped I/O and data/registers
 type MMU struct {
-	cart        *Cartridge
-	mbc         MBC
-	memory      []byte
-	joypad      *Joypad
-	joypadState uint8
+	cart              *Cartridge
+	mbc               MBC
+	memory            []byte
+	joypad            *Joypad
+	joypadState       uint8
+	timaWriteCallback func() // Callback when TIMA is written
 }
 
 // New creates a new memory unity with default data, i.e. nothing cartridge loaded.
@@ -205,6 +206,13 @@ func (m *MMU) Write(addr uint16, value byte) {
 		if addr == 0xFF4A { // Window Y position (WY)
 			slog.Debug("Window Y register", "WY", fmt.Sprintf("0x%02X", value))
 		}
+		// Timer register handling
+		if addr == 0xFF05 { // TIMA
+			// Reset timer cycles when TIMA is written by ROM
+			if m.timaWriteCallback != nil {
+				m.timaWriteCallback()
+			}
+		}
 		m.memory[addr] = value
 		return
 	}
@@ -229,4 +237,9 @@ func (m *MMU) HandleKeyRelease(key JoypadKey) {
 // GetJoypadState returns the raw joypad state for debugging
 func (m *MMU) GetJoypadState() (uint8, uint8) {
 	return m.joypad.buttons, m.joypad.dpad
+}
+
+// SetTimaWriteCallback sets the callback function to be called when TIMA is written
+func (m *MMU) SetTimaWriteCallback(callback func()) {
+	m.timaWriteCallback = callback
 }

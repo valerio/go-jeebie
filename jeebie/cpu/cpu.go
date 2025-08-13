@@ -326,7 +326,8 @@ func (c *CPU) updateTimers(cycles int) {
 		c.timaCycles -= frequency
 		tima := c.memory.Read(addr.TIMA)
 		if tima == 0xFF {
-			c.memory.Write(addr.TIMA, c.memory.Read(addr.TMA))
+			tma := c.memory.Read(addr.TMA)
+			c.memory.Write(addr.TIMA, tma)
 			c.memory.RequestInterrupt(addr.TimerInterrupt)
 		} else {
 			c.memory.Write(addr.TIMA, tima+1)
@@ -384,4 +385,9 @@ func (c *CPU) GetFlagString() string {
 		flags += "-"
 	}
 	return flags
+}
+
+// ResetTimerCycles resets the TIMA timer cycle counter when TIMA is written to
+func (c *CPU) ResetTimerCycles() {
+	c.timaCycles = 0
 }
