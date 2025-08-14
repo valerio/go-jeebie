@@ -492,11 +492,10 @@ func (g *GPU) drawSprites() {
 // Bit 3 - Interrupt when Mode 00 (hblankMode)
 // Bit 2 - condition for triggering LYC/LY (0=LYC != LY, 1=LYC == LY)
 // Bit 1,0 - represents the current GPU mode
-//         - 00 -> hblankMode
-//         - 01 -> vblankMode
-//         - 10 -> oamReadMode
-//         - 11 -> vramReadMode
-
+//   - 00 -> hblankMode
+//   - 01 -> vblankMode
+//   - 10 -> oamReadMode
+//   - 11 -> vramReadMode
 type statFlag uint8
 
 const (
@@ -518,7 +517,6 @@ const (
 // Bit 2 - OBJ (Sprite) Size (0=8x8, 1=8x16)
 // Bit 1 - OBJ (Sprite) Display Enable (0=Off, 1=On)
 // Bit 0 - BG Display (0=Off, 1=On)
-
 type lcdcFlag uint8
 
 const (
@@ -538,16 +536,6 @@ func (g *GPU) readLCDCVariable(flag lcdcFlag) byte {
 	}
 
 	return 0
-}
-
-func (g *GPU) setLCDCVariable(flag lcdcFlag, shouldSet bool) {
-	lcdcRegister := g.memory.Read(addr.LCDC)
-
-	if shouldSet {
-		lcdcRegister = bit.Set(uint8(flag), lcdcRegister)
-	} else {
-		lcdcRegister = bit.Clear(uint8(flag), lcdcRegister)
-	}
 }
 
 func (g *GPU) compareLYToLYC() {

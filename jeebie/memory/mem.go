@@ -10,11 +10,10 @@ import (
 
 // MMU allows access to all memory mapped I/O and data/registers
 type MMU struct {
-	cart        *Cartridge
-	mbc         MBC
-	memory      []byte
-	joypad      *Joypad
-	joypadState uint8
+	cart   *Cartridge
+	mbc    MBC
+	memory []byte
+	joypad *Joypad
 }
 
 // New creates a new memory unity with default data, i.e. nothing cartridge loaded.
@@ -91,9 +90,9 @@ func (m *MMU) ReadBit(index uint8, addr uint16) bool {
 func (m *MMU) SetBit(index uint8, addr uint16, set bool) {
 	value := m.Read(addr)
 	if set {
-		bit.Set(index, value)
+		value = bit.Set(index, value)
 	} else {
-		bit.Reset(index, value)
+		value = bit.Reset(index, value)
 	}
 	m.Write(addr, value)
 }

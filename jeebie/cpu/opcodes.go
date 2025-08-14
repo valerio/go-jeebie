@@ -1,15 +1,8 @@
 package cpu
 
 import (
-	"fmt"
-
 	"github.com/valerio/go-jeebie/jeebie/bit"
 )
-
-func unimplemented(cpu *CPU) int {
-	msg := fmt.Sprintf("Unimplemented opcode 0x%X was called.", cpu.currentOpcode)
-	panic(msg)
-}
 
 // NOP
 // #0x00:
