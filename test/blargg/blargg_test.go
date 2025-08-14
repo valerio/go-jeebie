@@ -214,7 +214,7 @@ func savePNG(fb *video.FrameBuffer, filename string) error {
 
 func TestBlarggSuite(t *testing.T) {
 	tests := GetBlarggTests()
-	
+
 	for _, testCase := range tests {
 		t.Run(testCase.Name, func(t *testing.T) {
 			runBlarggTest(t, testCase)

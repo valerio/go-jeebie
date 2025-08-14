@@ -1,5 +1,6 @@
-generate: fmt
+generate:
 	cd jeebie/disasm && go generate
+	go fmt ./jeebie/disasm/
 
 build: generate fmt
 	go build -o bin/jeebie ./cmd/jeebie

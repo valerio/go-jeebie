@@ -1,6 +1,6 @@
 module github.com/valerio/go-jeebie
 
-go 1.22
+go 1.23
 
 require (
 	github.com/gdamore/tcell/v2 v2.8.1
