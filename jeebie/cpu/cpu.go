@@ -16,13 +16,6 @@ const (
 	carryFlag          = 0x10
 )
 
-var timerFrequencies = map[uint8]int{
-	0: 1024,
-	1: 16,
-	2: 64,
-	3: 256,
-}
-
 const (
 	baseInterruptAddress uint16 = 0x40
 )
@@ -49,8 +42,6 @@ type CPU struct {
 	halted            bool
 	haltBug           bool // HALT bug: PC doesn't increment properly
 	cycles            uint64
-	divCycles         int
-	timaCycles        int
 
 	memory *memory.MMU
 }
@@ -145,8 +136,6 @@ func (c *CPU) Tick() int {
 		c.eiPending = false
 		c.interruptsEnabled = true
 	}
-
-	c.updateTimers(cycles)
 
 	return cycles
 }
@@ -307,34 +296,6 @@ func (c CPU) getAF() uint16 {
 	return bit.Combine(c.a, c.f)
 }
 
-func (c *CPU) updateTimers(cycles int) {
-	c.divCycles += cycles
-	if c.divCycles >= 256 {
-		c.divCycles -= 256
-		c.memory.Write(addr.DIV, c.memory.Read(addr.DIV)+1)
-	}
-
-	tac := c.memory.Read(addr.TAC)
-	if !bit.IsSet(2, tac) {
-		return
-	}
-
-	c.timaCycles += cycles
-	frequency := timerFrequencies[tac&0x03]
-
-	for c.timaCycles >= frequency {
-		c.timaCycles -= frequency
-		tima := c.memory.Read(addr.TIMA)
-		if tima == 0xFF {
-			tma := c.memory.Read(addr.TMA)
-			c.memory.Write(addr.TIMA, tma)
-			c.memory.RequestInterrupt(addr.TimerInterrupt)
-		} else {
-			c.memory.Write(addr.TIMA, tima+1)
-		}
-	}
-}
-
 // Debug getter methods for register display
 func (c *CPU) GetA() uint8       { return c.a }
 func (c *CPU) GetF() uint8       { return c.f }
@@ -385,9 +346,4 @@ func (c *CPU) GetFlagString() string {
 		flags += "-"
 	}
 	return flags
-}
-
-// ResetTimerCycles resets the TIMA timer cycle counter when TIMA is written to
-func (c *CPU) ResetTimerCycles() {
-	c.timaCycles = 0
 }

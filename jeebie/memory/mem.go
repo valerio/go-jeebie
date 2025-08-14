@@ -62,7 +62,26 @@ func isBetween(addr, start, end uint16) bool {
 // RequestInterrupt sets the interrupt flag (IF register) of the chosen interrupt to 1.
 func (m *MMU) RequestInterrupt(interrupt addr.Interrupt) {
 	interruptFlags := m.Read(addr.IF)
-	m.Write(addr.IF, bit.Set(uint8(interrupt), interruptFlags))
+
+	var bitPos uint8
+	switch interrupt {
+	case addr.VBlankInterrupt:
+		bitPos = 0
+	case addr.LCDSTATInterrupt:
+		bitPos = 1
+	case addr.TimerInterrupt:
+		bitPos = 2
+	case addr.SerialInterrupt:
+		bitPos = 3
+	case addr.JoypadInterrupt:
+		bitPos = 4
+	default:
+		panic(fmt.Sprintf("Unknown interrupt: 0x%02X", uint8(interrupt)))
+	}
+
+	newFlags := bit.Set(bitPos, interruptFlags)
+
+	m.Write(addr.IF, newFlags)
 }
 
 func (m *MMU) ReadBit(index uint8, addr uint16) bool {
@@ -145,7 +164,6 @@ func (m *MMU) Write(addr uint16, value byte) {
 
 	// VRAM
 	if isBetween(addr, 0x8000, 0x9FFF) {
-		slog.Debug("VRAM write", "addr", fmt.Sprintf("0x%04X", addr), "value", fmt.Sprintf("0x%02X", value))
 		m.memory[addr] = value
 		return
 	}
@@ -190,20 +208,6 @@ func (m *MMU) Write(addr uint16, value byte) {
 		if addr == 0xFF00 {
 			m.joypad.Write(value)
 			return
-		}
-		if addr == 0xFF40 {
-			oldLcdc := m.memory[addr]
-			lcdWasEnabled := (oldLcdc & 0x80) != 0
-			lcdNowEnabled := (value & 0x80) != 0
-			if lcdWasEnabled != lcdNowEnabled {
-				slog.Debug("LCD state changed", "enabled", lcdNowEnabled, "LCDC", fmt.Sprintf("0x%02X", value))
-			}
-		}
-		if addr == 0xFF4B { // Window X position (WX)
-			slog.Debug("Window X register", "WX", fmt.Sprintf("0x%02X", value), "actual_x", int(value)-7)
-		}
-		if addr == 0xFF4A { // Window Y position (WY)
-			slog.Debug("Window Y register", "WY", fmt.Sprintf("0x%02X", value))
 		}
 		m.memory[addr] = value
 		return

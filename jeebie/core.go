@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"sync"
 
+	"github.com/valerio/go-jeebie/jeebie/addr"
 	"github.com/valerio/go-jeebie/jeebie/cpu"
 	"github.com/valerio/go-jeebie/jeebie/memory"
 	"github.com/valerio/go-jeebie/jeebie/video"
@@ -27,6 +28,12 @@ type Emulator struct {
 	gpu *video.GPU
 	mem *memory.MMU
 
+	// Timer state
+	systemCounter uint16 // Internal 16-bit counter, DIV is upper 8 bits
+	lastTimerBit  bool   // Previous state of timer bit for edge detection
+	timaOverflow  int    // Cycles remaining in TIMA overflow state
+	timaDelayInt  bool   // Delayed interrupt flag setting (1 M-cycle after TMA load)
+
 	// Debugger state
 	debuggerState    DebuggerState
 	debuggerMutex    sync.RWMutex
@@ -41,6 +48,11 @@ func (e *Emulator) init(mem *memory.MMU) {
 	e.gpu = video.NewGpu(mem)
 	e.mem = mem
 
+	e.systemCounter = 0xABCC
+	e.lastTimerBit = false
+	e.timaOverflow = 0
+	e.timaDelayInt = false
+	mem.Write(addr.DIV, byte(e.systemCounter>>8))
 }
 
 // New creates a new emulator instance
@@ -86,6 +98,7 @@ func (e *Emulator) RunUntilFrame() {
 			// Execute one CPU instruction
 			oldPC := e.cpu.GetPC()
 			cycles := e.cpu.Tick()
+			e.updateTimers(cycles)
 			e.gpu.Tick(cycles)
 			e.instructionCount++
 
@@ -114,6 +127,7 @@ func (e *Emulator) RunUntilFrame() {
 			total := 0
 			for {
 				cycles := e.cpu.Tick()
+				e.updateTimers(cycles)
 				e.gpu.Tick(cycles)
 				e.instructionCount++
 				total += cycles
@@ -133,6 +147,7 @@ func (e *Emulator) RunUntilFrame() {
 	total := 0
 	for {
 		cycles := e.cpu.Tick()
+		e.updateTimers(cycles)
 		e.gpu.Tick(cycles)
 		e.instructionCount++
 
@@ -215,4 +230,63 @@ func (e *Emulator) GetFrameCount() uint64 {
 
 func (e *Emulator) GetMMU() *memory.MMU {
 	return e.mem
+}
+
+func (e *Emulator) updateTimers(cycles int) {
+	if e.timaDelayInt {
+		e.mem.RequestInterrupt(addr.TimerInterrupt)
+		e.timaDelayInt = false
+	}
+
+	if e.timaOverflow > 0 {
+		e.timaOverflow -= cycles
+		if e.timaOverflow <= 0 {
+			tma := e.mem.Read(addr.TMA)
+			e.mem.Write(addr.TIMA, tma)
+			e.timaDelayInt = true
+			e.timaOverflow = 0
+		}
+	}
+
+	for i := 0; i < cycles; i++ {
+		e.systemCounter++
+		e.mem.Write(addr.DIV, byte(e.systemCounter>>8))
+
+		if e.timaOverflow > 0 {
+			continue
+		}
+
+		tac := e.mem.Read(addr.TAC)
+		timerEnabled := (tac & 0x04) != 0
+
+		if timerEnabled {
+			var bitPosition uint
+			switch tac & 0x03 {
+			case 0x00:
+				bitPosition = 9
+			case 0x01:
+				bitPosition = 3
+			case 0x02:
+				bitPosition = 5
+			case 0x03:
+				bitPosition = 7
+			}
+
+			currentTimerBit := (e.systemCounter & (1 << bitPosition)) != 0
+
+			if e.lastTimerBit && !currentTimerBit {
+				currentTima := e.mem.Read(addr.TIMA)
+				if currentTima == 0xFF {
+					e.mem.Write(addr.TIMA, 0x00)
+					e.timaOverflow = 4
+				} else {
+					e.mem.Write(addr.TIMA, currentTima+1)
+				}
+			}
+
+			e.lastTimerBit = currentTimerBit
+		} else {
+			e.lastTimerBit = false
+		}
+	}
 }
