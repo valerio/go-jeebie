@@ -673,7 +673,7 @@ func TestCallRetInstructions(t *testing.T) {
 		mmu.Write(0xC001, 0x34) // low byte
 		mmu.Write(0xC002, 0x12) // high byte
 
-		cpu.pc++ // Advance past opcode byte (simulate Decode)
+		cpu.pc++
 		cycles := opcode0xCD(cpu)
 
 		// Check that PC jumped to destination
@@ -699,7 +699,7 @@ func TestCallRetInstructions(t *testing.T) {
 
 		cpu.pc = 0x1500 // Current PC (irrelevant for RET)
 
-		cpu.pc++ // Advance past opcode byte (simulate Decode)
+		cpu.pc++
 		cycles := opcode0xC9(cpu)
 
 		// Check that PC was set to popped value
@@ -725,7 +725,7 @@ func TestCallRetInstructions(t *testing.T) {
 		mmu.Write(0xC001, 0x78) // low byte
 		mmu.Write(0xC002, 0x56) // high byte
 
-		cpu.pc++ // Advance past opcode byte (simulate Decode)
+		cpu.pc++
 		cycles := opcode0xC4(cpu)
 
 		// Should execute the call
@@ -749,7 +749,7 @@ func TestCallRetInstructions(t *testing.T) {
 		mmu.Write(0xC001, 0x78) // low byte
 		mmu.Write(0xC002, 0x56) // high byte
 
-		cpu.pc++ // Advance past opcode byte (simulate Decode)
+		cpu.pc++
 		cycles := opcode0xC4(cpu)
 
 		// Should NOT execute the call, just skip operand
@@ -771,7 +771,7 @@ func TestCallRetInstructions(t *testing.T) {
 		mmu.Write(0xC001, 0x78)
 		mmu.Write(0xC002, 0x56)
 
-		cpu.pc++ // Advance past opcode byte (simulate Decode)
+		cpu.pc++
 		cycles := opcode0xCC(cpu)
 
 		// Should execute the call
@@ -795,7 +795,7 @@ func TestCallRetInstructions(t *testing.T) {
 		mmu.Write(0xC001, 0xAB)
 		mmu.Write(0xC002, 0xCD)
 
-		cpu.pc++ // Advance past opcode byte (simulate Decode)
+		cpu.pc++
 		cycles := opcode0xD4(cpu)
 
 		// Should execute the call
@@ -817,7 +817,7 @@ func TestCallRetInstructions(t *testing.T) {
 		mmu.Write(0xC001, 0xEF)
 		mmu.Write(0xC002, 0xBE)
 
-		cpu.pc++ // Advance past opcode byte (simulate Decode)
+		cpu.pc++
 		cycles := opcode0xDC(cpu)
 
 		// Should execute the call
@@ -842,13 +842,13 @@ func TestCallRetInstructions(t *testing.T) {
 		mmu.Write(0xC200, 0xC9)
 
 		// Execute CALL
-		cpu.pc++ // Advance past opcode byte (simulate Decode)
+		cpu.pc++
 		opcode0xCD(cpu)
 		assert.Equal(t, uint16(0xC200), cpu.pc)
 		assert.Equal(t, uint16(0xFFFC), cpu.sp)
 
 		// Execute RET
-		cpu.pc++ // Advance past opcode byte (simulate Decode)
+		cpu.pc++
 		opcode0xC9(cpu)
 		assert.Equal(t, uint16(0xC103), cpu.pc) // Should return to instruction after CALL
 		assert.Equal(t, uint16(0xFFFE), cpu.sp)
