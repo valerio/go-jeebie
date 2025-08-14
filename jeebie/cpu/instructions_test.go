@@ -88,7 +88,7 @@ func TestCPU_rlc(t *testing.T) {
 		{desc: "rotates left", reg: &cpu.a, arg: 0x01, want: 0x02},
 		{desc: "sets carry flag", reg: &cpu.a, arg: 0x80, want: 0x01, flags: carryFlag},
 		{desc: "sets zero flag", reg: &cpu.b, arg: 0, want: 0, flags: zeroFlag},
-		{desc: "does not set zero for register A", reg: &cpu.a, arg: 0, want: 0},
+		{desc: "sets zero flag for register A", reg: &cpu.a, arg: 0, want: 0, flags: zeroFlag},
 	}
 	for _, tC := range testCases {
 		t.Run(tC.desc, func(t *testing.T) {
@@ -115,9 +115,9 @@ func TestCPU_rl(t *testing.T) {
 	}{
 		{desc: "rotates left", reg: &cpu.a, arg: 0x01, want: 0x02},
 		{desc: "adds carry bit", reg: &cpu.a, arg: 0x01, want: 0x03, initialFlags: carryFlag},
-		{desc: "sets carry flag", reg: &cpu.a, arg: 0x80, want: 0, flags: carryFlag},
+		{desc: "sets carry flag", reg: &cpu.a, arg: 0x80, want: 0, flags: carryFlag | zeroFlag},
 		{desc: "sets zero flag", reg: &cpu.b, arg: 0, want: 0, flags: zeroFlag},
-		{desc: "does not set zero for register A", reg: &cpu.a, arg: 0, want: 0},
+		{desc: "sets zero flag for register A", reg: &cpu.a, arg: 0, want: 0, flags: zeroFlag},
 	}
 	for _, tC := range testCases {
 		t.Run(tC.desc, func(t *testing.T) {
@@ -144,7 +144,7 @@ func TestCPU_rrc(t *testing.T) {
 		{desc: "rotates right", reg: &cpu.a, arg: 0x02, want: 0x01},
 		{desc: "sets carry flag", reg: &cpu.a, arg: 0x01, want: 0x80, flags: carryFlag},
 		{desc: "sets zero flag", reg: &cpu.b, arg: 0, want: 0, flags: zeroFlag},
-		{desc: "does not set zero for register A", reg: &cpu.a, arg: 0, want: 0},
+		{desc: "sets zero flag for register A", reg: &cpu.a, arg: 0, want: 0, flags: zeroFlag},
 	}
 	for _, tC := range testCases {
 		t.Run(tC.desc, func(t *testing.T) {
@@ -171,9 +171,9 @@ func TestCPU_rr(t *testing.T) {
 	}{
 		{desc: "rotates right", reg: &cpu.a, arg: 0x02, want: 0x01},
 		{desc: "adds carry bit", reg: &cpu.a, arg: 0x02, want: 0x81, initialFlags: carryFlag},
-		{desc: "sets carry flag", reg: &cpu.a, arg: 1, want: 0, flags: carryFlag},
+		{desc: "sets carry flag", reg: &cpu.a, arg: 1, want: 0, flags: carryFlag | zeroFlag},
 		{desc: "sets zero flag", reg: &cpu.b, arg: 0, want: 0, flags: zeroFlag},
-		{desc: "does not set zero for register A", reg: &cpu.a, arg: 0, want: 0},
+		{desc: "sets zero flag for register A", reg: &cpu.a, arg: 0, want: 0, flags: zeroFlag},
 	}
 	for _, tC := range testCases {
 		t.Run(tC.desc, func(t *testing.T) {
@@ -665,13 +665,15 @@ func TestCallRetInstructions(t *testing.T) {
 		mmu := memory.New()
 		cpu := New(mmu)
 
-		cpu.pc = 0xC001 // PC should point to first operand (after decode)
+		cpu.pc = 0xC000
 		cpu.sp = 0xFFFE
 
-		// Setup CALL nn operand bytes: 34 12 (CALL 0x1234)
+		// Setup CALL nn instruction: CD 34 12 (CALL 0x1234)
+		mmu.Write(0xC000, 0xCD) // opcode
 		mmu.Write(0xC001, 0x34) // low byte
 		mmu.Write(0xC002, 0x12) // high byte
 
+		cpu.pc++ // Advance past opcode byte (simulate Decode)
 		cycles := opcode0xCD(cpu)
 
 		// Check that PC jumped to destination
@@ -697,6 +699,7 @@ func TestCallRetInstructions(t *testing.T) {
 
 		cpu.pc = 0x1500 // Current PC (irrelevant for RET)
 
+		cpu.pc++ // Advance past opcode byte (simulate Decode)
 		cycles := opcode0xC9(cpu)
 
 		// Check that PC was set to popped value
@@ -713,22 +716,23 @@ func TestCallRetInstructions(t *testing.T) {
 		mmu := memory.New()
 		cpu := New(mmu)
 
-		cpu.pc = 0x1000
+		cpu.pc = 0xC000
 		cpu.sp = 0xFFFE
 		cpu.f = 0 // Zero flag not set
 
 		// Setup CALL NZ,nn instruction: C4 78 56 (CALL NZ,0x5678)
-		mmu.Write(0x1000, 0xC4)
-		mmu.Write(0x1001, 0x78) // low byte
-		mmu.Write(0x1002, 0x56) // high byte
+		mmu.Write(0xC000, 0xC4)
+		mmu.Write(0xC001, 0x78) // low byte
+		mmu.Write(0xC002, 0x56) // high byte
 
+		cpu.pc++ // Advance past opcode byte (simulate Decode)
 		cycles := opcode0xC4(cpu)
 
 		// Should execute the call
 		assert.Equal(t, uint16(0x5678), cpu.pc)
 		assert.Equal(t, uint16(0xFFFC), cpu.sp)
 		assert.Equal(t, uint8(0x03), mmu.Read(0xFFFC)) // return address low
-		assert.Equal(t, uint8(0x10), mmu.Read(0xFFFD)) // return address high
+		assert.Equal(t, uint8(0xC0), mmu.Read(0xFFFD)) // return address high
 		assert.Equal(t, 24, cycles)
 	})
 
@@ -736,19 +740,20 @@ func TestCallRetInstructions(t *testing.T) {
 		mmu := memory.New()
 		cpu := New(mmu)
 
-		cpu.pc = 0x1000
+		cpu.pc = 0xC000
 		cpu.sp = 0xFFFE
 		cpu.f = uint8(zeroFlag) // Zero flag set
 
 		// Setup CALL NZ,nn instruction: C4 78 56 (CALL NZ,0x5678)
-		mmu.Write(0x1000, 0xC4)
-		mmu.Write(0x1001, 0x78) // low byte
-		mmu.Write(0x1002, 0x56) // high byte
+		mmu.Write(0xC000, 0xC4)
+		mmu.Write(0xC001, 0x78) // low byte
+		mmu.Write(0xC002, 0x56) // high byte
 
+		cpu.pc++ // Advance past opcode byte (simulate Decode)
 		cycles := opcode0xC4(cpu)
 
 		// Should NOT execute the call, just skip operand
-		assert.Equal(t, uint16(0x1003), cpu.pc) // PC advanced by 3
+		assert.Equal(t, uint16(0xC003), cpu.pc) // PC advanced by 3
 		assert.Equal(t, uint16(0xFFFE), cpu.sp) // SP unchanged
 		assert.Equal(t, 12, cycles)
 	})
@@ -757,22 +762,23 @@ func TestCallRetInstructions(t *testing.T) {
 		mmu := memory.New()
 		cpu := New(mmu)
 
-		cpu.pc = 0x1000
+		cpu.pc = 0xC000
 		cpu.sp = 0xFFFE
 		cpu.f = uint8(zeroFlag) // Zero flag set
 
 		// Setup CALL Z,nn instruction: CC 78 56 (CALL Z,0x5678)
-		mmu.Write(0x1000, 0xCC)
-		mmu.Write(0x1001, 0x78)
-		mmu.Write(0x1002, 0x56)
+		mmu.Write(0xC000, 0xCC)
+		mmu.Write(0xC001, 0x78)
+		mmu.Write(0xC002, 0x56)
 
+		cpu.pc++ // Advance past opcode byte (simulate Decode)
 		cycles := opcode0xCC(cpu)
 
 		// Should execute the call
 		assert.Equal(t, uint16(0x5678), cpu.pc)
 		assert.Equal(t, uint16(0xFFFC), cpu.sp)
 		assert.Equal(t, uint8(0x03), mmu.Read(0xFFFC))
-		assert.Equal(t, uint8(0x10), mmu.Read(0xFFFD))
+		assert.Equal(t, uint8(0xC0), mmu.Read(0xFFFD))
 		assert.Equal(t, 24, cycles)
 	})
 
@@ -780,15 +786,16 @@ func TestCallRetInstructions(t *testing.T) {
 		mmu := memory.New()
 		cpu := New(mmu)
 
-		cpu.pc = 0x1000
+		cpu.pc = 0xC000
 		cpu.sp = 0xFFFE
 		cpu.f = 0 // Carry flag not set
 
 		// Setup CALL NC,nn instruction: D4 AB CD
-		mmu.Write(0x1000, 0xD4)
-		mmu.Write(0x1001, 0xAB)
-		mmu.Write(0x1002, 0xCD)
+		mmu.Write(0xC000, 0xD4)
+		mmu.Write(0xC001, 0xAB)
+		mmu.Write(0xC002, 0xCD)
 
+		cpu.pc++ // Advance past opcode byte (simulate Decode)
 		cycles := opcode0xD4(cpu)
 
 		// Should execute the call
@@ -801,15 +808,16 @@ func TestCallRetInstructions(t *testing.T) {
 		mmu := memory.New()
 		cpu := New(mmu)
 
-		cpu.pc = 0x1000
+		cpu.pc = 0xC000
 		cpu.sp = 0xFFFE
 		cpu.f = uint8(carryFlag) // Carry flag set
 
 		// Setup CALL C,nn instruction: DC EF BE
-		mmu.Write(0x1000, 0xDC)
-		mmu.Write(0x1001, 0xEF)
-		mmu.Write(0x1002, 0xBE)
+		mmu.Write(0xC000, 0xDC)
+		mmu.Write(0xC001, 0xEF)
+		mmu.Write(0xC002, 0xBE)
 
+		cpu.pc++ // Advance past opcode byte (simulate Decode)
 		cycles := opcode0xDC(cpu)
 
 		// Should execute the call
@@ -822,25 +830,27 @@ func TestCallRetInstructions(t *testing.T) {
 		mmu := memory.New()
 		cpu := New(mmu)
 
-		cpu.pc = 0x0100
+		cpu.pc = 0xC100
 		cpu.sp = 0xFFFE
 
-		// Setup CALL 0x0200 at 0x0100
-		mmu.Write(0x0100, 0xCD)
-		mmu.Write(0x0101, 0x00)
-		mmu.Write(0x0102, 0x02)
+		// Setup CALL 0xC200 at 0xC100
+		mmu.Write(0xC100, 0xCD)
+		mmu.Write(0xC101, 0x00)
+		mmu.Write(0xC102, 0xC2)
 
-		// Setup RET at 0x0200
-		mmu.Write(0x0200, 0xC9)
+		// Setup RET at 0xC200
+		mmu.Write(0xC200, 0xC9)
 
 		// Execute CALL
+		cpu.pc++ // Advance past opcode byte (simulate Decode)
 		opcode0xCD(cpu)
-		assert.Equal(t, uint16(0x0200), cpu.pc)
+		assert.Equal(t, uint16(0xC200), cpu.pc)
 		assert.Equal(t, uint16(0xFFFC), cpu.sp)
 
 		// Execute RET
+		cpu.pc++ // Advance past opcode byte (simulate Decode)
 		opcode0xC9(cpu)
-		assert.Equal(t, uint16(0x0103), cpu.pc) // Should return to instruction after CALL
+		assert.Equal(t, uint16(0xC103), cpu.pc) // Should return to instruction after CALL
 		assert.Equal(t, uint16(0xFFFE), cpu.sp)
 	})
 }
