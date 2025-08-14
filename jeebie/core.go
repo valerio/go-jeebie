@@ -22,6 +22,30 @@ const (
 	DebuggerStepFrame                      // Execute one frame then pause
 )
 
+// TestCompletionDetector tracks execution patterns to detect when tests finish
+type TestCompletionDetector struct {
+	MaxCycles       uint64 // Safety timeout in total cycles
+	MaxFrames       uint64 // Alternative safety timeout in frames
+	PatternCycles   uint64 // Cycles to confirm loop pattern
+	LastPC          uint16 // Track PC for loop detection
+	LoopCount       int    // Count consecutive loops at same PC
+	MinLoopCount    int    // Minimum loops to confirm completion
+	LastInstruction uint8  // Last executed instruction
+	LastOperand     uint8  // Last operand for JR -2 detection
+	Enabled         bool   // Whether detection is active
+}
+
+// NewTestCompletionDetector creates a detector with reasonable defaults
+func NewTestCompletionDetector() *TestCompletionDetector {
+	return &TestCompletionDetector{
+		MaxCycles:     70224 * 1000, // ~1000 frames worth of cycles
+		MaxFrames:     1000,         // 1000 frames max
+		PatternCycles: 70224,        // At least one frame of looping
+		MinLoopCount:  100,          // 100 consecutive loops
+		Enabled:       true,
+	}
+}
+
 // Emulator represents the root struct and entry point for running the emulation
 type Emulator struct {
 	cpu *cpu.CPU
@@ -41,6 +65,9 @@ type Emulator struct {
 	frameRequested   bool
 	instructionCount uint64
 	frameCount       uint64
+
+	// Test completion detection
+	completionDetector *TestCompletionDetector
 }
 
 func (e *Emulator) init(mem *memory.MMU) {
@@ -52,6 +79,7 @@ func (e *Emulator) init(mem *memory.MMU) {
 	e.lastTimerBit = false
 	e.timaOverflow = 0
 	e.timaDelayInt = false
+	e.completionDetector = NewTestCompletionDetector()
 	mem.Write(addr.DIV, byte(e.systemCounter>>8))
 }
 
@@ -289,4 +317,91 @@ func (e *Emulator) updateTimers(cycles int) {
 			e.lastTimerBit = false
 		}
 	}
+}
+
+// UpdateCompletionDetection updates the completion detector with current execution state
+func (e *Emulator) UpdateCompletionDetection() {
+	if !e.completionDetector.Enabled {
+		return
+	}
+
+	currentPC := e.cpu.GetPC()
+
+	// Check for JR -2 pattern (0x18, 0xFE)
+	if currentPC == e.completionDetector.LastPC {
+		// Same PC, increment loop count
+		e.completionDetector.LoopCount++
+	} else {
+		// Different PC, reset loop count
+		e.completionDetector.LoopCount = 0
+		e.completionDetector.LastPC = currentPC
+	}
+
+	// Additional check for JR -2 instruction pattern
+	instruction := e.mem.Read(currentPC)
+	if instruction == 0x18 { // JR instruction
+		operand := e.mem.Read(currentPC + 1)
+		if operand == 0xFE { // -2 in two's complement
+			e.completionDetector.LastInstruction = instruction
+			e.completionDetector.LastOperand = operand
+		}
+	}
+}
+
+// IsTestComplete checks if the test appears to have completed
+func (e *Emulator) IsTestComplete() bool {
+	if !e.completionDetector.Enabled {
+		return false
+	}
+
+	detector := e.completionDetector
+
+	// Safety timeout based on total cycles
+	totalCycles := e.cpu.GetCycles()
+	if totalCycles >= detector.MaxCycles {
+		slog.Debug("Test completion: cycle timeout reached", "cycles", totalCycles, "max", detector.MaxCycles)
+		return true
+	}
+
+	// Safety timeout based on frames
+	if e.frameCount >= detector.MaxFrames {
+		slog.Debug("Test completion: frame timeout reached", "frames", e.frameCount, "max", detector.MaxFrames)
+		return true
+	}
+
+	// Check for JR -2 loop pattern
+	if detector.LoopCount >= detector.MinLoopCount {
+		currentPC := e.cpu.GetPC()
+		instruction := e.mem.Read(currentPC)
+		operand := e.mem.Read(currentPC + 1)
+
+		if instruction == 0x18 && operand == 0xFE {
+			slog.Debug("Test completion: JR -2 loop detected", "pc", fmt.Sprintf("0x%04X", currentPC), "loops", detector.LoopCount)
+			return true
+		}
+	}
+
+	return false
+}
+
+// RunUntilComplete runs the emulator until test completion is detected
+func (e *Emulator) RunUntilComplete() {
+	for !e.IsTestComplete() {
+		e.UpdateCompletionDetection()
+		e.RunUntilFrame()
+	}
+
+	slog.Info("Test completed", "frames", e.frameCount, "instructions", e.instructionCount)
+}
+
+// EnableCompletionDetection enables or disables test completion detection
+func (e *Emulator) EnableCompletionDetection(enabled bool) {
+	e.completionDetector.Enabled = enabled
+}
+
+// ConfigureCompletionDetection allows customizing completion detection parameters
+func (e *Emulator) ConfigureCompletionDetection(maxFrames uint64, minLoopCount int) {
+	e.completionDetector.MaxFrames = maxFrames
+	e.completionDetector.MaxCycles = maxFrames * 70224
+	e.completionDetector.MinLoopCount = minLoopCount
 }

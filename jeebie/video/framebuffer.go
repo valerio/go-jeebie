@@ -92,3 +92,37 @@ func (fb *FrameBuffer) DrawNoise() {
 		fb.buffer[i] = uint32(color)
 	}
 }
+
+// ToBinaryData returns the framebuffer as raw binary data for test comparison
+func (fb *FrameBuffer) ToBinaryData() []byte {
+	data := make([]byte, len(fb.buffer)*4)
+	for i, pixel := range fb.buffer {
+		// Convert uint32 pixel to 4 bytes (RGBA format)
+		data[i*4] = byte(pixel >> 24)   // R
+		data[i*4+1] = byte(pixel >> 16) // G
+		data[i*4+2] = byte(pixel >> 8)  // B
+		data[i*4+3] = byte(pixel)       // A
+	}
+	return data
+}
+
+// ToGrayscale converts the framebuffer to grayscale values for simpler comparison
+func (fb *FrameBuffer) ToGrayscale() []byte {
+	data := make([]byte, len(fb.buffer))
+	for i, pixel := range fb.buffer {
+		// Convert Game Boy colors to grayscale values (0-3)
+		switch GBColor(pixel) {
+		case BlackColor:
+			data[i] = 0
+		case DarkGreyColor:
+			data[i] = 1
+		case LightGreyColor:
+			data[i] = 2
+		case WhiteColor:
+			data[i] = 3
+		default:
+			data[i] = 0
+		}
+	}
+	return data
+}
