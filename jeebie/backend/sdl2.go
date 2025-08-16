@@ -4,7 +4,12 @@ package backend
 
 import (
 	"fmt"
+	"image"
+	"image/png"
 	"log/slog"
+	"os"
+	"path/filepath"
+	"time"
 	"unsafe"
 
 	"github.com/valerio/go-jeebie/jeebie/display"
@@ -34,6 +39,9 @@ type SDL2Backend struct {
 	testPatternFrame *video.FrameBuffer
 	testPatternType  int
 	testFrameCount   int
+
+	// Snapshot state
+	lastFrameData []uint32 // Store last frame data for snapshot generation
 }
 
 // NewSDL2Backend creates a new SDL2 backend
@@ -179,6 +187,8 @@ func (s *SDL2Backend) handleKeyDown(key sdl.Keycode) {
 			if s.callbacks.OnQuit != nil {
 				s.callbacks.OnQuit()
 			}
+		case sdl.K_F12:
+			s.takeSnapshot()
 		}
 		return
 	}
@@ -226,6 +236,8 @@ func (s *SDL2Backend) handleKeyDown(key sdl.Keycode) {
 		if s.callbacks.OnDebugMessage != nil {
 			s.callbacks.OnDebugMessage("debug:toggle_pause")
 		}
+	case sdl.K_F12:
+		s.takeSnapshot()
 	}
 }
 
@@ -274,8 +286,9 @@ func (s *SDL2Backend) handleKeyUp(key sdl.Keycode) {
 func (s *SDL2Backend) renderFrame(frame *video.FrameBuffer) {
 	frameData := frame.ToSlice()
 
-	// Convert Game Boy pixels to RGBA8888 format
-	pixels := make([]byte, video.FramebufferWidth*video.FramebufferHeight*display.RGBABytesPerPixel)
+	// Convert to ABGR byte order for little-endian RGBA8888
+	sdlPixels := make([]byte, video.FramebufferWidth*video.FramebufferHeight*display.RGBABytesPerPixel)
+
 	for y := 0; y < video.FramebufferHeight; y++ {
 		for x := 0; x < video.FramebufferWidth; x++ {
 			srcIdx := y*video.FramebufferWidth + x
@@ -284,15 +297,19 @@ func (s *SDL2Backend) renderFrame(frame *video.FrameBuffer) {
 			gbPixel := frameData[srcIdx]
 			r, g, b, a := s.gbColorToRGBA(gbPixel)
 
-			pixels[dstIdx] = byte(r)   // Red
-			pixels[dstIdx+1] = byte(g) // Green
-			pixels[dstIdx+2] = byte(b) // Blue
-			pixels[dstIdx+3] = byte(a) // Alpha
+			// ABGR byte order for little-endian RGBA8888
+			sdlPixels[dstIdx] = byte(a)   // Alpha (first byte)
+			sdlPixels[dstIdx+1] = byte(b) // Blue
+			sdlPixels[dstIdx+2] = byte(g) // Green
+			sdlPixels[dstIdx+3] = byte(r) // Red (last byte)
 		}
 	}
 
-	// Update texture with new pixel data
-	s.texture.Update(nil, unsafe.Pointer(&pixels[0]), video.FramebufferWidth*display.RGBABytesPerPixel)
+	// Store framebuffer data for potential snapshot generation
+	s.lastFrameData = frameData
+
+	// Update texture with SDL2 pixel data
+	s.texture.Update(nil, unsafe.Pointer(&sdlPixels[0]), video.FramebufferWidth*display.RGBABytesPerPixel)
 
 	// Clear renderer and draw texture scaled up
 	s.renderer.SetDrawColor(display.GrayscaleBlack, display.GrayscaleBlack, display.GrayscaleBlack, display.FullAlpha)
@@ -303,13 +320,7 @@ func (s *SDL2Backend) renderFrame(frame *video.FrameBuffer) {
 
 // gbColorToRGBA converts a Game Boy color value to RGBA components
 func (s *SDL2Backend) gbColorToRGBA(gbColor uint32) (r, g, b, a uint8) {
-	// Extract color components (assuming RGBA format)
-	r = uint8((gbColor >> display.RGBARShift) & display.RGBAColorMask)
-	g = uint8((gbColor >> display.RGBAGShift) & display.RGBAColorMask)
-	b = uint8((gbColor >> display.RGBABShift) & display.RGBAColorMask)
-	a = uint8(gbColor & display.RGBAColorMask)
-
-	// Map Game Boy colors to grayscale values if needed
+	// Always map to proper Game Boy grayscale colors first
 	switch gbColor {
 	case uint32(video.WhiteColor):
 		return display.GrayscaleWhite, display.GrayscaleWhite, display.GrayscaleWhite, display.FullAlpha
@@ -321,7 +332,12 @@ func (s *SDL2Backend) gbColorToRGBA(gbColor uint32) (r, g, b, a uint8) {
 		return display.GrayscaleBlack, display.GrayscaleBlack, display.GrayscaleBlack, display.FullAlpha
 	}
 
-	return r, g, b, a
+	// For any non-standard colors, extract the red channel and convert to grayscale
+	// This handles test pattern gradients properly
+	red := uint8((gbColor >> display.RGBARShift) & display.RGBAColorMask)
+
+	// Convert to grayscale by using the red channel value
+	return red, red, red, display.FullAlpha
 }
 
 // generateTestPattern creates different test patterns
@@ -342,8 +358,19 @@ func (s *SDL2Backend) generateTestPattern(patternType int) {
 	case 1: // Gradient
 		for y := 0; y < video.FramebufferHeight; y++ {
 			for x := 0; x < video.FramebufferWidth; x++ {
-				gray := uint32(x * display.GrayscaleWhite / video.FramebufferWidth)
-				color := video.GBColor((gray << display.RGBARShift) | (gray << display.RGBAGShift) | (gray << display.RGBABShift) | display.FullAlpha)
+				// Map x position to one of the 4 Game Boy colors
+				colorIndex := x * 4 / video.FramebufferWidth
+				var color video.GBColor
+				switch colorIndex {
+				case 0:
+					color = video.BlackColor
+				case 1:
+					color = video.DarkGreyColor
+				case 2:
+					color = video.LightGreyColor
+				default:
+					color = video.WhiteColor
+				}
 				s.testPatternFrame.SetPixel(uint(x), uint(y), color)
 			}
 		}
@@ -403,4 +430,82 @@ func (s *SDL2Backend) animateTestPattern() {
 			}
 		}
 	}
+}
+
+// takeSnapshot saves the current frame as a PNG image file
+func (s *SDL2Backend) takeSnapshot() {
+	// Generate RGBA pixels from stored frame data
+	if s.lastFrameData == nil {
+		slog.Warn("No frame data available for snapshot")
+		return
+	}
+
+	// Convert Game Boy framebuffer to RGBA format for PNG
+	pixels := make([]byte, video.FramebufferWidth*video.FramebufferHeight*display.RGBABytesPerPixel)
+	for y := 0; y < video.FramebufferHeight; y++ {
+		for x := 0; x < video.FramebufferWidth; x++ {
+			srcIdx := y*video.FramebufferWidth + x
+			dstIdx := srcIdx * display.RGBABytesPerPixel
+
+			gbPixel := s.lastFrameData[srcIdx]
+			r, g, b, a := s.gbColorToRGBA(gbPixel)
+
+			pixels[dstIdx] = byte(r)   // Red
+			pixels[dstIdx+1] = byte(g) // Green
+			pixels[dstIdx+2] = byte(b) // Blue
+			pixels[dstIdx+3] = byte(a) // Alpha
+		}
+	}
+
+	// Generate filename with timestamp
+	timestamp := time.Now().Format("20060102_150405")
+	var filename string
+	if s.config.TestPattern {
+		patternNames := []string{"checkerboard", "gradient", "stripes", "diagonal"}
+		filename = fmt.Sprintf("jeebie_snapshot_%s_%s.png", patternNames[s.testPatternType], timestamp)
+	} else {
+		filename = fmt.Sprintf("jeebie_snapshot_%s.png", timestamp)
+	}
+
+	// Get current directory
+	cwd, err := os.Getwd()
+	if err != nil {
+		slog.Error("Failed to get current directory", "error", err)
+		return
+	}
+
+	filePath := filepath.Join(cwd, filename)
+
+	// Create PNG file
+	file, err := os.Create(filePath)
+	if err != nil {
+		slog.Error("Failed to create snapshot file", "path", filePath, "error", err)
+		return
+	}
+	defer file.Close()
+
+	// Create image.RGBA from pixel data
+	img := image.NewRGBA(image.Rect(0, 0, video.FramebufferWidth, video.FramebufferHeight))
+
+	// Copy pixel data - pixels are already in RGBA format
+	for y := 0; y < video.FramebufferHeight; y++ {
+		for x := 0; x < video.FramebufferWidth; x++ {
+			pixelIdx := (y*video.FramebufferWidth + x) * display.RGBABytesPerPixel
+			imgIdx := img.PixOffset(x, y)
+
+			img.Pix[imgIdx] = pixels[pixelIdx]     // R
+			img.Pix[imgIdx+1] = pixels[pixelIdx+1] // G
+			img.Pix[imgIdx+2] = pixels[pixelIdx+2] // B
+			img.Pix[imgIdx+3] = pixels[pixelIdx+3] // A
+		}
+	}
+
+	// Encode as PNG
+	err = png.Encode(file, img)
+	if err != nil {
+		slog.Error("Failed to encode PNG", "error", err)
+		return
+	}
+
+	slog.Info("Snapshot saved", "path", filePath, "size", fmt.Sprintf("%dx%d", video.FramebufferWidth, video.FramebufferHeight), "format", "PNG")
 }
