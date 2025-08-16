@@ -17,6 +17,7 @@
 vendor/
 
 data/docs/
+docs/
 
 # local IDE settings
 .idea

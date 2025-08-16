@@ -47,7 +47,7 @@ func main() {
 		},
 		cli.StringFlag{
 			Name:  "backend",
-			Usage: "Backend to use for rendering (terminal, sdl2, web)",
+			Usage: "Backend to use for rendering (terminal, sdl2)",
 			Value: "terminal",
 		},
 		cli.BoolFlag{
@@ -170,10 +170,12 @@ func createBackend(c *cli.Context, romPath string) (backend.Backend, error) {
 	switch backendName {
 	case "terminal":
 		return backend.NewTerminalBackend(), nil
+	case "sdl2":
+		return backend.NewSDL2Backend(), nil
 	case "headless":
 		return nil, errors.New("use --headless flag instead of --backend=headless")
 	default:
-		return nil, fmt.Errorf("unsupported backend: %s (available: terminal)", backendName)
+		return nil, fmt.Errorf("unsupported backend: %s (available: terminal, sdl2)", backendName)
 	}
 }
 
