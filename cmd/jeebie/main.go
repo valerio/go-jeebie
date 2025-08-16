@@ -5,12 +5,11 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	"path/filepath"
-	"strings"
 
 	"github.com/urfave/cli"
 	"github.com/valerio/go-jeebie/jeebie"
-	"github.com/valerio/go-jeebie/jeebie/render"
+	"github.com/valerio/go-jeebie/jeebie/backend"
+	"github.com/valerio/go-jeebie/jeebie/video"
 )
 
 func main() {
@@ -46,6 +45,15 @@ func main() {
 			Name:  "snapshot-dir",
 			Usage: "Directory to save frame snapshots (default: temp directory)",
 		},
+		cli.StringFlag{
+			Name:  "backend",
+			Usage: "Backend to use for rendering (terminal, sdl2, web)",
+			Value: "terminal",
+		},
+		cli.BoolFlag{
+			Name:  "debug",
+			Usage: "Enable debug information display",
+		},
 	}
 	app.Action = runEmulator
 
@@ -57,136 +65,142 @@ func main() {
 }
 
 func runEmulator(c *cli.Context) error {
-	// Test pattern mode - no ROM needed
-	if c.Bool("test-pattern") {
-		slog.Info("Running in test pattern mode")
-		return render.RunTestPattern()
-	}
+	testPattern := c.Bool("test-pattern")
 
-	romPath := c.String("rom")
-	if romPath == "" {
-		if c.NArg() > 0 {
-			romPath = c.Args().Get(0)
-		} else {
-			cli.ShowAppHelp(c)
-			return errors.New("no ROM path provided")
-		}
-	}
+	var romPath string
+	var emu *jeebie.Emulator
+	var err error
 
-	if c.Bool("headless") {
-		frames := c.Int("frames")
-		if frames <= 0 {
-			return errors.New("headless mode requires --frames option with a positive value")
-		}
-
-		snapshotInterval := c.Int("snapshot-interval")
-		snapshotDir := c.String("snapshot-dir")
-
-		// Set up snapshot directory
-		if snapshotInterval > 0 {
-			if snapshotDir == "" {
-				// Create temp directory
-				tempDir, err := os.MkdirTemp("", "jeebie-snapshots-*")
-				if err != nil {
-					return fmt.Errorf("failed to create snapshot directory: %v", err)
-				}
-				snapshotDir = tempDir
+	if !testPattern {
+		romPath = c.String("rom")
+		if romPath == "" {
+			if c.NArg() > 0 {
+				romPath = c.Args().Get(0)
 			} else {
-				// Create specified directory if it doesn't exist
-				if err := os.MkdirAll(snapshotDir, 0755); err != nil {
-					return fmt.Errorf("failed to create snapshot directory: %v", err)
-				}
+				cli.ShowAppHelp(c)
+				return errors.New("no ROM path provided")
 			}
 		}
 
-		// Set up debug logging for headless mode
-		handler := slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
-			Level: slog.LevelDebug,
-		})
-		logger := slog.New(handler)
-		slog.SetDefault(logger)
-
-		// Extract ROM name for snapshot filenames
-		romName := filepath.Base(romPath)
-		romName = strings.TrimSuffix(romName, filepath.Ext(romName))
-
-		slog.Info("Running headless mode", "frames", frames, "snapshot_interval", snapshotInterval, "snapshot_dir", snapshotDir)
-
-		// Use traditional emulation
-		emu, err := jeebie.NewWithFile(romPath)
+		emu, err = jeebie.NewWithFile(romPath)
 		if err != nil {
 			return err
 		}
-
-		for i := 0; i < frames; i++ {
-			emu.RunUntilFrame()
-
-			// Save snapshot if needed
-			if snapshotInterval > 0 && (i+1)%snapshotInterval == 0 {
-				snapshotPath := filepath.Join(snapshotDir, fmt.Sprintf("%s_frame_%d.txt", romName, i+1))
-				if err := saveFrameSnapshot(emu, snapshotPath); err != nil {
-					slog.Error("Failed to save snapshot", "frame", i+1, "path", snapshotPath, "error", err)
-				} else {
-					slog.Info("Saved frame snapshot", "frame", i+1, "path", snapshotPath)
-				}
-			}
-
-			if i%10 == 0 { // Log progress every 10 frames
-				slog.Info("Frame progress", "completed", i+1, "total", frames)
-			}
-		}
-
-		if snapshotInterval > 0 {
-			slog.Info("Headless execution completed", "frames", frames, "snapshots_saved_to", snapshotDir)
-		} else {
-			slog.Info("Headless execution completed", "frames", frames)
-		}
-		return nil
-	} else {
-		// Interactive mode
-		emu, err := jeebie.NewWithFile(romPath)
-		if err != nil {
-			return err
-		}
-
-		renderer, err := render.NewTerminalRenderer(emu)
-		if err != nil {
-			return err
-		}
-		return renderer.Run()
-	}
-}
-
-// saveFrameSnapshot saves the current frame as a text representation using half-blocks
-func saveFrameSnapshot(emu *jeebie.Emulator, filename string) error {
-	fb := emu.GetCurrentFrame()
-	frame := fb.ToSlice()
-
-	// Create output directory if it doesn't exist
-	if err := os.MkdirAll(filepath.Dir(filename), 0755); err != nil {
-		return fmt.Errorf("failed to create directory: %v", err)
 	}
 
-	file, err := os.Create(filename)
+	emulatorBackend, err := createBackend(c, romPath)
 	if err != nil {
-		return fmt.Errorf("failed to create file: %v", err)
+		return err
 	}
-	defer file.Close()
 
-	// Write header with metadata
-	fmt.Fprintf(file, "# Game Boy Frame Snapshot (Half-Block Rendering)\n")
-	fmt.Fprintf(file, "# Frame: %d, Instructions: %d\n", emu.GetFrameCount(), emu.GetInstructionCount())
-	fmt.Fprintf(file, "# Resolution: 160x144 pixels -> 160x72 text rows\n")
-	fmt.Fprintf(file, "# Characters: ▀ ▄ █ (upper half, lower half, full block)\n")
-	fmt.Fprintf(file, "#\n")
+	running := true
+	callbacks := backend.BackendCallbacks{
+		OnQuit: func() { running = false },
+	}
 
-	// Use shared rendering utility to convert to half-blocks
-	lines := render.RenderFrameToHalfBlocks(frame, 160, 144)
+	// only set up emulator callbacks if we have an emulator
+	if emu != nil {
+		callbacks.OnKeyPress = emu.HandleKeyPress
+		callbacks.OnKeyRelease = emu.HandleKeyRelease
+		callbacks.OnDebugMessage = func(message string) {
+			handleDebugCommand(emu, message)
+		}
+	}
 
-	// Write the rendered lines
-	for _, line := range lines {
-		fmt.Fprintf(file, "%s\n", line)
+	config := backend.BackendConfig{
+		Title:       "Jeebie Game Boy Emulator",
+		Scale:       2,
+		ShowDebug:   c.Bool("debug"),
+		TestPattern: testPattern,
+		Callbacks:   callbacks,
+	}
+
+	if err := emulatorBackend.Init(config); err != nil {
+		return fmt.Errorf("failed to initialize backend: %v", err)
+	}
+	defer emulatorBackend.Cleanup()
+
+	// provide access to emulator state for debugging displays
+	if emu != nil {
+		if terminalBackend, ok := emulatorBackend.(*backend.TerminalBackend); ok {
+			terminalBackend.SetEmulatorState(
+				func() backend.CPUState { return emu.GetCPU() },
+				func() backend.MMUState { return emu.GetMMU() },
+			)
+		}
+	}
+
+	for running {
+		var frame *video.FrameBuffer
+		if emu != nil {
+			emu.RunUntilFrame()
+			frame = emu.GetCurrentFrame()
+		}
+		// frame can be nil for test pattern mode - backends handle this
+
+		if err := emulatorBackend.Update(frame); err != nil {
+			return fmt.Errorf("backend update failed: %v", err)
+		}
 	}
 
 	return nil
+}
+
+func createBackend(c *cli.Context, romPath string) (backend.Backend, error) {
+	if c.Bool("headless") {
+		frames := c.Int("frames")
+		// Test pattern mode doesn't need frames since it exits immediately
+		if frames <= 0 && !c.Bool("test-pattern") {
+			return nil, errors.New("headless mode requires --frames option with a positive value")
+		}
+
+		snapshotConfig, err := backend.CreateSnapshotConfig(
+			c.Int("snapshot-interval"),
+			c.String("snapshot-dir"),
+			romPath,
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		return backend.NewHeadlessBackend(frames, snapshotConfig), nil
+	}
+
+	backendName := c.String("backend")
+	switch backendName {
+	case "terminal":
+		return backend.NewTerminalBackend(), nil
+	case "headless":
+		return nil, errors.New("use --headless flag instead of --backend=headless")
+	default:
+		return nil, fmt.Errorf("unsupported backend: %s (available: terminal)", backendName)
+	}
+}
+
+// handleDebugCommand processes debug commands from backends
+func handleDebugCommand(emu *jeebie.Emulator, command string) {
+	switch command {
+	case "debug:toggle_pause":
+		if emu.GetDebuggerState() == 1 { // DebuggerPaused
+			slog.Info("Debugger: Resuming execution")
+			emu.DebuggerResume()
+		} else {
+			slog.Info("Debugger: Pausing execution")
+			emu.DebuggerPause()
+		}
+	case "debug:step_instruction":
+		slog.Info("Debugger: Step instruction")
+		emu.DebuggerStepInstruction()
+	case "debug:step_frame":
+		slog.Info("Debugger: Step frame")
+		emu.DebuggerStepFrame()
+	case "debug:resume":
+		slog.Info("Debugger: Resume")
+		emu.DebuggerResume()
+	case "debug:pause":
+		slog.Info("Debugger: Pause")
+		emu.DebuggerPause()
+	default:
+		slog.Debug("Unknown debug command", "command", command)
+	}
 }
