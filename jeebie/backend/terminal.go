@@ -10,14 +10,15 @@ import (
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/valerio/go-jeebie/jeebie/disasm"
+	"github.com/valerio/go-jeebie/jeebie/display"
 	"github.com/valerio/go-jeebie/jeebie/memory"
 	"github.com/valerio/go-jeebie/jeebie/render"
 	"github.com/valerio/go-jeebie/jeebie/video"
 )
 
 const (
-	width     = 160
-	height    = 144
+	width     = video.FramebufferWidth
+	height    = video.FramebufferHeight
 	scaleX    = 1
 	scaleY    = 1
 	frameTime = time.Second / 60
@@ -136,7 +137,7 @@ func (t *TerminalBackend) Update(frame *video.FrameBuffer) error {
 	if t.config.TestPattern {
 		t.testFrameCount++
 		// Animate test pattern occasionally
-		if t.testFrameCount%30 == 0 {
+		if t.testFrameCount%display.TestPatternAnimationFrames == 0 {
 			t.animateTestPattern()
 		}
 		renderFrame = t.testPatternFrame
@@ -224,7 +225,7 @@ func (t *TerminalBackend) handleRuneKey(r rune) {
 		// Test pattern specific controls
 		switch r {
 		case 't': // 't' key - cycle test patterns
-			t.testPatternType = (t.testPatternType + 1) % 4
+			t.testPatternType = (t.testPatternType + 1) % display.TestPatternCount
 			t.generateTestPattern(t.testPatternType)
 			patternNames := []string{"Checkerboard", "Gradient", "Stripes", "Diagonal"}
 			slog.Info("Switched to test pattern", "pattern", patternNames[t.testPatternType])
@@ -668,10 +669,10 @@ func (t *TerminalBackend) drawLogs(startX, startY, width, termHeight int) {
 func (t *TerminalBackend) generateTestPattern(patternType int) {
 	switch patternType {
 	case 0: // Checkerboard
-		for y := 0; y < 144; y++ {
-			for x := 0; x < 160; x++ {
+		for y := 0; y < video.FramebufferHeight; y++ {
+			for x := 0; x < video.FramebufferWidth; x++ {
 				var color video.GBColor
-				if ((x/8)+(y/8))%2 == 0 {
+				if ((x/display.TestPatternTileSize)+(y/display.TestPatternTileSize))%2 == 0 {
 					color = video.WhiteColor
 				} else {
 					color = video.BlackColor
@@ -680,18 +681,18 @@ func (t *TerminalBackend) generateTestPattern(patternType int) {
 			}
 		}
 	case 1: // Gradient
-		for y := 0; y < 144; y++ {
-			for x := 0; x < 160; x++ {
-				gray := uint32(x * 255 / 160)
-				color := video.GBColor((gray << 24) | (gray << 16) | (gray << 8) | 255)
+		for y := 0; y < video.FramebufferHeight; y++ {
+			for x := 0; x < video.FramebufferWidth; x++ {
+				gray := uint32(x * display.GrayscaleWhite / video.FramebufferWidth)
+				color := video.GBColor((gray << display.RGBARShift) | (gray << display.RGBAGShift) | (gray << display.RGBABShift) | display.FullAlpha)
 				t.testPatternFrame.SetPixel(uint(x), uint(y), color)
 			}
 		}
 	case 2: // Vertical stripes
-		for y := 0; y < 144; y++ {
-			for x := 0; x < 160; x++ {
+		for y := 0; y < video.FramebufferHeight; y++ {
+			for x := 0; x < video.FramebufferWidth; x++ {
 				var color video.GBColor
-				if (x/4)%2 == 0 {
+				if (x/display.TestPatternStripeWidth)%2 == 0 {
 					color = video.WhiteColor
 				} else {
 					color = video.DarkGreyColor
@@ -700,10 +701,10 @@ func (t *TerminalBackend) generateTestPattern(patternType int) {
 			}
 		}
 	case 3: // Diagonal lines
-		for y := 0; y < 144; y++ {
-			for x := 0; x < 160; x++ {
+		for y := 0; y < video.FramebufferHeight; y++ {
+			for x := 0; x < video.FramebufferWidth; x++ {
 				var color video.GBColor
-				if ((x+y)/8)%2 == 0 {
+				if ((x+y)/display.TestPatternTileSize)%2 == 0 {
 					color = video.LightGreyColor
 				} else {
 					color = video.DarkGreyColor
@@ -716,13 +717,13 @@ func (t *TerminalBackend) generateTestPattern(patternType int) {
 
 // animateTestPattern provides simple animation for test patterns
 func (t *TerminalBackend) animateTestPattern() {
-	frame := t.testFrameCount / 30
+	frame := t.testFrameCount / display.TestPatternAnimationFrames
 	switch t.testPatternType {
 	case 2: // Animate stripes
-		for y := 0; y < 144; y++ {
-			for x := 0; x < 160; x++ {
+		for y := 0; y < video.FramebufferHeight; y++ {
+			for x := 0; x < video.FramebufferWidth; x++ {
 				var color video.GBColor
-				if ((x+frame*2)/4)%2 == 0 {
+				if ((x+frame*display.TestPatternStripeSpeed)/display.TestPatternStripeWidth)%2 == 0 {
 					color = video.WhiteColor
 				} else {
 					color = video.DarkGreyColor
@@ -731,10 +732,10 @@ func (t *TerminalBackend) animateTestPattern() {
 			}
 		}
 	case 3: // Animate diagonal
-		for y := 0; y < 144; y++ {
-			for x := 0; x < 160; x++ {
+		for y := 0; y < video.FramebufferHeight; y++ {
+			for x := 0; x < video.FramebufferWidth; x++ {
 				var color video.GBColor
-				if ((x+y+frame*4)/8)%2 == 0 {
+				if ((x+y+frame*display.TestPatternDiagonalSpeed)/display.TestPatternTileSize)%2 == 0 {
 					color = video.LightGreyColor
 				} else {
 					color = video.DarkGreyColor
