@@ -21,20 +21,7 @@ jobs:
       uses: actions/setup-go@v4
       with:
         go-version: ${{ env.GO_VERSION }}
-    
-    - name: Cache Go modules
-      uses: actions/cache@v3
-      with:
-        path: ~/go/pkg/mod
-        key: ${{ runner.os }}-go-mod-${{ hashFiles('**/go.sum') }}
-        restore-keys: ${{ runner.os }}-go-mod-
-    
-    - name: Cache Go build
-      uses: actions/cache@v3
-      with:
-        path: ~/.cache/go-build
-        key: ${{ runner.os }}-go-build-${{ hashFiles('**/*.go') }}
-        restore-keys: ${{ runner.os }}-go-build-
+        cache: true
     
     - name: Go mod download
       run: go mod download
@@ -78,37 +65,20 @@ jobs:
       uses: actions/setup-go@v4
       with:
         go-version: ${{ env.GO_VERSION }}
-    
-    - name: Cache Go modules
-      uses: actions/cache@v3
-      with:
-        path: ~/go/pkg/mod
-        key: ${{ runner.os }}-go-mod-${{ hashFiles('**/go.sum') }}
-        restore-keys: ${{ runner.os }}-go-mod-
-    
-    - name: Cache Go build
-      uses: actions/cache@v3
-      with:
-        path: ~/.cache/go-build
-        key: ${{ runner.os }}-go-build-${{ hashFiles('**/*.go') }}
-        restore-keys: |
-          ${{ runner.os }}-go-build-
-          ${{ runner.os }}-go-build-sdl2-
-    
-    - name: Cache SDL2 Ubuntu packages
-      if: matrix.os == 'ubuntu-latest'
-      uses: actions/cache@v3
-      with:
-        path: |
-          /var/cache/apt/archives
-          /var/lib/apt/lists
-        key: ubuntu-sdl2-${{ env.SDL2_VERSION }}
-        restore-keys: ubuntu-sdl2-
+        cache: true
     
     - name: Install SDL2 dependencies (Ubuntu)
       if: matrix.os == 'ubuntu-latest'
       run: sudo apt update && sudo apt install -y libsdl2-dev
     
+    - name: Cache Homebrew (macOS)
+      if: matrix.os == 'macos-latest'
+      uses: actions/cache@v3
+      with:
+        path: ~/Library/Caches/Homebrew
+        key: macos-brew-${{ env.SDL2_VERSION }}
+        restore-keys: macos-brew-
+        
     - name: Install SDL2 dependencies (macOS)
       if: matrix.os == 'macos-latest'
       run: brew install sdl2
