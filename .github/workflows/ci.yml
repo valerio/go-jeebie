@@ -116,8 +116,8 @@ jobs:
     - name: Install build dependencies (Ubuntu)
       if: matrix.os == 'ubuntu-latest'
       run: |
-        echo "=== Installing build essentials only ==="
-        time sudo apt update && sudo apt install -y build-essential
+        echo "=== Installing build essentials and X11 headers ==="
+        time sudo apt update && sudo apt install -y build-essential libx11-dev
     
     - name: Install SDL2 dependencies (macOS)
       if: matrix.os == 'macos-latest'
