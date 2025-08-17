@@ -72,52 +72,37 @@ jobs:
       uses: msys2/setup-msys2@v2
       with:
         msystem: MINGW64
-        update: true
+        update: false
         install: >-
           mingw-w64-x86_64-gcc
-          mingw-w64-x86_64-go
           mingw-w64-x86_64-SDL2
           mingw-w64-x86_64-pkg-config
     
     - name: Cache CGO build artifacts
-      uses: actions/cache@v3
+      uses: actions/cache@v4
       with:
         path: |
           ~/.cache/go-build
           ~/go/pkg/mod
-        key: ${{ runner.os }}-cgo-${{ hashFiles('**/go.sum') }}-${{ env.SDL2_VERSION }}
+        key: ${{ runner.os }}-cgo-${{ hashFiles('**/go.sum') }}-${{ env.SDL2_VERSION }}-v2
         restore-keys: |
+          ${{ runner.os }}-cgo-${{ hashFiles('**/go.sum') }}-${{ env.SDL2_VERSION }}-
           ${{ runner.os }}-cgo-${{ hashFiles('**/go.sum') }}-
-          ${{ runner.os }}-cgo-
         
     - name: Verify Go cache setup (Windows)
       if: matrix.os == 'windows-latest'
       shell: msys2 {0}
-      run: |
-        echo "=== System info ==="
-        nproc
-        echo "=== Go cache paths ==="
-        go env GOCACHE GOMODCACHE
-        echo "=== Cache directories ==="
-        ls -la $(go env GOCACHE) 2>/dev/null | head -5 || echo "Build cache empty"
-        ls -la $(go env GOMODCACHE) 2>/dev/null | head -5 || echo "Module cache empty"
+      run: go env GOCACHE GOMODCACHE
         
     - name: Verify Go cache setup (Unix)
       if: matrix.os != 'windows-latest'
-      run: |
-        echo "=== System info ==="
-        nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo "CPU count unknown"
-        echo "=== Go cache paths ==="
-        go env GOCACHE GOMODCACHE
-        echo "=== Cache directories ==="
-        ls -la $(go env GOCACHE) 2>/dev/null | head -5 || echo "Build cache empty"
-        ls -la $(go env GOMODCACHE) 2>/dev/null | head -5 || echo "Module cache empty"
+      run: go env GOCACHE GOMODCACHE
     
-    - name: Install build dependencies (Ubuntu)
+    - name: Install SDL2 dependencies (Ubuntu)
       if: matrix.os == 'ubuntu-latest'
       run: |
-        echo "=== Installing build essentials and X11 headers ==="
-        time sudo apt update && sudo apt install -y build-essential libx11-dev
+        sudo apt update -qq
+        sudo apt install -y libsdl2-dev libsdl2-2.0-0
     
     - name: Install SDL2 dependencies (macOS)
       if: matrix.os == 'macos-latest'
@@ -130,11 +115,7 @@ jobs:
       
     - name: Go mod download (Unix)
       if: matrix.os != 'windows-latest'
-      run: |
-        echo "=== Go environment ==="
-        go env GOCACHE GOMODCACHE
-        echo "=== Module download ==="
-        time go mod download
+      run: go mod download
     
     - name: Build SDL2 variant (Windows)
       if: matrix.os == 'windows-latest'
@@ -149,13 +130,9 @@ jobs:
       env:
         GOMAXPROCS: 4
         CGO_ENABLED: 1
+        CGO_LDFLAGS: "-static-libgcc"
       run: |
-        echo "=== Build cache status ==="
-        ls -la ~/.cache/go-build/ 2>/dev/null | head -10 || echo "No build cache found"
-        echo "=== Module cache status ==="
-        ls -la ~/go/pkg/mod/ 2>/dev/null | head -10 || echo "No module cache found"
-        echo "=== Building with SDL2 (static) ==="
-        time go build -v -tags "sdl2 static" -ldflags "-s -w" -o bin/jeebie ./cmd/jeebie
+        go build -tags "sdl2 static" -ldflags "-s -w -extldflags '-static'" -o bin/jeebie ./cmd/jeebie
         
     - name: Build SDL2 variant (macOS - Dynamic)
       if: matrix.os == 'macos-latest'
@@ -163,12 +140,7 @@ jobs:
         GOMAXPROCS: 4
         CGO_ENABLED: 1
       run: |
-        echo "=== Build cache status ==="
-        ls -la ~/.cache/go-build/ 2>/dev/null | head -10 || echo "No build cache found"
-        echo "=== Module cache status ==="
-        ls -la ~/go/pkg/mod/ 2>/dev/null | head -10 || echo "No module cache found"
-        echo "=== Building with SDL2 (dynamic) ==="
-        time go build -v -tags sdl2 -o bin/jeebie ./cmd/jeebie
+        go build -tags sdl2 -o bin/jeebie ./cmd/jeebie
     
     - name: Run core tests (Windows)
       if: matrix.os == 'windows-latest'
