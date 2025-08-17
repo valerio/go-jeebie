@@ -6,7 +6,12 @@ on:
   pull_request:
     branches: [ master ]
 
+env:
+  GO_VERSION: '1.23'
+  SDL2_VERSION: '2.30.9'
+
 jobs:
+  # Core tests - run on Ubuntu only to save CI minutes
   test:
     runs-on: ubuntu-latest
     
@@ -16,7 +21,21 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v4
       with:
-        go-version: '1.23'
+        go-version: ${{ env.GO_VERSION }}
+    
+    - name: Cache Go modules
+      uses: actions/cache@v3
+      with:
+        path: ~/go/pkg/mod
+        key: ${{ runner.os }}-go-mod-${{ hashFiles('**/go.sum') }}
+        restore-keys: ${{ runner.os }}-go-mod-
+    
+    - name: Cache Go build
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/go-build
+        key: ${{ runner.os }}-go-build-${{ hashFiles('**/*.go') }}
+        restore-keys: ${{ runner.os }}-go-build-
     
     - name: Go mod download
       run: go mod download
@@ -40,3 +59,74 @@ jobs:
     
     - name: Run Blargg tests
       run: make test-blargg
+
+  # SDL2 build verification across platforms
+  sdl2-build:
+    # Only run if SDL2-related files changed or explicitly requested
+    if: |
+      contains(github.event.head_commit.message, '[sdl2]') ||
+      contains(github.event.head_commit.message, '[ci-full]') ||
+      github.event_name == 'pull_request'
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+      fail-fast: false
+    runs-on: ${{ matrix.os }}
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: ${{ env.GO_VERSION }}
+    
+    - name: Cache Go modules
+      uses: actions/cache@v3
+      with:
+        path: ~/go/pkg/mod
+        key: ${{ runner.os }}-go-mod-${{ hashFiles('**/go.sum') }}
+        restore-keys: ${{ runner.os }}-go-mod-
+    
+    - name: Cache Go build
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/go-build
+        key: ${{ runner.os }}-go-build-sdl2-${{ hashFiles('**/*.go') }}
+        restore-keys: ${{ runner.os }}-go-build-sdl2-
+    
+    - name: Cache SDL2 Windows libraries
+      if: matrix.os == 'windows-latest'
+      uses: actions/cache@v3
+      with:
+        path: SDL2-${{ env.SDL2_VERSION }}
+        key: sdl2-windows-${{ env.SDL2_VERSION }}
+    
+    - name: Install SDL2 dependencies (Ubuntu)
+      if: matrix.os == 'ubuntu-latest'
+      run: sudo apt update && sudo apt install -y libsdl2-dev
+    
+    - name: Install SDL2 dependencies (macOS)
+      if: matrix.os == 'macos-latest'
+      run: brew install sdl2
+    
+    - name: Install SDL2 dependencies (Windows)
+      if: matrix.os == 'windows-latest'
+      run: |
+        if [ ! -d "SDL2-${{ env.SDL2_VERSION }}" ]; then
+          curl -L -o SDL2-devel.zip https://github.com/libsdl-org/SDL/releases/download/release-${{ env.SDL2_VERSION }}/SDL2-devel-${{ env.SDL2_VERSION }}-VC.zip
+          unzip SDL2-devel.zip
+        fi
+        # Set environment variables for CGO
+        echo "CGO_CFLAGS=-I$(pwd)/SDL2-${{ env.SDL2_VERSION }}/include" >> $GITHUB_ENV
+        echo "CGO_LDFLAGS=-L$(pwd)/SDL2-${{ env.SDL2_VERSION }}/lib/x64" >> $GITHUB_ENV
+      shell: bash
+    
+    - name: Go mod download
+      run: go mod download
+    
+    - name: Build SDL2 variant
+      run: go build -tags sdl2 -o bin/jeebie ./cmd/jeebie
+    
+    - name: Run core tests (skip Blargg for time)
+      run: go test -tags sdl2 ./jeebie/...
