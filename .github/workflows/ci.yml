@@ -67,7 +67,31 @@ jobs:
         go-version: ${{ env.GO_VERSION }}
         cache: true
         
-    - name: Verify Go cache setup
+    - name: Cache CGO build artifacts
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/.cache/go-build
+          ~/go/pkg/mod
+        key: ${{ runner.os }}-cgo-${{ hashFiles('**/go.sum') }}-${{ env.SDL2_VERSION }}
+        restore-keys: |
+          ${{ runner.os }}-cgo-${{ hashFiles('**/go.sum') }}-
+          ${{ runner.os }}-cgo-
+        
+    - name: Verify Go cache setup (Windows)
+      if: matrix.os == 'windows-latest'
+      shell: msys2 {0}
+      run: |
+        echo "=== System info ==="
+        nproc
+        echo "=== Go cache paths ==="
+        go env GOCACHE GOMODCACHE
+        echo "=== Cache directories ==="
+        ls -la $(go env GOCACHE) 2>/dev/null | head -5 || echo "Build cache empty"
+        ls -la $(go env GOMODCACHE) 2>/dev/null | head -5 || echo "Module cache empty"
+        
+    - name: Verify Go cache setup (Unix)
+      if: matrix.os != 'windows-latest'
       run: |
         echo "=== System info ==="
         nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo "CPU count unknown"
@@ -125,14 +149,15 @@ jobs:
     
     - name: Build SDL2 variant (Unix)
       if: matrix.os != 'windows-latest'
+      env:
+        GOMAXPROCS: 4
+        CGO_ENABLED: 1
       run: |
         echo "=== Build cache status ==="
         ls -la ~/.cache/go-build/ 2>/dev/null | head -10 || echo "No build cache found"
         echo "=== Module cache status ==="
         ls -la ~/go/pkg/mod/ 2>/dev/null | head -10 || echo "No module cache found"
-        echo "=== Building without SDL2 (for comparison) ==="
-        time go build -v -o bin/jeebie-nosldl2 ./cmd/jeebie
-        echo "=== Building with SDL2 ==="
+        echo "=== Building with SDL2 (optimized) ==="
         time go build -v -tags sdl2 -o bin/jeebie ./cmd/jeebie
     
     - name: Run core tests (Windows)
