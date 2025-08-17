@@ -89,7 +89,9 @@ jobs:
         
         # Install pkg-config using Chocolatey
         choco install pkgconfiglite -y
-        refreshenv
+        
+        # Add pkg-config to PATH manually (refreshenv doesn't work in CI)
+        echo "C:\ProgramData\chocolatey\lib\pkgconfiglite\tools\bin" >> $env:GITHUB_PATH
         
         # Create pkg-config directory and SDL2.pc file
         $sdlPath = "$PWD\SDL2-${{ env.SDL2_VERSION }}\x86_64-w64-mingw32"
