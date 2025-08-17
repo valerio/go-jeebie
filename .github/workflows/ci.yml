@@ -66,19 +66,26 @@ jobs:
       with:
         go-version: ${{ env.GO_VERSION }}
         cache: true
+        
+    - name: Verify Go cache setup
+      run: |
+        echo "=== System info ==="
+        nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo "CPU count unknown"
+        echo "=== Go cache paths ==="
+        go env GOCACHE GOMODCACHE
+        echo "=== Cache directories ==="
+        ls -la $(go env GOCACHE) 2>/dev/null | head -5 || echo "Build cache empty"
+        ls -la $(go env GOMODCACHE) 2>/dev/null | head -5 || echo "Module cache empty"
     
     - name: Install SDL2 dependencies (Ubuntu)
       if: matrix.os == 'ubuntu-latest'
-      run: sudo apt update && sudo apt install -y libsdl2-dev
+      run: |
+        echo "=== Checking what will be installed ==="
+        sudo apt update
+        apt-cache depends libsdl2-dev
+        echo "=== Installing SDL2 ==="
+        time sudo apt install -y libsdl2-dev
     
-    - name: Cache Homebrew (macOS)
-      if: matrix.os == 'macos-latest'
-      uses: actions/cache@v3
-      with:
-        path: ~/Library/Caches/Homebrew
-        key: macos-brew-${{ env.SDL2_VERSION }}
-        restore-keys: macos-brew-
-        
     - name: Install SDL2 dependencies (macOS)
       if: matrix.os == 'macos-latest'
       run: brew install sdl2
@@ -102,7 +109,11 @@ jobs:
       
     - name: Go mod download (Unix)
       if: matrix.os != 'windows-latest'
-      run: go mod download
+      run: |
+        echo "=== Go environment ==="
+        go env GOCACHE GOMODCACHE
+        echo "=== Module download ==="
+        time go mod download
     
     - name: Build SDL2 variant (Windows)
       if: matrix.os == 'windows-latest'
@@ -114,7 +125,15 @@ jobs:
     
     - name: Build SDL2 variant (Unix)
       if: matrix.os != 'windows-latest'
-      run: go build -tags sdl2 -o bin/jeebie ./cmd/jeebie
+      run: |
+        echo "=== Build cache status ==="
+        ls -la ~/.cache/go-build/ 2>/dev/null | head -10 || echo "No build cache found"
+        echo "=== Module cache status ==="
+        ls -la ~/go/pkg/mod/ 2>/dev/null | head -10 || echo "No module cache found"
+        echo "=== Building without SDL2 (for comparison) ==="
+        time go build -v -o bin/jeebie-nosldl2 ./cmd/jeebie
+        echo "=== Building with SDL2 ==="
+        time go build -v -tags sdl2 -o bin/jeebie ./cmd/jeebie
     
     - name: Run core tests (Windows)
       if: matrix.os == 'windows-latest'
