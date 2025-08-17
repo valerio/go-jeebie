@@ -126,8 +126,10 @@ jobs:
         if [ ! -d "SDL2-${{ env.SDL2_VERSION }}" ]; then
           curl -L -o SDL2-devel.zip https://github.com/libsdl-org/SDL/releases/download/release-${{ env.SDL2_VERSION }}/SDL2-devel-${{ env.SDL2_VERSION }}-VC.zip
           unzip SDL2-devel.zip
+          mkdir -p SDL2-${{ env.SDL2_VERSION }}/include/SDL2
+          cp SDL2-${{ env.SDL2_VERSION }}/include/*.h SDL2-${{ env.SDL2_VERSION }}/include/SDL2/
         fi
-        echo "CGO_CFLAGS=-I$(pwd)/SDL2-${{ env.SDL2_VERSION }}" >> $GITHUB_ENV
+        echo "CGO_CFLAGS=-I$(pwd)/SDL2-${{ env.SDL2_VERSION }}/include" >> $GITHUB_ENV
         echo "CGO_LDFLAGS=-L$(pwd)/SDL2-${{ env.SDL2_VERSION }}/lib/x64" >> $GITHUB_ENV
       shell: bash
     
