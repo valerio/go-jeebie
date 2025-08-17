@@ -66,6 +66,7 @@ jobs:
     if: |
       contains(github.event.head_commit.message, '[sdl2]') ||
       contains(github.event.head_commit.message, '[ci-full]') ||
+      contains(github.ref, 'ci-sdl2') ||
       github.event_name == 'pull_request'
     strategy:
       matrix:
@@ -92,8 +93,10 @@ jobs:
       uses: actions/cache@v3
       with:
         path: ~/.cache/go-build
-        key: ${{ runner.os }}-go-build-sdl2-${{ hashFiles('**/*.go') }}
-        restore-keys: ${{ runner.os }}-go-build-sdl2-
+        key: ${{ runner.os }}-go-build-${{ hashFiles('**/*.go') }}
+        restore-keys: 
+          - ${{ runner.os }}-go-build-
+          - ${{ runner.os }}-go-build-sdl2-
     
     - name: Cache SDL2 Windows libraries
       if: matrix.os == 'windows-latest'
@@ -101,6 +104,16 @@ jobs:
       with:
         path: SDL2-${{ env.SDL2_VERSION }}
         key: sdl2-windows-${{ env.SDL2_VERSION }}
+    
+    - name: Cache SDL2 Ubuntu packages
+      if: matrix.os == 'ubuntu-latest'
+      uses: actions/cache@v3
+      with:
+        path: |
+          /var/cache/apt/archives
+          /var/lib/apt/lists
+        key: ubuntu-sdl2-${{ env.SDL2_VERSION }}
+        restore-keys: ubuntu-sdl2-
     
     - name: Install SDL2 dependencies (Ubuntu)
       if: matrix.os == 'ubuntu-latest'
@@ -117,8 +130,8 @@ jobs:
           curl -L -o SDL2-devel.zip https://github.com/libsdl-org/SDL/releases/download/release-${{ env.SDL2_VERSION }}/SDL2-devel-${{ env.SDL2_VERSION }}-VC.zip
           unzip SDL2-devel.zip
         fi
-        # Set environment variables for CGO
-        echo "CGO_CFLAGS=-I$(pwd)/SDL2-${{ env.SDL2_VERSION }}/include" >> $GITHUB_ENV
+        # Set environment variables for CGO - note the parent directory for SDL2/SDL.h include
+        echo "CGO_CFLAGS=-I$(pwd)/SDL2-${{ env.SDL2_VERSION }}" >> $GITHUB_ENV
         echo "CGO_LDFLAGS=-L$(pwd)/SDL2-${{ env.SDL2_VERSION }}/lib/x64" >> $GITHUB_ENV
       shell: bash
     
