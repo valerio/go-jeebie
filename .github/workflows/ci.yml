@@ -121,10 +121,17 @@ jobs:
         update: true
         install: >-
           mingw-w64-x86_64-gcc
+          mingw-w64-x86_64-go
           mingw-w64-x86_64-SDL2
           mingw-w64-x86_64-pkg-config
     
-    - name: Go mod download
+    - name: Go mod download (Windows)
+      if: matrix.os == 'windows-latest'
+      shell: msys2 {0}
+      run: go mod download
+      
+    - name: Go mod download (Unix)
+      if: matrix.os != 'windows-latest'
       run: go mod download
     
     - name: Build SDL2 variant (Windows)
@@ -133,7 +140,7 @@ jobs:
       run: |
         export CGO_CFLAGS="$(pkg-config --cflags sdl2) -D_REENTRANT"
         export CGO_LDFLAGS="$(pkg-config --libs sdl2)"
-        /c/hostedtoolcache/windows/go/${{ env.GO_VERSION }}/x64/bin/go.exe build -tags sdl2 -o bin/jeebie ./cmd/jeebie
+        go build -tags sdl2 -o bin/jeebie ./cmd/jeebie
     
     - name: Build SDL2 variant (Unix)
       if: matrix.os != 'windows-latest'
@@ -145,7 +152,7 @@ jobs:
       run: |
         export CGO_CFLAGS="$(pkg-config --cflags sdl2) -D_REENTRANT"
         export CGO_LDFLAGS="$(pkg-config --libs sdl2)"
-        /c/hostedtoolcache/windows/go/${{ env.GO_VERSION }}/x64/bin/go.exe test -tags sdl2 ./jeebie/...
+        go test -tags sdl2 ./jeebie/...
     
     - name: Run core tests (Unix)
       if: matrix.os != 'windows-latest'
