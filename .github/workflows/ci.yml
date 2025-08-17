@@ -11,7 +11,6 @@ env:
   SDL2_VERSION: '2.30.9'
 
 jobs:
-  # Core tests - run on Ubuntu only to save CI minutes
   test:
     runs-on: ubuntu-latest
     
@@ -60,9 +59,7 @@ jobs:
     - name: Run Blargg tests
       run: make test-blargg
 
-  # SDL2 build verification across platforms
   sdl2-build:
-    # Only run if SDL2-related files changed or explicitly requested
     if: |
       contains(github.event.head_commit.message, '[sdl2]') ||
       contains(github.event.head_commit.message, '[ci-full]') ||
@@ -94,9 +91,9 @@ jobs:
       with:
         path: ~/.cache/go-build
         key: ${{ runner.os }}-go-build-${{ hashFiles('**/*.go') }}
-        restore-keys: 
-          - ${{ runner.os }}-go-build-
-          - ${{ runner.os }}-go-build-sdl2-
+        restore-keys: |
+          ${{ runner.os }}-go-build-
+          ${{ runner.os }}-go-build-sdl2-
     
     - name: Cache SDL2 Windows libraries
       if: matrix.os == 'windows-latest'
@@ -130,7 +127,6 @@ jobs:
           curl -L -o SDL2-devel.zip https://github.com/libsdl-org/SDL/releases/download/release-${{ env.SDL2_VERSION }}/SDL2-devel-${{ env.SDL2_VERSION }}-VC.zip
           unzip SDL2-devel.zip
         fi
-        # Set environment variables for CGO - note the parent directory for SDL2/SDL.h include
         echo "CGO_CFLAGS=-I$(pwd)/SDL2-${{ env.SDL2_VERSION }}" >> $GITHUB_ENV
         echo "CGO_LDFLAGS=-L$(pwd)/SDL2-${{ env.SDL2_VERSION }}/lib/x64" >> $GITHUB_ENV
       shell: bash
@@ -141,5 +137,5 @@ jobs:
     - name: Build SDL2 variant
       run: go build -tags sdl2 -o bin/jeebie ./cmd/jeebie
     
-    - name: Run core tests (skip Blargg for time)
+    - name: Run core tests
       run: go test -tags sdl2 ./jeebie/...
