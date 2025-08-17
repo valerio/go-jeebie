@@ -41,7 +41,7 @@ jobs:
       run: make build
     
     - name: Run tests
-      run: make test
+      run: go test ./...
     
     - name: Run Blargg tests
       run: make test-blargg
@@ -66,84 +66,80 @@ jobs:
       with:
         go-version: ${{ env.GO_VERSION }}
         cache: true
-        
-    - name: Install SDL2 (Windows)
-      if: matrix.os == 'windows-latest'
-      run: |
-        Invoke-WebRequest -Uri "https://github.com/libsdl-org/SDL/releases/download/release-2.30.9/SDL2-devel-2.30.9-mingw.tar.gz" -OutFile "SDL2-devel.tar.gz"
-        tar -xzf SDL2-devel.tar.gz
-        echo "SDL2_PATH=$PWD/SDL2-2.30.9" >> $env:GITHUB_ENV
     
-    - name: Cache CGO build artifacts
-      uses: actions/cache@v4
-      with:
-        path: |
-          ~/.cache/go-build
-          ~/go/pkg/mod
-        key: ${{ runner.os }}-cgo-${{ hashFiles('**/go.sum') }}-${{ env.SDL2_VERSION }}
-        restore-keys: |
-          ${{ runner.os }}-cgo-${{ hashFiles('**/go.sum') }}-
-          ${{ runner.os }}-cgo-
-        
-    - name: Install TDM-GCC (Windows)
-      if: matrix.os == 'windows-latest'
-      run: |
-        Invoke-WebRequest -Uri "https://github.com/jmeubank/tdm-gcc/releases/download/v10.3.0-tdm64-2/tdm64-gcc-10.3.0-2.exe" -OutFile "tdm-gcc.exe"
-        Start-Process -FilePath "tdm-gcc.exe" -ArgumentList "/S" -Wait
-        echo "C:\TDM-GCC-64\bin" >> $env:GITHUB_PATH
-        
-    - name: Verify Go cache setup (Unix)
-      if: matrix.os != 'windows-latest'
-      run: go env GOCACHE GOMODCACHE
-    
-    - name: Install SDL2 dependencies (Ubuntu)
+    # Platform-specific SDL2 and pkg-config installation
+    - name: Install SDL2 and dependencies (Ubuntu)
       if: matrix.os == 'ubuntu-latest'
       run: |
         sudo apt update -qq
-        sudo apt install -y libsdl2-dev
+        sudo apt install -y libsdl2-dev pkg-config
     
-    - name: Install SDL2 dependencies (macOS)
+    - name: Install SDL2 and dependencies (macOS)
       if: matrix.os == 'macos-latest'
-      run: brew install sdl2
+      run: |
+        brew install sdl2 pkg-config
     
-    - name: Go mod download (Windows)
+    - name: Install SDL2 and dependencies (Windows)
       if: matrix.os == 'windows-latest'
-      run: go mod download
-      
-    - name: Go mod download (Unix)
-      if: matrix.os != 'windows-latest'
-      run: go mod download
-    
-    - name: Build SDL2 variant (Windows)
-      if: matrix.os == 'windows-latest'
-      env:
-        CGO_ENABLED: 1
-        CC: gcc
-        CGO_CFLAGS: "-I${{ env.SDL2_PATH }}/x86_64-w64-mingw32/include/SDL2 -D_REENTRANT"
-        CGO_LDFLAGS: "-L${{ env.SDL2_PATH }}/x86_64-w64-mingw32/lib -lSDL2main -lSDL2 -static-libgcc"
-      run: go build -tags sdl2 -ldflags "-H windowsgui" -o bin/jeebie.exe ./cmd/jeebie
-    
-    - name: Build SDL2 variant (Ubuntu)
-      if: matrix.os == 'ubuntu-latest'
-      run: go build -tags sdl2 -o bin/jeebie ./cmd/jeebie
+      shell: pwsh
+      run: |
+        # Download and extract SDL2 MinGW development files
+        Invoke-WebRequest -Uri "https://github.com/libsdl-org/SDL/releases/download/release-${{ env.SDL2_VERSION }}/SDL2-devel-${{ env.SDL2_VERSION }}-mingw.tar.gz" -OutFile "SDL2-devel.tar.gz"
+        tar -xzf SDL2-devel.tar.gz
         
-    - name: Build SDL2 variant (macOS)
-      if: matrix.os == 'macos-latest'
-      run: go build -tags sdl2 -o bin/jeebie ./cmd/jeebie
+        # Install pkg-config using Chocolatey
+        choco install pkgconfiglite -y
+        refreshenv
+        
+        # Create pkg-config directory and SDL2.pc file
+        $sdlPath = "$PWD\SDL2-${{ env.SDL2_VERSION }}\x86_64-w64-mingw32"
+        $pkgConfigPath = "$PWD\pkgconfig"
+        New-Item -ItemType Directory -Force -Path $pkgConfigPath
+        
+        # Generate SDL2.pc file for pkg-config
+        $pcContent = @"
+        prefix=$($sdlPath -replace '\\','/')
+        exec_prefix=`${prefix}
+        libdir=`${exec_prefix}/lib
+        includedir=`${prefix}/include
+        
+        Name: sdl2
+        Description: Simple DirectMedia Layer
+        Version: ${{ env.SDL2_VERSION }}
+        Requires:
+        Conflicts:
+        Libs: -L`${libdir} -lmingw32 -lSDL2main -lSDL2
+        Cflags: -I`${includedir}/SDL2 -Dmain=SDL_main
+        "@
+        
+        Set-Content -Path "$pkgConfigPath\sdl2.pc" -Value $pcContent
+        
+        # Set environment variables
+        echo "PKG_CONFIG_PATH=$pkgConfigPath" >> $env:GITHUB_ENV
+        echo "CGO_ENABLED=1" >> $env:GITHUB_ENV
     
-    - name: Run core tests (Windows)
-      if: matrix.os == 'windows-latest'
-      env:
-        CGO_ENABLED: 1
-        CC: gcc
-        CGO_CFLAGS: "-I${{ env.SDL2_PATH }}/x86_64-w64-mingw32/include/SDL2 -D_REENTRANT"
-        CGO_LDFLAGS: "-L${{ env.SDL2_PATH }}/x86_64-w64-mingw32/lib -lSDL2main -lSDL2 -static-libgcc"
-      run: go test -tags sdl2 ./jeebie/...
+    - name: Verify build tools
+      shell: bash
+      run: |
+        echo "=== Go environment ==="
+        go env GOCACHE GOMODCACHE CGO_ENABLED
+        echo "=== pkg-config ==="
+        which pkg-config || echo "pkg-config not found"
+        pkg-config --version || echo "pkg-config not working"
+        echo "=== SDL2 check ==="
+        pkg-config --cflags --libs sdl2 || echo "SDL2 not found via pkg-config"
     
-    - name: Run core tests (Ubuntu)
-      if: matrix.os == 'ubuntu-latest'
-      run: go test -tags sdl2 ./jeebie/...
-      
-    - name: Run core tests (macOS)
-      if: matrix.os == 'macos-latest'
-      run: go test -tags sdl2 ./jeebie/...
+    - name: Go mod download
+      run: go mod download
+    
+    - name: Build SDL2 variant
+      shell: bash
+      run: |
+        if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
+          go build -tags sdl2 -ldflags "-H windowsgui" -o bin/jeebie.exe ./cmd/jeebie
+        else
+          go build -tags sdl2 -o bin/jeebie ./cmd/jeebie
+        fi
+    
+    - name: Run tests with SDL2
+      run: go test -tags sdl2 ./...
