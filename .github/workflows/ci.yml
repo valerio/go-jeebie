@@ -100,7 +100,7 @@ jobs:
       uses: actions/cache@v3
       with:
         path: SDL2-${{ env.SDL2_VERSION }}
-        key: sdl2-windows-${{ env.SDL2_VERSION }}
+        key: sdl2-windows-${{ env.SDL2_VERSION }}-v2
     
     - name: Cache SDL2 Ubuntu packages
       if: matrix.os == 'ubuntu-latest'
@@ -126,9 +126,10 @@ jobs:
         if [ ! -d "SDL2-${{ env.SDL2_VERSION }}" ]; then
           curl -L -o SDL2-devel.zip https://github.com/libsdl-org/SDL/releases/download/release-${{ env.SDL2_VERSION }}/SDL2-devel-${{ env.SDL2_VERSION }}-VC.zip
           unzip SDL2-devel.zip
-          mkdir -p SDL2-${{ env.SDL2_VERSION }}/include/SDL2
-          cp SDL2-${{ env.SDL2_VERSION }}/include/*.h SDL2-${{ env.SDL2_VERSION }}/include/SDL2/
         fi
+        # Ensure SDL2 subdirectory exists for veandco/go-sdl2 compatibility
+        mkdir -p SDL2-${{ env.SDL2_VERSION }}/include/SDL2
+        cp SDL2-${{ env.SDL2_VERSION }}/include/*.h SDL2-${{ env.SDL2_VERSION }}/include/SDL2/ 2>/dev/null || true
         echo "CGO_CFLAGS=-I$(pwd)/SDL2-${{ env.SDL2_VERSION }}/include" >> $GITHUB_ENV
         echo "CGO_LDFLAGS=-L$(pwd)/SDL2-${{ env.SDL2_VERSION }}/lib/x64" >> $GITHUB_ENV
       shell: bash
