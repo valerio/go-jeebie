@@ -70,9 +70,6 @@ jobs:
         os: [ubuntu-latest, macos-latest, windows-latest]
       fail-fast: false
     runs-on: ${{ matrix.os }}
-    defaults:
-      run:
-        shell: ${{ matrix.os == 'windows-latest' && 'msys2 {0}' || 'bash' }}
     
     steps:
     - uses: actions/checkout@v4
@@ -130,13 +127,26 @@ jobs:
     - name: Go mod download
       run: go mod download
     
-    - name: Build SDL2 variant
+    - name: Build SDL2 variant (Windows)
+      if: matrix.os == 'windows-latest'
+      shell: msys2 {0}
       run: |
-        if [ "${{ matrix.os }}" = "windows-latest" ]; then
-          export CGO_CFLAGS="$(pkg-config --cflags sdl2) -D_REENTRANT"
-          export CGO_LDFLAGS="$(pkg-config --libs sdl2)"
-        fi
-        go build -tags sdl2 -o bin/jeebie ./cmd/jeebie
+        export CGO_CFLAGS="$(pkg-config --cflags sdl2) -D_REENTRANT"
+        export CGO_LDFLAGS="$(pkg-config --libs sdl2)"
+        /c/hostedtoolcache/windows/go/${{ env.GO_VERSION }}/x64/bin/go.exe build -tags sdl2 -o bin/jeebie ./cmd/jeebie
     
-    - name: Run core tests
+    - name: Build SDL2 variant (Unix)
+      if: matrix.os != 'windows-latest'
+      run: go build -tags sdl2 -o bin/jeebie ./cmd/jeebie
+    
+    - name: Run core tests (Windows)
+      if: matrix.os == 'windows-latest'
+      shell: msys2 {0}
+      run: |
+        export CGO_CFLAGS="$(pkg-config --cflags sdl2) -D_REENTRANT"
+        export CGO_LDFLAGS="$(pkg-config --libs sdl2)"
+        /c/hostedtoolcache/windows/go/${{ env.GO_VERSION }}/x64/bin/go.exe test -tags sdl2 ./jeebie/...
+    
+    - name: Run core tests (Unix)
+      if: matrix.os != 'windows-latest'
       run: go test -tags sdl2 ./jeebie/...
