@@ -72,7 +72,6 @@ jobs:
       uses: msys2/setup-msys2@v2
       with:
         msystem: MINGW64
-        update: false
         install: >-
           mingw-w64-x86_64-gcc
           mingw-w64-x86_64-SDL2
@@ -84,10 +83,10 @@ jobs:
         path: |
           ~/.cache/go-build
           ~/go/pkg/mod
-        key: ${{ runner.os }}-cgo-${{ hashFiles('**/go.sum') }}-${{ env.SDL2_VERSION }}-v2
+        key: ${{ runner.os }}-cgo-${{ hashFiles('**/go.sum') }}-${{ env.SDL2_VERSION }}
         restore-keys: |
-          ${{ runner.os }}-cgo-${{ hashFiles('**/go.sum') }}-${{ env.SDL2_VERSION }}-
           ${{ runner.os }}-cgo-${{ hashFiles('**/go.sum') }}-
+          ${{ runner.os }}-cgo-
         
     - name: Verify Go cache setup (Windows)
       if: matrix.os == 'windows-latest'
@@ -102,7 +101,7 @@ jobs:
       if: matrix.os == 'ubuntu-latest'
       run: |
         sudo apt update -qq
-        sudo apt install -y libsdl2-dev libsdl2-2.0-0
+        sudo apt install -y libsdl2-dev
     
     - name: Install SDL2 dependencies (macOS)
       if: matrix.os == 'macos-latest'
@@ -125,22 +124,13 @@ jobs:
         export CGO_LDFLAGS="$(pkg-config --libs sdl2)"
         go build -tags sdl2 -o bin/jeebie ./cmd/jeebie
     
-    - name: Build SDL2 variant (Ubuntu - Static)
+    - name: Build SDL2 variant (Ubuntu)
       if: matrix.os == 'ubuntu-latest'
-      env:
-        GOMAXPROCS: 4
-        CGO_ENABLED: 1
-        CGO_LDFLAGS: "-static-libgcc"
-      run: |
-        go build -tags "sdl2 static" -ldflags "-s -w -extldflags '-static'" -o bin/jeebie ./cmd/jeebie
+      run: go build -tags sdl2 -o bin/jeebie ./cmd/jeebie
         
-    - name: Build SDL2 variant (macOS - Dynamic)
+    - name: Build SDL2 variant (macOS)
       if: matrix.os == 'macos-latest'
-      env:
-        GOMAXPROCS: 4
-        CGO_ENABLED: 1
-      run: |
-        go build -tags sdl2 -o bin/jeebie ./cmd/jeebie
+      run: go build -tags sdl2 -o bin/jeebie ./cmd/jeebie
     
     - name: Run core tests (Windows)
       if: matrix.os == 'windows-latest'
@@ -150,10 +140,10 @@ jobs:
         export CGO_LDFLAGS="$(pkg-config --libs sdl2)"
         go test -tags sdl2 ./jeebie/...
     
-    - name: Run core tests (Ubuntu - Static)
+    - name: Run core tests (Ubuntu)
       if: matrix.os == 'ubuntu-latest'
-      run: go test -tags "sdl2 static" ./jeebie/...
+      run: go test -tags sdl2 ./jeebie/...
       
-    - name: Run core tests (macOS - Dynamic)
+    - name: Run core tests (macOS)
       if: matrix.os == 'macos-latest'
       run: go test -tags sdl2 ./jeebie/...
