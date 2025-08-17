@@ -67,6 +67,18 @@ jobs:
         go-version: ${{ env.GO_VERSION }}
         cache: true
         
+    - name: Set up MSYS2 (Windows)
+      if: matrix.os == 'windows-latest'
+      uses: msys2/setup-msys2@v2
+      with:
+        msystem: MINGW64
+        update: true
+        install: >-
+          mingw-w64-x86_64-gcc
+          mingw-w64-x86_64-go
+          mingw-w64-x86_64-SDL2
+          mingw-w64-x86_64-pkg-config
+    
     - name: Cache CGO build artifacts
       uses: actions/cache@v3
       with:
@@ -101,30 +113,15 @@ jobs:
         ls -la $(go env GOCACHE) 2>/dev/null | head -5 || echo "Build cache empty"
         ls -la $(go env GOMODCACHE) 2>/dev/null | head -5 || echo "Module cache empty"
     
-    - name: Install SDL2 dependencies (Ubuntu)
+    - name: Install build dependencies (Ubuntu)
       if: matrix.os == 'ubuntu-latest'
       run: |
-        echo "=== Checking what will be installed ==="
-        sudo apt update
-        apt-cache depends libsdl2-dev
-        echo "=== Installing SDL2 ==="
-        time sudo apt install -y libsdl2-dev
+        echo "=== Installing build essentials only ==="
+        time sudo apt update && sudo apt install -y build-essential
     
     - name: Install SDL2 dependencies (macOS)
       if: matrix.os == 'macos-latest'
       run: brew install sdl2
-    
-    - name: Set up MSYS2 (Windows)
-      if: matrix.os == 'windows-latest'
-      uses: msys2/setup-msys2@v2
-      with:
-        msystem: MINGW64
-        update: true
-        install: >-
-          mingw-w64-x86_64-gcc
-          mingw-w64-x86_64-go
-          mingw-w64-x86_64-SDL2
-          mingw-w64-x86_64-pkg-config
     
     - name: Go mod download (Windows)
       if: matrix.os == 'windows-latest'
@@ -147,8 +144,8 @@ jobs:
         export CGO_LDFLAGS="$(pkg-config --libs sdl2)"
         go build -tags sdl2 -o bin/jeebie ./cmd/jeebie
     
-    - name: Build SDL2 variant (Unix)
-      if: matrix.os != 'windows-latest'
+    - name: Build SDL2 variant (Ubuntu - Static)
+      if: matrix.os == 'ubuntu-latest'
       env:
         GOMAXPROCS: 4
         CGO_ENABLED: 1
@@ -157,7 +154,20 @@ jobs:
         ls -la ~/.cache/go-build/ 2>/dev/null | head -10 || echo "No build cache found"
         echo "=== Module cache status ==="
         ls -la ~/go/pkg/mod/ 2>/dev/null | head -10 || echo "No module cache found"
-        echo "=== Building with SDL2 (optimized) ==="
+        echo "=== Building with SDL2 (static) ==="
+        time go build -v -tags "sdl2 static" -ldflags "-s -w" -o bin/jeebie ./cmd/jeebie
+        
+    - name: Build SDL2 variant (macOS - Dynamic)
+      if: matrix.os == 'macos-latest'
+      env:
+        GOMAXPROCS: 4
+        CGO_ENABLED: 1
+      run: |
+        echo "=== Build cache status ==="
+        ls -la ~/.cache/go-build/ 2>/dev/null | head -10 || echo "No build cache found"
+        echo "=== Module cache status ==="
+        ls -la ~/go/pkg/mod/ 2>/dev/null | head -10 || echo "No module cache found"
+        echo "=== Building with SDL2 (dynamic) ==="
         time go build -v -tags sdl2 -o bin/jeebie ./cmd/jeebie
     
     - name: Run core tests (Windows)
@@ -168,6 +178,10 @@ jobs:
         export CGO_LDFLAGS="$(pkg-config --libs sdl2)"
         go test -tags sdl2 ./jeebie/...
     
-    - name: Run core tests (Unix)
-      if: matrix.os != 'windows-latest'
+    - name: Run core tests (Ubuntu - Static)
+      if: matrix.os == 'ubuntu-latest'
+      run: go test -tags "sdl2 static" ./jeebie/...
+      
+    - name: Run core tests (macOS - Dynamic)
+      if: matrix.os == 'macos-latest'
       run: go test -tags sdl2 ./jeebie/...
