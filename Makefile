@@ -17,7 +17,7 @@ build-all: build build-sdl2
 
 .PHONY: test
 test:
-	go test -v ./...
+	go test -short -v ./...
 
 .PHONY: test-blargg
 test-blargg:

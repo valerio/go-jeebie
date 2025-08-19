@@ -213,10 +213,15 @@ func savePNG(fb *video.FrameBuffer, filename string) error {
 }
 
 func TestBlarggSuite(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping Blargg integration tests in short mode")
+	}
+
 	tests := GetBlarggTests()
 
 	for _, testCase := range tests {
 		t.Run(testCase.Name, func(t *testing.T) {
+			t.Parallel()
 			runBlarggTest(t, testCase)
 		})
 	}
