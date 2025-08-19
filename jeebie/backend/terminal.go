@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/gdamore/tcell/v2"
+	"github.com/valerio/go-jeebie/jeebie/debug"
 	"github.com/valerio/go-jeebie/jeebie/disasm"
 	"github.com/valerio/go-jeebie/jeebie/display"
 	"github.com/valerio/go-jeebie/jeebie/memory"
@@ -50,6 +51,9 @@ type TerminalBackend struct {
 	testPatternFrame *video.FrameBuffer
 	testPatternType  int
 	testFrameCount   int
+
+	// Snapshot state
+	currentFrame *video.FrameBuffer // Store current frame for snapshot generation
 }
 
 // CPUState represents the CPU state needed for debugging display
@@ -143,6 +147,8 @@ func (t *TerminalBackend) Update(frame *video.FrameBuffer) error {
 		renderFrame = t.testPatternFrame
 	}
 
+	// Store current frame for snapshots and render
+	t.currentFrame = renderFrame
 	t.render(renderFrame)
 	t.screen.Show()
 
@@ -195,6 +201,8 @@ func (t *TerminalBackend) handleKeyEvent(ev *tcell.EventKey) {
 			t.callbacks.OnQuit()
 		}
 		return
+	case tcell.KeyF12:
+		debug.TakeSnapshot(t.currentFrame, t.config.TestPattern, t.testPatternType)
 	case tcell.KeyEnter:
 		if t.callbacks.OnKeyPress != nil {
 			t.callbacks.OnKeyPress(memory.JoypadStart)
@@ -426,9 +434,9 @@ func (t *TerminalBackend) drawBorders(termWidth, termHeight, dividerX int) {
 	helpY := termHeight - 1
 	var helpText string
 	if t.config.TestPattern {
-		helpText = " Test Pattern Mode: T=cycle patterns ESC=exit "
+		helpText = " Test Pattern Mode: T=cycle patterns F12=snapshot ESC=exit "
 	} else {
-		helpText = " Debug: SPACE=pause/resume N=step F=frame | Logs: +/- filter "
+		helpText = " Debug: SPACE=pause/resume N=step F=frame F12=snapshot | Logs: +/- filter "
 	}
 	for i, ch := range helpText {
 		if i < termWidth {

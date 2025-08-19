@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/valerio/go-jeebie/jeebie/render"
+	"github.com/valerio/go-jeebie/jeebie/debug"
 	"github.com/valerio/go-jeebie/jeebie/video"
 )
 
@@ -69,14 +69,7 @@ func (h *HeadlessBackend) Update(frame *video.FrameBuffer) error {
 
 	// Save snapshot if needed
 	if h.snapshotConfig.Enabled && h.frameCount%h.snapshotConfig.Interval == 0 {
-		snapshotPath := filepath.Join(h.snapshotConfig.Directory,
-			fmt.Sprintf("%s_frame_%d.txt", h.snapshotConfig.ROMName, h.frameCount))
-
-		if err := h.saveFrameSnapshot(frame, snapshotPath); err != nil {
-			slog.Error("Failed to save snapshot", "frame", h.frameCount, "path", snapshotPath, "error", err)
-		} else {
-			slog.Info("Saved frame snapshot", "frame", h.frameCount, "path", snapshotPath)
-		}
+		h.saveSnapshot(frame)
 	}
 
 	// Log progress periodically
@@ -86,8 +79,13 @@ func (h *HeadlessBackend) Update(frame *video.FrameBuffer) error {
 
 	// Check if we've reached the target frame count
 	if h.frameCount >= h.maxFrames {
+		// Save final snapshot if enabled and we haven't just saved one
+		if h.snapshotConfig.Enabled && h.frameCount%h.snapshotConfig.Interval != 0 {
+			h.saveSnapshot(frame)
+		}
+
 		if h.snapshotConfig.Enabled {
-			slog.Info("Headless execution completed", "frames", h.maxFrames, "snapshots_saved_to", h.snapshotConfig.Directory)
+			slog.Info("Headless execution completed", "frames", h.maxFrames, "png_snapshots_saved_to", h.snapshotConfig.Directory)
 		} else {
 			slog.Info("Headless execution completed", "frames", h.maxFrames)
 		}
@@ -102,38 +100,6 @@ func (h *HeadlessBackend) Update(frame *video.FrameBuffer) error {
 }
 
 func (h *HeadlessBackend) Cleanup() error {
-	return nil
-}
-
-// saveFrameSnapshot saves the current frame as a text representation using half-blocks
-func (h *HeadlessBackend) saveFrameSnapshot(frame *video.FrameBuffer, filename string) error {
-	frameData := frame.ToSlice()
-
-	// Create output directory if it doesn't exist
-	if err := os.MkdirAll(filepath.Dir(filename), 0755); err != nil {
-		return fmt.Errorf("failed to create directory: %v", err)
-	}
-
-	file, err := os.Create(filename)
-	if err != nil {
-		return fmt.Errorf("failed to create file: %v", err)
-	}
-	defer file.Close()
-
-	// Write header with metadata
-	fmt.Fprintf(file, "# Game Boy Frame Snapshot (Half-Block Rendering)\n")
-	fmt.Fprintf(file, "# Frame: %d\n", h.frameCount)
-	fmt.Fprintf(file, "# Resolution: 160x144 pixels -> 160x72 text rows\n")
-	fmt.Fprintf(file, "# Characters: ▀ ▄ █ (upper half, lower half, full block)\n")
-	fmt.Fprintf(file, "#\n")
-
-	// Use shared rendering utility to convert to half-blocks
-	lines := render.RenderFrameToHalfBlocks(frameData, 160, 144)
-
-	for _, line := range lines {
-		fmt.Fprintf(file, "%s\n", line)
-	}
-
 	return nil
 }
 
@@ -167,4 +133,13 @@ func CreateSnapshotConfig(interval int, directory, romPath string) (SnapshotConf
 	config.ROMName = strings.TrimSuffix(config.ROMName, filepath.Ext(config.ROMName))
 
 	return config, nil
+}
+
+// saveSnapshot saves a PNG snapshot for the current frame
+func (h *HeadlessBackend) saveSnapshot(frame *video.FrameBuffer) {
+	pngBaseName := fmt.Sprintf("%s_frame_%d", h.snapshotConfig.ROMName, h.frameCount)
+
+	if err := debug.SaveFramePNGToDir(frame, pngBaseName, h.snapshotConfig.Directory); err != nil {
+		slog.Error("Failed to save PNG snapshot", "frame", h.frameCount, "error", err)
+	}
 }

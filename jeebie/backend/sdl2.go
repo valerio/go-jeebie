@@ -4,14 +4,10 @@ package backend
 
 import (
 	"fmt"
-	"image"
-	"image/png"
 	"log/slog"
-	"os"
-	"path/filepath"
-	"time"
 	"unsafe"
 
+	"github.com/valerio/go-jeebie/jeebie/debug"
 	"github.com/valerio/go-jeebie/jeebie/display"
 	"github.com/valerio/go-jeebie/jeebie/memory"
 	"github.com/valerio/go-jeebie/jeebie/video"
@@ -41,7 +37,7 @@ type SDL2Backend struct {
 	testFrameCount   int
 
 	// Snapshot state
-	lastFrameData []uint32 // Store last frame data for snapshot generation
+	currentFrame *video.FrameBuffer
 }
 
 // NewSDL2Backend creates a new SDL2 backend
@@ -133,7 +129,8 @@ func (s *SDL2Backend) Update(frame *video.FrameBuffer) error {
 		renderFrame = s.testPatternFrame
 	}
 
-	// Render the frame
+	// Store current frame for snapshots and render
+	s.currentFrame = renderFrame
 	s.renderFrame(renderFrame)
 
 	return nil
@@ -188,7 +185,7 @@ func (s *SDL2Backend) handleKeyDown(key sdl.Keycode) {
 				s.callbacks.OnQuit()
 			}
 		case sdl.K_F12:
-			s.takeSnapshot()
+			debug.TakeSnapshot(s.currentFrame, s.config.TestPattern, s.testPatternType)
 		}
 		return
 	}
@@ -237,7 +234,7 @@ func (s *SDL2Backend) handleKeyDown(key sdl.Keycode) {
 			s.callbacks.OnDebugMessage("debug:toggle_pause")
 		}
 	case sdl.K_F12:
-		s.takeSnapshot()
+		debug.TakeSnapshot(s.currentFrame, s.config.TestPattern, s.testPatternType)
 	}
 }
 
@@ -304,9 +301,6 @@ func (s *SDL2Backend) renderFrame(frame *video.FrameBuffer) {
 			sdlPixels[dstIdx+3] = byte(r) // Red (last byte)
 		}
 	}
-
-	// Store framebuffer data for potential snapshot generation
-	s.lastFrameData = frameData
 
 	// Update texture with SDL2 pixel data
 	s.texture.Update(nil, unsafe.Pointer(&sdlPixels[0]), video.FramebufferWidth*display.RGBABytesPerPixel)
@@ -430,82 +424,4 @@ func (s *SDL2Backend) animateTestPattern() {
 			}
 		}
 	}
-}
-
-// takeSnapshot saves the current frame as a PNG image file
-func (s *SDL2Backend) takeSnapshot() {
-	// Generate RGBA pixels from stored frame data
-	if s.lastFrameData == nil {
-		slog.Warn("No frame data available for snapshot")
-		return
-	}
-
-	// Convert Game Boy framebuffer to RGBA format for PNG
-	pixels := make([]byte, video.FramebufferWidth*video.FramebufferHeight*display.RGBABytesPerPixel)
-	for y := 0; y < video.FramebufferHeight; y++ {
-		for x := 0; x < video.FramebufferWidth; x++ {
-			srcIdx := y*video.FramebufferWidth + x
-			dstIdx := srcIdx * display.RGBABytesPerPixel
-
-			gbPixel := s.lastFrameData[srcIdx]
-			r, g, b, a := s.gbColorToRGBA(gbPixel)
-
-			pixels[dstIdx] = byte(r)   // Red
-			pixels[dstIdx+1] = byte(g) // Green
-			pixels[dstIdx+2] = byte(b) // Blue
-			pixels[dstIdx+3] = byte(a) // Alpha
-		}
-	}
-
-	// Generate filename with timestamp
-	timestamp := time.Now().Format("20060102_150405")
-	var filename string
-	if s.config.TestPattern {
-		patternNames := []string{"checkerboard", "gradient", "stripes", "diagonal"}
-		filename = fmt.Sprintf("jeebie_snapshot_%s_%s.png", patternNames[s.testPatternType], timestamp)
-	} else {
-		filename = fmt.Sprintf("jeebie_snapshot_%s.png", timestamp)
-	}
-
-	// Get current directory
-	cwd, err := os.Getwd()
-	if err != nil {
-		slog.Error("Failed to get current directory", "error", err)
-		return
-	}
-
-	filePath := filepath.Join(cwd, filename)
-
-	// Create PNG file
-	file, err := os.Create(filePath)
-	if err != nil {
-		slog.Error("Failed to create snapshot file", "path", filePath, "error", err)
-		return
-	}
-	defer file.Close()
-
-	// Create image.RGBA from pixel data
-	img := image.NewRGBA(image.Rect(0, 0, video.FramebufferWidth, video.FramebufferHeight))
-
-	// Copy pixel data - pixels are already in RGBA format
-	for y := 0; y < video.FramebufferHeight; y++ {
-		for x := 0; x < video.FramebufferWidth; x++ {
-			pixelIdx := (y*video.FramebufferWidth + x) * display.RGBABytesPerPixel
-			imgIdx := img.PixOffset(x, y)
-
-			img.Pix[imgIdx] = pixels[pixelIdx]     // R
-			img.Pix[imgIdx+1] = pixels[pixelIdx+1] // G
-			img.Pix[imgIdx+2] = pixels[pixelIdx+2] // B
-			img.Pix[imgIdx+3] = pixels[pixelIdx+3] // A
-		}
-	}
-
-	// Encode as PNG
-	err = png.Encode(file, img)
-	if err != nil {
-		slog.Error("Failed to encode PNG", "error", err)
-		return
-	}
-
-	slog.Info("Snapshot saved", "path", filePath, "size", fmt.Sprintf("%dx%d", video.FramebufferWidth, video.FramebufferHeight), "format", "PNG")
 }
