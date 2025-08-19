@@ -28,7 +28,7 @@ type DebugWindow struct {
 	vramData *debug.VRAMData
 
 	// Rendering state
-	needsUpdate bool
+	needsUpdate   bool
 	colorLogCount int // For debugging color conversion
 }
 
@@ -196,7 +196,7 @@ func (dw *DebugWindow) renderTileToPixels(tile debug.TilePattern, pixelData []by
 			// Use ABGR byte order for little-endian RGBA8888 (same as main renderer)
 			pixelData[pixelOffset] = a   // Alpha (first byte)
 			pixelData[pixelOffset+1] = b // Blue
-			pixelData[pixelOffset+2] = g // Green  
+			pixelData[pixelOffset+2] = g // Green
 			pixelData[pixelOffset+3] = r // Red (last byte)
 		}
 	}
@@ -211,11 +211,11 @@ func (dw *DebugWindow) renderOAMInfo() {
 	// Draw border
 	dw.renderer.SetDrawColor(128, 128, 128, 255)
 	dw.renderer.DrawRect(oamRect)
-	
+
 	if dw.oamData == nil {
 		return
 	}
-	
+
 	// Count visible sprites for display
 	visibleCount := 0
 	for _, sprite := range dw.oamData.Sprites {
@@ -223,32 +223,32 @@ func (dw *DebugWindow) renderOAMInfo() {
 			visibleCount++
 		}
 	}
-	
+
 	// For now, just draw some lines to show we have OAM data
 	// Each visible sprite gets a small rectangle to indicate presence
 	dw.renderer.SetDrawColor(200, 200, 200, 255)
-	
+
 	maxDisplay := 20 // Show first 20 sprites
 	if len(dw.oamData.Sprites) < maxDisplay {
 		maxDisplay = len(dw.oamData.Sprites)
 	}
-	
+
 	for i := 0; i < maxDisplay; i++ {
 		sprite := dw.oamData.Sprites[i]
 		y := int32(60 + i*20)
-		
+
 		// Draw sprite info as colored rectangles
 		if sprite.IsVisible {
 			dw.renderer.SetDrawColor(100, 200, 100, 255) // Green for visible
 		} else {
-			dw.renderer.SetDrawColor(100, 100, 100, 255)  // Gray for hidden
+			dw.renderer.SetDrawColor(100, 100, 100, 255) // Gray for hidden
 		}
-		
+
 		spriteRect := &sdl.Rect{20, y, 10, 15}
 		dw.renderer.FillRect(spriteRect)
-		
+
 		// Show tile index as a second rectangle
-		tileColor := uint8(sprite.TileIndex % 200 + 55) // Vary color by tile index
+		tileColor := uint8(sprite.TileIndex%200 + 55) // Vary color by tile index
 		dw.renderer.SetDrawColor(tileColor, tileColor, tileColor, 255)
 		tileRect := &sdl.Rect{40, y, 10, 15}
 		dw.renderer.FillRect(tileRect)
@@ -262,7 +262,7 @@ func (dw *DebugWindow) gbColorToRGBA(color video.GBColor) (r, g, b, a uint8) {
 		return 255, 255, 255, 255
 	case 1: // Light gray
 		return 170, 170, 170, 255
-	case 2: // Dark gray  
+	case 2: // Dark gray
 		return 85, 85, 85, 255
 	case 3: // Darkest (black in Game Boy context)
 		return 0, 0, 0, 255
