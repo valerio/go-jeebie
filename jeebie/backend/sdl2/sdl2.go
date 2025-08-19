@@ -1,12 +1,13 @@
 //go:build sdl2
 
-package backend
+package sdl2
 
 import (
 	"fmt"
 	"log/slog"
 	"unsafe"
 
+	"github.com/valerio/go-jeebie/jeebie/backend"
 	"github.com/valerio/go-jeebie/jeebie/debug"
 	"github.com/valerio/go-jeebie/jeebie/display"
 	"github.com/valerio/go-jeebie/jeebie/memory"
@@ -20,16 +21,16 @@ const (
 	pixelScale   = display.DefaultPixelScale
 )
 
-// SDL2Backend implements the Backend interface using SDL2 bindings
+// Backend implements the Backend interface using SDL2 bindings
 // Note: building this requires SDL2 development libraries installed.
 // Default builds skip this and use a stubbed renderer, see build tags (sdl2)
-type SDL2Backend struct {
+type Backend struct {
 	window    *sdl.Window
 	renderer  *sdl.Renderer
 	texture   *sdl.Texture
 	running   bool
-	callbacks BackendCallbacks
-	config    BackendConfig
+	callbacks backend.BackendCallbacks
+	config    backend.BackendConfig
 
 	// Test pattern state
 	testPatternFrame *video.FrameBuffer
@@ -38,15 +39,20 @@ type SDL2Backend struct {
 
 	// Snapshot state
 	currentFrame *video.FrameBuffer
+
+	// Debug window
+	debugWindow *DebugWindow
 }
 
-// NewSDL2Backend creates a new SDL2 backend
-func NewSDL2Backend() *SDL2Backend {
-	return &SDL2Backend{}
+// New creates a new SDL2 backend
+func New() *Backend {
+	return &Backend{
+		debugWindow: NewDebugWindow(),
+	}
 }
 
 // Init initializes the SDL2 backend
-func (s *SDL2Backend) Init(config BackendConfig) error {
+func (s *Backend) Init(config backend.BackendConfig) error {
 	s.config = config
 	s.callbacks = config.Callbacks
 
@@ -93,6 +99,13 @@ func (s *SDL2Backend) Init(config BackendConfig) error {
 
 	s.running = true
 
+	// Initialize debug window if ShowDebug is enabled
+	if config.ShowDebug {
+		if err := s.debugWindow.Init(); err != nil {
+			slog.Warn("Failed to initialize debug window", "error", err)
+		}
+	}
+
 	if config.TestPattern {
 		s.testPatternFrame = video.NewFrameBuffer()
 		s.generateTestPattern(0)
@@ -105,7 +118,7 @@ func (s *SDL2Backend) Init(config BackendConfig) error {
 }
 
 // Update renders a frame and processes events
-func (s *SDL2Backend) Update(frame *video.FrameBuffer) error {
+func (s *Backend) Update(frame *video.FrameBuffer) error {
 	if !s.running {
 		return nil
 	}
@@ -133,13 +146,21 @@ func (s *SDL2Backend) Update(frame *video.FrameBuffer) error {
 	s.currentFrame = renderFrame
 	s.renderFrame(renderFrame)
 
+	// Render debug window if visible
+	if s.debugWindow != nil {
+		s.debugWindow.Render()
+	}
+
 	return nil
 }
 
 // Cleanup cleans up SDL2 resources
-func (s *SDL2Backend) Cleanup() error {
+func (s *Backend) Cleanup() error {
 	slog.Info("Cleaning up SDL2 backend")
 
+	if s.debugWindow != nil {
+		s.debugWindow.Cleanup()
+	}
 	if s.texture != nil {
 		s.texture.Destroy()
 	}
@@ -154,7 +175,7 @@ func (s *SDL2Backend) Cleanup() error {
 	return nil
 }
 
-func (s *SDL2Backend) handleEvent(event sdl.Event) {
+func (s *Backend) handleEvent(event sdl.Event) {
 	switch e := event.(type) {
 	case *sdl.QuitEvent:
 		s.running = false
@@ -169,9 +190,15 @@ func (s *SDL2Backend) handleEvent(event sdl.Event) {
 			s.handleKeyUp(e.Keysym.Sym)
 		}
 	}
+
+	// Pass event to debug window
+	if s.debugWindow != nil {
+		s.debugWindow.ProcessEvent(event)
+	}
 }
 
-func (s *SDL2Backend) handleKeyDown(key sdl.Keycode) {
+func (s *Backend) handleKeyDown(key sdl.Keycode) {
+	slog.Info("Key pressed", "key", key, "keyname", sdl.GetKeyName(key))
 	if s.config.TestPattern {
 		switch key {
 		case sdl.K_t:
@@ -233,12 +260,22 @@ func (s *SDL2Backend) handleKeyDown(key sdl.Keycode) {
 		if s.callbacks.OnDebugMessage != nil {
 			s.callbacks.OnDebugMessage("debug:toggle_pause")
 		}
+	case sdl.K_F11:
+		slog.Info("F11 pressed - toggling debug window")
+		if s.callbacks.OnDebugMessage != nil {
+			s.callbacks.OnDebugMessage("debug:toggle_window")
+		}
+	case sdl.K_F10:
+		slog.Info("F10 pressed - updating debug window")
+		if s.callbacks.OnDebugMessage != nil {
+			s.callbacks.OnDebugMessage("debug:update_window")
+		}
 	case sdl.K_F12:
 		debug.TakeSnapshot(s.currentFrame, s.config.TestPattern, s.testPatternType)
 	}
 }
 
-func (s *SDL2Backend) handleKeyUp(key sdl.Keycode) {
+func (s *Backend) handleKeyUp(key sdl.Keycode) {
 	if s.config.TestPattern {
 		return
 	}
@@ -280,7 +317,7 @@ func (s *SDL2Backend) handleKeyUp(key sdl.Keycode) {
 	}
 }
 
-func (s *SDL2Backend) renderFrame(frame *video.FrameBuffer) {
+func (s *Backend) renderFrame(frame *video.FrameBuffer) {
 	frameData := frame.ToSlice()
 
 	// Convert to ABGR byte order for little-endian RGBA8888
@@ -313,7 +350,7 @@ func (s *SDL2Backend) renderFrame(frame *video.FrameBuffer) {
 }
 
 // gbColorToRGBA converts a Game Boy color value to RGBA components
-func (s *SDL2Backend) gbColorToRGBA(gbColor uint32) (r, g, b, a uint8) {
+func (s *Backend) gbColorToRGBA(gbColor uint32) (r, g, b, a uint8) {
 	// Always map to proper Game Boy grayscale colors first
 	switch gbColor {
 	case uint32(video.WhiteColor):
@@ -335,7 +372,7 @@ func (s *SDL2Backend) gbColorToRGBA(gbColor uint32) (r, g, b, a uint8) {
 }
 
 // generateTestPattern creates different test patterns
-func (s *SDL2Backend) generateTestPattern(patternType int) {
+func (s *Backend) generateTestPattern(patternType int) {
 	switch patternType {
 	case 0: // Checkerboard
 		for y := 0; y < video.FramebufferHeight; y++ {
@@ -396,7 +433,7 @@ func (s *SDL2Backend) generateTestPattern(patternType int) {
 }
 
 // animateTestPattern provides simple animation for test patterns
-func (s *SDL2Backend) animateTestPattern() {
+func (s *Backend) animateTestPattern() {
 	frame := s.testFrameCount / display.TestPatternAnimationFrames
 	switch s.testPatternType {
 	case 2: // Animate stripes
@@ -423,5 +460,38 @@ func (s *SDL2Backend) animateTestPattern() {
 				s.testPatternFrame.SetPixel(uint(x), uint(y), color)
 			}
 		}
+	}
+}
+
+// UpdateDebugData updates the debug window with current emulator state
+func (s *Backend) UpdateDebugData(oam *debug.OAMData, vram *debug.VRAMData) {
+	if s.debugWindow != nil {
+		s.debugWindow.UpdateData(oam, vram)
+	}
+}
+
+// ToggleDebugWindow shows/hides the debug window
+func (s *Backend) ToggleDebugWindow() {
+	slog.Info("ToggleDebugWindow called")
+	if s.debugWindow != nil {
+		// Initialize debug window if not already initialized
+		if !s.debugWindow.IsInitialized() {
+			slog.Info("Debug window not initialized, initializing now")
+			if err := s.debugWindow.Init(); err != nil {
+				slog.Warn("Failed to initialize debug window", "error", err)
+				return
+			}
+		}
+		wasVisible := s.debugWindow.IsVisible()
+		s.debugWindow.SetVisible(!wasVisible)
+		slog.Info("Debug window visibility changed", "was_visible", wasVisible, "now_visible", !wasVisible)
+
+		// If we're showing the window, trigger a debug data update
+		if !wasVisible && s.callbacks.OnDebugMessage != nil {
+			slog.Info("Triggering debug data update")
+			s.callbacks.OnDebugMessage("debug:update_window")
+		}
+	} else {
+		slog.Warn("Debug window is nil")
 	}
 }

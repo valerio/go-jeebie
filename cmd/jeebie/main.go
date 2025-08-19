@@ -8,7 +8,12 @@ import (
 
 	"github.com/urfave/cli"
 	"github.com/valerio/go-jeebie/jeebie"
+	"github.com/valerio/go-jeebie/jeebie/addr"
 	"github.com/valerio/go-jeebie/jeebie/backend"
+	"github.com/valerio/go-jeebie/jeebie/backend/headless"
+	"github.com/valerio/go-jeebie/jeebie/backend/sdl2"
+	"github.com/valerio/go-jeebie/jeebie/backend/terminal"
+	"github.com/valerio/go-jeebie/jeebie/debug"
 	"github.com/valerio/go-jeebie/jeebie/video"
 )
 
@@ -65,6 +70,11 @@ func main() {
 }
 
 func runEmulator(c *cli.Context) error {
+	// Set log level based on debug flag
+	if c.Bool("debug") {
+		slog.SetLogLoggerLevel(slog.LevelDebug)
+	}
+
 	testPattern := c.Bool("test-pattern")
 
 	var romPath string
@@ -103,7 +113,7 @@ func runEmulator(c *cli.Context) error {
 		callbacks.OnKeyPress = emu.HandleKeyPress
 		callbacks.OnKeyRelease = emu.HandleKeyRelease
 		callbacks.OnDebugMessage = func(message string) {
-			handleDebugCommand(emu, message)
+			handleDebugCommand(emu, message, emulatorBackend)
 		}
 	}
 
@@ -122,10 +132,10 @@ func runEmulator(c *cli.Context) error {
 
 	// provide access to emulator state for debugging displays
 	if emu != nil {
-		if terminalBackend, ok := emulatorBackend.(*backend.TerminalBackend); ok {
+		if terminalBackend, ok := emulatorBackend.(*terminal.Backend); ok {
 			terminalBackend.SetEmulatorState(
-				func() backend.CPUState { return emu.GetCPU() },
-				func() backend.MMUState { return emu.GetMMU() },
+				func() terminal.CPUState { return emu.GetCPU() },
+				func() terminal.MMUState { return emu.GetMMU() },
 			)
 		}
 	}
@@ -154,7 +164,7 @@ func createBackend(c *cli.Context, romPath string) (backend.Backend, error) {
 			return nil, errors.New("headless mode requires --frames option with a positive value")
 		}
 
-		snapshotConfig, err := backend.CreateSnapshotConfig(
+		snapshotConfig, err := headless.CreateSnapshotConfig(
 			c.Int("snapshot-interval"),
 			c.String("snapshot-dir"),
 			romPath,
@@ -163,15 +173,15 @@ func createBackend(c *cli.Context, romPath string) (backend.Backend, error) {
 			return nil, err
 		}
 
-		return backend.NewHeadlessBackend(frames, snapshotConfig), nil
+		return headless.New(frames, snapshotConfig), nil
 	}
 
 	backendName := c.String("backend")
 	switch backendName {
 	case "terminal":
-		return backend.NewTerminalBackend(), nil
+		return terminal.New(), nil
 	case "sdl2":
-		return backend.NewSDL2Backend(), nil
+		return sdl2.New(), nil
 	case "headless":
 		return nil, errors.New("use --headless flag instead of --backend=headless")
 	default:
@@ -180,7 +190,7 @@ func createBackend(c *cli.Context, romPath string) (backend.Backend, error) {
 }
 
 // handleDebugCommand processes debug commands from backends
-func handleDebugCommand(emu *jeebie.Emulator, command string) {
+func handleDebugCommand(emu *jeebie.Emulator, command string, emulatorBackend backend.Backend) {
 	switch command {
 	case "debug:toggle_pause":
 		if emu.GetDebuggerState() == 1 { // DebuggerPaused
@@ -202,6 +212,32 @@ func handleDebugCommand(emu *jeebie.Emulator, command string) {
 	case "debug:pause":
 		slog.Info("Debugger: Pause")
 		emu.DebuggerPause()
+	case "debug:toggle_window":
+		slog.Info("Handling debug:toggle_window")
+		if sdl2Backend, ok := emulatorBackend.(*sdl2.Backend); ok {
+			sdl2Backend.ToggleDebugWindow()
+		} else {
+			slog.Warn("Backend is not SDL2, cannot toggle debug window")
+		}
+	case "debug:update_window":
+		slog.Info("Handling debug:update_window")
+		if sdl2Backend, ok := emulatorBackend.(*sdl2.Backend); ok {
+			// Extract debug data and update
+			mmu := emu.GetMMU()
+			spriteHeight := 8
+			if mmu.ReadBit(2, addr.LCDC) {
+				spriteHeight = 16
+			}
+			currentLine := int(mmu.Read(addr.LY))
+
+			oamData := debug.ExtractOAMData(mmu, currentLine, spriteHeight)
+			vramData := debug.ExtractVRAMData(mmu)
+
+			slog.Info("Extracted debug data", "oam_entries", len(oamData.Sprites), "vram_tiles", "extracted")
+			sdl2Backend.UpdateDebugData(oamData, vramData)
+		} else {
+			slog.Warn("Backend is not SDL2, cannot update debug data")
+		}
 	default:
 		slog.Debug("Unknown debug command", "command", command)
 	}

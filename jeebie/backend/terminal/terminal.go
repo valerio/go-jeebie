@@ -1,4 +1,4 @@
-package backend
+package terminal
 
 import (
 	"fmt"
@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/gdamore/tcell/v2"
+	"github.com/valerio/go-jeebie/jeebie/backend"
 	"github.com/valerio/go-jeebie/jeebie/debug"
 	"github.com/valerio/go-jeebie/jeebie/disasm"
 	"github.com/valerio/go-jeebie/jeebie/display"
@@ -34,14 +35,14 @@ const (
 
 var shadeChars = []rune{'█', '▓', '▒', '░'}
 
-// TerminalBackend implements the Backend interface using tcell for terminal rendering
-type TerminalBackend struct {
+// Backend implements the Backend interface using tcell for terminal rendering
+type Backend struct {
 	screen    tcell.Screen
 	running   bool
 	logBuffer *render.LogBuffer
 	logLevel  slog.Level
-	callbacks BackendCallbacks
-	config    BackendConfig
+	callbacks backend.BackendCallbacks
+	config    backend.BackendConfig
 
 	// For accessing emulator state (will be passed via interface)
 	getCPU func() CPUState
@@ -76,15 +77,15 @@ type MMUState interface {
 	Read(addr uint16) uint8
 }
 
-// NewTerminalBackend creates a new terminal backend
-func NewTerminalBackend() *TerminalBackend {
-	return &TerminalBackend{
+// New creates a new terminal backend
+func New() *Backend {
+	return &Backend{
 		logLevel: slog.LevelInfo,
 	}
 }
 
 // Init initializes the terminal backend
-func (t *TerminalBackend) Init(config BackendConfig) error {
+func (t *Backend) Init(config backend.BackendConfig) error {
 	t.config = config
 	t.callbacks = config.Callbacks
 
@@ -131,7 +132,7 @@ func (t *TerminalBackend) Init(config BackendConfig) error {
 }
 
 // Update renders a frame and processes events
-func (t *TerminalBackend) Update(frame *video.FrameBuffer) error {
+func (t *Backend) Update(frame *video.FrameBuffer) error {
 	if !t.running {
 		return nil
 	}
@@ -156,7 +157,7 @@ func (t *TerminalBackend) Update(frame *video.FrameBuffer) error {
 }
 
 // Cleanup cleans up terminal resources
-func (t *TerminalBackend) Cleanup() error {
+func (t *Backend) Cleanup() error {
 	if t.screen != nil {
 		slog.Info("Cleaning up terminal backend")
 		t.screen.Fini()
@@ -165,12 +166,12 @@ func (t *TerminalBackend) Cleanup() error {
 }
 
 // SetEmulatorState allows the backend to access emulator state for debugging
-func (t *TerminalBackend) SetEmulatorState(getCPU func() CPUState, getMMU func() MMUState) {
+func (t *Backend) SetEmulatorState(getCPU func() CPUState, getMMU func() MMUState) {
 	t.getCPU = getCPU
 	t.getMMU = getMMU
 }
 
-func (t *TerminalBackend) handleSignals() {
+func (t *Backend) handleSignals() {
 	signals := make(chan os.Signal, 1)
 	signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP, syscall.SIGQUIT)
 
@@ -181,7 +182,7 @@ func (t *TerminalBackend) handleSignals() {
 	}
 }
 
-func (t *TerminalBackend) handleInput() {
+func (t *Backend) handleInput() {
 	for t.running {
 		ev := t.screen.PollEvent()
 		switch ev := ev.(type) {
@@ -193,7 +194,7 @@ func (t *TerminalBackend) handleInput() {
 	}
 }
 
-func (t *TerminalBackend) handleKeyEvent(ev *tcell.EventKey) {
+func (t *Backend) handleKeyEvent(ev *tcell.EventKey) {
 	switch ev.Key() {
 	case tcell.KeyEscape, tcell.KeyCtrlC:
 		t.running = false
@@ -228,7 +229,7 @@ func (t *TerminalBackend) handleKeyEvent(ev *tcell.EventKey) {
 	}
 }
 
-func (t *TerminalBackend) handleRuneKey(r rune) {
+func (t *Backend) handleRuneKey(r rune) {
 	if t.config.TestPattern {
 		// Test pattern specific controls
 		switch r {
@@ -283,7 +284,7 @@ func (t *TerminalBackend) handleRuneKey(r rune) {
 	}
 }
 
-func (t *TerminalBackend) changeLogLevel(direction int) {
+func (t *Backend) changeLogLevel(direction int) {
 	oldLevel := t.logLevel
 	switch direction {
 	case -1: // Decrease verbosity (show fewer logs)
@@ -310,7 +311,7 @@ func (t *TerminalBackend) changeLogLevel(direction int) {
 	}
 }
 
-func (t *TerminalBackend) render(frame *video.FrameBuffer) {
+func (t *Backend) render(frame *video.FrameBuffer) {
 	termWidth, termHeight := t.screen.Size()
 
 	// Check minimum terminal size
@@ -350,7 +351,7 @@ func (t *TerminalBackend) render(frame *video.FrameBuffer) {
 	t.drawLogs(rightPanelX, logsY, rightPanelWidth, termHeight)
 }
 
-func (t *TerminalBackend) drawBorders(termWidth, termHeight, dividerX int) {
+func (t *Backend) drawBorders(termWidth, termHeight, dividerX int) {
 	borderStyle := tcell.StyleDefault.Foreground(tcell.ColorWhite)
 	titleStyle := tcell.StyleDefault.Foreground(tcell.ColorYellow)
 
@@ -407,7 +408,7 @@ func (t *TerminalBackend) drawBorders(termWidth, termHeight, dividerX int) {
 			title = " Disassembly "
 			for i, ch := range title {
 				if startX+i < termWidth {
-					t.screen.SetContent(startX+i, registerEndY+1, ch, nil, titleStyle)
+					t.screen.SetContent(startX+i, disasmEndY+1, ch, nil, titleStyle)
 				}
 			}
 		}
@@ -445,7 +446,7 @@ func (t *TerminalBackend) drawBorders(termWidth, termHeight, dividerX int) {
 	}
 }
 
-func (t *TerminalBackend) drawGameBoy(frame *video.FrameBuffer) {
+func (t *Backend) drawGameBoy(frame *video.FrameBuffer) {
 	frameData := frame.ToSlice()
 
 	// process two rows at a time using half-blocks
@@ -495,7 +496,7 @@ func getHalfBlockChar(topShade, bottomShade int) (rune, tcell.Color, tcell.Color
 	}
 }
 
-func (t *TerminalBackend) drawRegisters(startX, startY, width, termHeight int) {
+func (t *Backend) drawRegisters(startX, startY, width, termHeight int) {
 	if t.getCPU == nil || t.getMMU == nil {
 		return
 	}
@@ -543,7 +544,7 @@ func (t *TerminalBackend) drawRegisters(startX, startY, width, termHeight int) {
 	}
 }
 
-func (t *TerminalBackend) drawDisassembly(startX, startY, width, termHeight int) {
+func (t *Backend) drawDisassembly(startX, startY, width, termHeight int) {
 	if t.getCPU == nil || t.getMMU == nil {
 		return
 	}
@@ -606,7 +607,7 @@ func (t *TerminalBackend) drawDisassembly(startX, startY, width, termHeight int)
 	}
 }
 
-func (t *TerminalBackend) drawLogs(startX, startY, width, termHeight int) {
+func (t *Backend) drawLogs(startX, startY, width, termHeight int) {
 	if width <= 0 || startY >= termHeight {
 		return
 	}
@@ -674,7 +675,7 @@ func (t *TerminalBackend) drawLogs(startX, startY, width, termHeight int) {
 }
 
 // generateTestPattern creates different test patterns
-func (t *TerminalBackend) generateTestPattern(patternType int) {
+func (t *Backend) generateTestPattern(patternType int) {
 	switch patternType {
 	case 0: // Checkerboard
 		for y := 0; y < video.FramebufferHeight; y++ {
@@ -724,7 +725,7 @@ func (t *TerminalBackend) generateTestPattern(patternType int) {
 }
 
 // animateTestPattern provides simple animation for test patterns
-func (t *TerminalBackend) animateTestPattern() {
+func (t *Backend) animateTestPattern() {
 	frame := t.testFrameCount / display.TestPatternAnimationFrames
 	switch t.testPatternType {
 	case 2: // Animate stripes

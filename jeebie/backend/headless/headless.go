@@ -1,4 +1,4 @@
-package backend
+package headless
 
 import (
 	"fmt"
@@ -7,14 +7,15 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/valerio/go-jeebie/jeebie/backend"
 	"github.com/valerio/go-jeebie/jeebie/debug"
 	"github.com/valerio/go-jeebie/jeebie/video"
 )
 
-// HeadlessBackend implements the Backend interface for automated testing and batch processing
-type HeadlessBackend struct {
-	config         BackendConfig
-	callbacks      BackendCallbacks
+// Backend implements the Backend interface for automated testing and batch processing
+type Backend struct {
+	config         backend.BackendConfig
+	callbacks      backend.BackendCallbacks
 	frameCount     int
 	maxFrames      int
 	snapshotConfig SnapshotConfig
@@ -28,14 +29,14 @@ type SnapshotConfig struct {
 	ROMName   string // ROM name for snapshot filenames
 }
 
-func NewHeadlessBackend(maxFrames int, snapshotConfig SnapshotConfig) *HeadlessBackend {
-	return &HeadlessBackend{
+func New(maxFrames int, snapshotConfig SnapshotConfig) *Backend {
+	return &Backend{
 		maxFrames:      maxFrames,
 		snapshotConfig: snapshotConfig,
 	}
 }
 
-func (h *HeadlessBackend) Init(config BackendConfig) error {
+func (h *Backend) Init(config backend.BackendConfig) error {
 	h.config = config
 	h.callbacks = config.Callbacks
 
@@ -64,7 +65,7 @@ func (h *HeadlessBackend) Init(config BackendConfig) error {
 }
 
 // Update processes a frame and handles snapshots
-func (h *HeadlessBackend) Update(frame *video.FrameBuffer) error {
+func (h *Backend) Update(frame *video.FrameBuffer) error {
 	h.frameCount++
 
 	// Save snapshot if needed
@@ -99,7 +100,7 @@ func (h *HeadlessBackend) Update(frame *video.FrameBuffer) error {
 	return nil
 }
 
-func (h *HeadlessBackend) Cleanup() error {
+func (h *Backend) Cleanup() error {
 	return nil
 }
 
@@ -136,7 +137,7 @@ func CreateSnapshotConfig(interval int, directory, romPath string) (SnapshotConf
 }
 
 // saveSnapshot saves a PNG snapshot for the current frame
-func (h *HeadlessBackend) saveSnapshot(frame *video.FrameBuffer) {
+func (h *Backend) saveSnapshot(frame *video.FrameBuffer) {
 	pngBaseName := fmt.Sprintf("%s_frame_%d", h.snapshotConfig.ROMName, h.frameCount)
 
 	if err := debug.SaveFramePNGToDir(frame, pngBaseName, h.snapshotConfig.Directory); err != nil {
