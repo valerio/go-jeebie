@@ -1,6 +1,7 @@
 package backend
 
 import (
+	"github.com/valerio/go-jeebie/jeebie/input"
 	"github.com/valerio/go-jeebie/jeebie/memory"
 	"github.com/valerio/go-jeebie/jeebie/video"
 )
@@ -21,18 +22,21 @@ type Backend interface {
 
 // BackendConfig holds configuration for backends
 type BackendConfig struct {
-	Title       string
-	Scale       int
-	VSync       bool
-	Fullscreen  bool
-	ShowDebug   bool             // Backends may ignore unsupported features
-	TestPattern bool             // Display test pattern instead of emulation
-	Callbacks   BackendCallbacks // Callbacks for backend communication
+	Title        string
+	Scale        int
+	VSync        bool
+	Fullscreen   bool
+	ShowDebug    bool             // Backends may ignore unsupported features
+	TestPattern  bool             // Display test pattern instead of emulation
+	Callbacks    BackendCallbacks // Callbacks for backend communication
+	InputManager *input.Manager   // Shared input manager for unified input handling
 }
 
 // BackendCallbacks allows backends to communicate with the emulator
 type BackendCallbacks struct {
 	// Input callbacks
+	// TODO: move these to input manager in all backends
+
 	OnKeyPress   func(key memory.JoypadKey)
 	OnKeyRelease func(key memory.JoypadKey)
 

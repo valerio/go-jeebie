@@ -14,6 +14,7 @@ import (
 	"github.com/valerio/go-jeebie/jeebie/backend/sdl2"
 	"github.com/valerio/go-jeebie/jeebie/backend/terminal"
 	"github.com/valerio/go-jeebie/jeebie/debug"
+	"github.com/valerio/go-jeebie/jeebie/input"
 	"github.com/valerio/go-jeebie/jeebie/video"
 )
 
@@ -108,21 +109,25 @@ func runEmulator(c *cli.Context) error {
 		OnQuit: func() { running = false },
 	}
 
-	// only set up emulator callbacks if we have an emulator
+	var inputManager *input.Manager
 	if emu != nil {
 		callbacks.OnKeyPress = emu.HandleKeyPress
 		callbacks.OnKeyRelease = emu.HandleKeyRelease
 		callbacks.OnDebugMessage = func(message string) {
 			handleDebugCommand(emu, message, emulatorBackend)
 		}
+		if emu != nil {
+			inputManager = input.NewManager(emu.GetJoypad())
+		}
 	}
 
 	config := backend.BackendConfig{
-		Title:       "Jeebie Game Boy Emulator",
-		Scale:       2,
-		ShowDebug:   c.Bool("debug"),
-		TestPattern: testPattern,
-		Callbacks:   callbacks,
+		Title:        "Jeebie",
+		Scale:        2,
+		ShowDebug:    c.Bool("debug"),
+		TestPattern:  testPattern,
+		Callbacks:    callbacks,
+		InputManager: inputManager,
 	}
 
 	if err := emulatorBackend.Init(config); err != nil {
@@ -192,6 +197,7 @@ func createBackend(c *cli.Context, romPath string) (backend.Backend, error) {
 // handleDebugCommand processes debug commands from backends
 func handleDebugCommand(emu *jeebie.Emulator, command string, emulatorBackend backend.Backend) {
 	switch command {
+	// TODO: move debug: strings to constants
 	case "debug:toggle_pause":
 		if emu.GetDebuggerState() == 1 { // DebuggerPaused
 			slog.Info("Debugger: Resuming execution")
@@ -214,6 +220,7 @@ func handleDebugCommand(emu *jeebie.Emulator, command string, emulatorBackend ba
 		emu.DebuggerPause()
 	case "debug:toggle_window":
 		slog.Info("Handling debug:toggle_window")
+		// TODO: this should just be handled in the backend itself
 		if sdl2Backend, ok := emulatorBackend.(*sdl2.Backend); ok {
 			sdl2Backend.ToggleDebugWindow()
 		} else {
@@ -221,6 +228,7 @@ func handleDebugCommand(emu *jeebie.Emulator, command string, emulatorBackend ba
 		}
 	case "debug:update_window":
 		slog.Info("Handling debug:update_window")
+		// TODO: this should just be handled in the backend itself
 		if sdl2Backend, ok := emulatorBackend.(*sdl2.Backend); ok {
 			// Extract debug data and update
 			mmu := emu.GetMMU()

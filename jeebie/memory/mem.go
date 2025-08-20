@@ -233,3 +233,8 @@ func (m *MMU) HandleKeyRelease(key JoypadKey) {
 func (m *MMU) GetJoypadState() (uint8, uint8) {
 	return m.joypad.buttons, m.joypad.dpad
 }
+
+// GetJoypad returns the joypad instance for direct access
+func (m *MMU) GetJoypad() *Joypad {
+	return m.joypad
+}

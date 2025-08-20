@@ -260,6 +260,10 @@ func (e *Emulator) GetMMU() *memory.MMU {
 	return e.mem
 }
 
+func (e *Emulator) GetJoypad() *memory.Joypad {
+	return e.mem.GetJoypad()
+}
+
 func (e *Emulator) updateTimers(cycles int) {
 	if e.timaDelayInt {
 		e.mem.RequestInterrupt(addr.TimerInterrupt)

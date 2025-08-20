@@ -10,7 +10,9 @@ import (
 	"github.com/valerio/go-jeebie/jeebie/backend"
 	"github.com/valerio/go-jeebie/jeebie/debug"
 	"github.com/valerio/go-jeebie/jeebie/display"
-	"github.com/valerio/go-jeebie/jeebie/memory"
+	"github.com/valerio/go-jeebie/jeebie/input"
+	"github.com/valerio/go-jeebie/jeebie/input/action"
+	"github.com/valerio/go-jeebie/jeebie/input/event"
 	"github.com/valerio/go-jeebie/jeebie/video"
 	"github.com/veandco/go-sdl2/sdl"
 )
@@ -42,6 +44,9 @@ type Backend struct {
 
 	// Debug window
 	debugWindow *DebugWindow
+
+	// Input management
+	inputManager *input.Manager
 }
 
 // New creates a new SDL2 backend
@@ -55,6 +60,7 @@ func New() *Backend {
 func (s *Backend) Init(config backend.BackendConfig) error {
 	s.config = config
 	s.callbacks = config.Callbacks
+	s.inputManager = config.InputManager
 
 	if err := sdl.Init(sdl.INIT_VIDEO | sdl.INIT_EVENTS); err != nil {
 		return fmt.Errorf("failed to initialize SDL2: %v", err)
@@ -105,6 +111,8 @@ func (s *Backend) Init(config backend.BackendConfig) error {
 			slog.Warn("Failed to initialize debug window", "error", err)
 		}
 	}
+
+	s.setupInputBindings()
 
 	if config.TestPattern {
 		s.testPatternFrame = video.NewFrameBuffer()
@@ -185,7 +193,7 @@ func (s *Backend) handleEvent(event sdl.Event) {
 
 	case *sdl.KeyboardEvent:
 		if e.Type == sdl.KEYDOWN {
-			s.handleKeyDown(e.Keysym.Sym)
+			s.handleKeyDown(e.Keysym.Sym, e.Repeat)
 		} else if e.Type == sdl.KEYUP {
 			s.handleKeyUp(e.Keysym.Sym)
 		}
@@ -197,122 +205,88 @@ func (s *Backend) handleEvent(event sdl.Event) {
 	}
 }
 
-func (s *Backend) handleKeyDown(key sdl.Keycode) {
-	slog.Info("Key pressed", "key", key, "keyname", sdl.GetKeyName(key))
-	if s.config.TestPattern {
-		switch key {
-		case sdl.K_t:
-			s.testPatternType = (s.testPatternType + 1) % display.TestPatternCount
-			s.generateTestPattern(s.testPatternType)
-			patternNames := []string{"Checkerboard", "Gradient", "Stripes", "Diagonal"}
-			slog.Info("Switched to test pattern", "pattern", patternNames[s.testPatternType])
-		case sdl.K_ESCAPE:
-			s.running = false
-			if s.callbacks.OnQuit != nil {
-				s.callbacks.OnQuit()
-			}
-		case sdl.K_F12:
-			debug.TakeSnapshot(s.currentFrame, s.config.TestPattern, s.testPatternType)
-		}
-		return
-	}
+// keyMapping maps SDL2 keys to actions
+var keyMapping = map[sdl.Keycode]action.Action{
+	// Emulator controls
+	sdl.K_F10:    action.EmulatorDebugUpdate,
+	sdl.K_F11:    action.EmulatorDebugToggle,
+	sdl.K_F12:    action.EmulatorSnapshot,
+	sdl.K_ESCAPE: action.EmulatorQuit,
+	sdl.K_SPACE:  action.EmulatorPauseToggle,
+	sdl.K_t:      action.EmulatorTestPatternCycle,
 
-	// Normal emulator controls
-	switch key {
-	case sdl.K_ESCAPE:
+	// Game Boy controls
+	sdl.K_RETURN: action.GBButtonStart,
+	sdl.K_a:      action.GBButtonA,
+	sdl.K_s:      action.GBButtonB,
+	sdl.K_q:      action.GBButtonSelect,
+	sdl.K_UP:     action.GBDPadUp,
+	sdl.K_DOWN:   action.GBDPadDown,
+	sdl.K_LEFT:   action.GBDPadLeft,
+	sdl.K_RIGHT:  action.GBDPadRight,
+}
+
+func (s *Backend) setupInputBindings() {
+	// Emulator controls
+	s.inputManager.On(action.EmulatorDebugToggle, event.Press, func() {
+		if s.callbacks.OnDebugMessage != nil {
+			s.callbacks.OnDebugMessage("debug:toggle_window")
+		}
+	})
+
+	s.inputManager.On(action.EmulatorDebugUpdate, event.Press, func() {
+		if s.callbacks.OnDebugMessage != nil {
+			s.callbacks.OnDebugMessage("debug:update_window")
+		}
+	})
+
+	s.inputManager.On(action.EmulatorSnapshot, event.Press, func() {
+		debug.TakeSnapshot(s.currentFrame, s.config.TestPattern, s.testPatternType)
+	})
+
+	s.inputManager.On(action.EmulatorPauseToggle, event.Press, func() {
+		if s.callbacks.OnDebugMessage != nil {
+			s.callbacks.OnDebugMessage("debug:toggle_pause")
+		}
+	})
+
+	s.inputManager.On(action.EmulatorQuit, event.Press, func() {
 		s.running = false
 		if s.callbacks.OnQuit != nil {
 			s.callbacks.OnQuit()
 		}
-	case sdl.K_RETURN:
-		if s.callbacks.OnKeyPress != nil {
-			s.callbacks.OnKeyPress(memory.JoypadStart)
+	})
+
+	// Test pattern cycling (only in test mode)
+	if s.config.TestPattern {
+		s.inputManager.On(action.EmulatorTestPatternCycle, event.Press, func() {
+			s.testPatternType = (s.testPatternType + 1) % display.TestPatternCount
+			s.generateTestPattern(s.testPatternType)
+			patternNames := []string{"Checkerboard", "Gradient", "Stripes", "Diagonal"}
+			slog.Info("Switched to test pattern", "pattern", patternNames[s.testPatternType])
+		})
+	}
+
+	// Game Boy controls are now handled directly by InputManager via joypad reference
+}
+
+func (s *Backend) handleKeyDown(key sdl.Keycode, repeat uint8) {
+	if act, exists := keyMapping[key]; exists {
+		// Special case for test pattern cycling
+		if act == action.EmulatorTestPatternCycle && !s.config.TestPattern {
+			return
 		}
-	case sdl.K_RIGHT:
-		if s.callbacks.OnKeyPress != nil {
-			s.callbacks.OnKeyPress(memory.JoypadRight)
-		}
-	case sdl.K_LEFT:
-		if s.callbacks.OnKeyPress != nil {
-			s.callbacks.OnKeyPress(memory.JoypadLeft)
-		}
-	case sdl.K_UP:
-		if s.callbacks.OnKeyPress != nil {
-			s.callbacks.OnKeyPress(memory.JoypadUp)
-		}
-	case sdl.K_DOWN:
-		if s.callbacks.OnKeyPress != nil {
-			s.callbacks.OnKeyPress(memory.JoypadDown)
-		}
-	case sdl.K_a:
-		if s.callbacks.OnKeyPress != nil {
-			s.callbacks.OnKeyPress(memory.JoypadA)
-		}
-	case sdl.K_s:
-		if s.callbacks.OnKeyPress != nil {
-			s.callbacks.OnKeyPress(memory.JoypadB)
-		}
-	case sdl.K_q:
-		if s.callbacks.OnKeyPress != nil {
-			s.callbacks.OnKeyPress(memory.JoypadSelect)
-		}
-	case sdl.K_SPACE:
-		if s.callbacks.OnDebugMessage != nil {
-			s.callbacks.OnDebugMessage("debug:toggle_pause")
-		}
-	case sdl.K_F11:
-		slog.Info("F11 pressed - toggling debug window")
-		if s.callbacks.OnDebugMessage != nil {
-			s.callbacks.OnDebugMessage("debug:toggle_window")
-		}
-	case sdl.K_F10:
-		slog.Info("F10 pressed - updating debug window")
-		if s.callbacks.OnDebugMessage != nil {
-			s.callbacks.OnDebugMessage("debug:update_window")
-		}
-	case sdl.K_F12:
-		debug.TakeSnapshot(s.currentFrame, s.config.TestPattern, s.testPatternType)
+		s.inputManager.Trigger(act, event.Press)
 	}
 }
 
 func (s *Backend) handleKeyUp(key sdl.Keycode) {
-	if s.config.TestPattern {
-		return
-	}
-
-	// Handle key releases for joypad
-	switch key {
-	case sdl.K_RIGHT:
-		if s.callbacks.OnKeyRelease != nil {
-			s.callbacks.OnKeyRelease(memory.JoypadRight)
-		}
-	case sdl.K_LEFT:
-		if s.callbacks.OnKeyRelease != nil {
-			s.callbacks.OnKeyRelease(memory.JoypadLeft)
-		}
-	case sdl.K_UP:
-		if s.callbacks.OnKeyRelease != nil {
-			s.callbacks.OnKeyRelease(memory.JoypadUp)
-		}
-	case sdl.K_DOWN:
-		if s.callbacks.OnKeyRelease != nil {
-			s.callbacks.OnKeyRelease(memory.JoypadDown)
-		}
-	case sdl.K_a:
-		if s.callbacks.OnKeyRelease != nil {
-			s.callbacks.OnKeyRelease(memory.JoypadA)
-		}
-	case sdl.K_s:
-		if s.callbacks.OnKeyRelease != nil {
-			s.callbacks.OnKeyRelease(memory.JoypadB)
-		}
-	case sdl.K_q:
-		if s.callbacks.OnKeyRelease != nil {
-			s.callbacks.OnKeyRelease(memory.JoypadSelect)
-		}
-	case sdl.K_RETURN:
-		if s.callbacks.OnKeyRelease != nil {
-			s.callbacks.OnKeyRelease(memory.JoypadStart)
+	if act, exists := keyMapping[key]; exists {
+		// Only trigger Release events for Game Boy controls
+		switch act {
+		case action.GBButtonA, action.GBButtonB, action.GBButtonStart, action.GBButtonSelect,
+			action.GBDPadUp, action.GBDPadDown, action.GBDPadLeft, action.GBDPadRight:
+			s.inputManager.Trigger(act, event.Release)
 		}
 	}
 }
@@ -472,26 +446,25 @@ func (s *Backend) UpdateDebugData(oam *debug.OAMData, vram *debug.VRAMData) {
 
 // ToggleDebugWindow shows/hides the debug window
 func (s *Backend) ToggleDebugWindow() {
-	slog.Info("ToggleDebugWindow called")
-	if s.debugWindow != nil {
-		// Initialize debug window if not already initialized
-		if !s.debugWindow.IsInitialized() {
-			slog.Info("Debug window not initialized, initializing now")
-			if err := s.debugWindow.Init(); err != nil {
-				slog.Warn("Failed to initialize debug window", "error", err)
-				return
-			}
-		}
-		wasVisible := s.debugWindow.IsVisible()
-		s.debugWindow.SetVisible(!wasVisible)
-		slog.Info("Debug window visibility changed", "was_visible", wasVisible, "now_visible", !wasVisible)
-
-		// If we're showing the window, trigger a debug data update
-		if !wasVisible && s.callbacks.OnDebugMessage != nil {
-			slog.Info("Triggering debug data update")
-			s.callbacks.OnDebugMessage("debug:update_window")
-		}
-	} else {
+	if s.debugWindow == nil {
 		slog.Warn("Debug window is nil")
+		return
+	}
+
+	if !s.debugWindow.IsInitialized() {
+		slog.Debug("Initializing debug window")
+		if err := s.debugWindow.Init(); err != nil {
+			slog.Warn("Failed to initialize debug window", "error", err)
+			return
+		}
+	}
+	wasVisible := s.debugWindow.IsVisible()
+	s.debugWindow.SetVisible(!wasVisible)
+	slog.Debug("Debug window visibility changed", "was_visible", wasVisible, "now_visible", !wasVisible)
+
+	// If we're showing the window, trigger a debug data update
+	if !wasVisible && s.callbacks.OnDebugMessage != nil {
+		slog.Debug("Triggering debug data update")
+		s.callbacks.OnDebugMessage("debug:update_window")
 	}
 }
