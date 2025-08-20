@@ -13,6 +13,9 @@ import (
 	"github.com/valerio/go-jeebie/jeebie/debug"
 	"github.com/valerio/go-jeebie/jeebie/disasm"
 	"github.com/valerio/go-jeebie/jeebie/display"
+	"github.com/valerio/go-jeebie/jeebie/input"
+	"github.com/valerio/go-jeebie/jeebie/input/action"
+	"github.com/valerio/go-jeebie/jeebie/input/event"
 	"github.com/valerio/go-jeebie/jeebie/memory"
 	"github.com/valerio/go-jeebie/jeebie/render"
 	"github.com/valerio/go-jeebie/jeebie/video"
@@ -37,12 +40,13 @@ var shadeChars = []rune{'█', '▓', '▒', '░'}
 
 // Backend implements the Backend interface using tcell for terminal rendering
 type Backend struct {
-	screen    tcell.Screen
-	running   bool
-	logBuffer *render.LogBuffer
-	logLevel  slog.Level
-	callbacks backend.BackendCallbacks
-	config    backend.BackendConfig
+	screen       tcell.Screen
+	running      bool
+	logBuffer    *render.LogBuffer
+	logLevel     slog.Level
+	callbacks    backend.BackendCallbacks
+	config       backend.BackendConfig
+	inputManager *input.Manager
 
 	// For accessing emulator state (will be passed via interface)
 	getCPU func() CPUState
@@ -88,6 +92,7 @@ func New() *Backend {
 func (t *Backend) Init(config backend.BackendConfig) error {
 	t.config = config
 	t.callbacks = config.Callbacks
+	t.inputManager = config.InputManager
 
 	screen, err := tcell.NewScreen()
 	if err != nil {
@@ -194,73 +199,71 @@ func (t *Backend) handleInput() {
 	}
 }
 
+// keyMapping maps tcell keys to actions
+var keyMapping = map[tcell.Key]action.Action{
+	// Emulator controls
+	tcell.KeyF12:    action.EmulatorSnapshot,
+	tcell.KeyEscape: action.EmulatorQuit,
+	tcell.KeyCtrlC:  action.EmulatorQuit,
+	// Game Boy controls
+	tcell.KeyEnter: action.GBButtonStart,
+	tcell.KeyUp:    action.GBDPadUp,
+	tcell.KeyDown:  action.GBDPadDown,
+	tcell.KeyLeft:  action.GBDPadLeft,
+	tcell.KeyRight: action.GBDPadRight,
+}
+
+// runeMapping maps runes to actions
+var runeMapping = map[rune]action.Action{
+	// Game Boy controls
+	'a': action.GBButtonA,
+	's': action.GBButtonB,
+	'q': action.GBButtonSelect,
+	// Emulator controls
+	' ': action.EmulatorPauseToggle,
+	't': action.EmulatorTestPatternCycle,
+}
+
 func (t *Backend) handleKeyEvent(ev *tcell.EventKey) {
-	switch ev.Key() {
-	case tcell.KeyEscape, tcell.KeyCtrlC:
-		t.running = false
-		if t.callbacks.OnQuit != nil {
-			t.callbacks.OnQuit()
+	// Handle special keys
+	if act, exists := keyMapping[ev.Key()]; exists {
+		// Handle backend-specific actions
+		if act == action.EmulatorSnapshot {
+			debug.TakeSnapshot(t.currentFrame, t.config.TestPattern, t.testPatternType)
+			return
 		}
+		if act == action.EmulatorQuit {
+			t.running = false
+		}
+		// Pass action to input manager
+		t.inputManager.Trigger(act, event.Press)
 		return
-	case tcell.KeyF12:
-		debug.TakeSnapshot(t.currentFrame, t.config.TestPattern, t.testPatternType)
-	case tcell.KeyEnter:
-		if t.callbacks.OnKeyPress != nil {
-			t.callbacks.OnKeyPress(memory.JoypadStart)
-		}
-	case tcell.KeyRight:
-		if t.callbacks.OnKeyPress != nil {
-			t.callbacks.OnKeyPress(memory.JoypadRight)
-		}
-	case tcell.KeyLeft:
-		if t.callbacks.OnKeyPress != nil {
-			t.callbacks.OnKeyPress(memory.JoypadLeft)
-		}
-	case tcell.KeyUp:
-		if t.callbacks.OnKeyPress != nil {
-			t.callbacks.OnKeyPress(memory.JoypadUp)
-		}
-	case tcell.KeyDown:
-		if t.callbacks.OnKeyPress != nil {
-			t.callbacks.OnKeyPress(memory.JoypadDown)
-		}
-	case tcell.KeyRune:
+	}
+
+	// Handle rune keys
+	if ev.Key() == tcell.KeyRune {
 		t.handleRuneKey(ev.Rune())
 	}
 }
 
 func (t *Backend) handleRuneKey(r rune) {
-	if t.config.TestPattern {
-		// Test pattern specific controls
-		switch r {
-		case 't': // 't' key - cycle test patterns
+	// Handle mapped runes
+	if act, exists := runeMapping[r]; exists {
+		// Handle backend-specific test pattern cycling
+		if act == action.EmulatorTestPatternCycle && t.config.TestPattern {
 			t.testPatternType = (t.testPatternType + 1) % display.TestPatternCount
 			t.generateTestPattern(t.testPatternType)
 			patternNames := []string{"Checkerboard", "Gradient", "Stripes", "Diagonal"}
 			slog.Info("Switched to test pattern", "pattern", patternNames[t.testPatternType])
+			return
 		}
+		// Pass action to input manager
+		t.inputManager.Trigger(act, event.Press)
 		return
 	}
 
-	// Normal emulator controls
+	// Terminal-specific debug controls not in the generic action system
 	switch r {
-	case 'a':
-		if t.callbacks.OnKeyPress != nil {
-			t.callbacks.OnKeyPress(memory.JoypadA)
-		}
-	case 's':
-		if t.callbacks.OnKeyPress != nil {
-			t.callbacks.OnKeyPress(memory.JoypadB)
-		}
-	case 'q':
-		if t.callbacks.OnKeyPress != nil {
-			t.callbacks.OnKeyPress(memory.JoypadSelect)
-		}
-
-	case ' ': // Spacebar - pause/resume toggle
-		if t.callbacks.OnDebugMessage != nil {
-			t.callbacks.OnDebugMessage("debug:toggle_pause")
-		}
 	case 'n': // Next instruction (step)
 		if t.callbacks.OnDebugMessage != nil {
 			t.callbacks.OnDebugMessage("debug:step_instruction")

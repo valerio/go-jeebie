@@ -15,6 +15,8 @@ import (
 	"github.com/valerio/go-jeebie/jeebie/backend/terminal"
 	"github.com/valerio/go-jeebie/jeebie/debug"
 	"github.com/valerio/go-jeebie/jeebie/input"
+	"github.com/valerio/go-jeebie/jeebie/input/action"
+	"github.com/valerio/go-jeebie/jeebie/input/event"
 	"github.com/valerio/go-jeebie/jeebie/video"
 )
 
@@ -111,15 +113,14 @@ func runEmulator(c *cli.Context) error {
 
 	var inputManager *input.Manager
 	if emu != nil {
-		callbacks.OnKeyPress = emu.HandleKeyPress
-		callbacks.OnKeyRelease = emu.HandleKeyRelease
 		callbacks.OnDebugMessage = func(message string) {
 			handleDebugCommand(emu, message, emulatorBackend)
 		}
-		if emu != nil {
-			inputManager = input.NewManager(emu.GetJoypad())
-		}
+		inputManager = input.NewManager(emu.GetJoypad())
+	} else {
+		inputManager = input.NewManager(nil)
 	}
+	setupInputCallbacks(inputManager, &callbacks, testPattern)
 
 	config := backend.BackendConfig{
 		Title:        "Jeebie",
@@ -194,6 +195,46 @@ func createBackend(c *cli.Context, romPath string) (backend.Backend, error) {
 	}
 }
 
+// setupInputCallbacks registers all input callbacks with the input manager
+func setupInputCallbacks(inputManager *input.Manager, callbacks *backend.BackendCallbacks, testPattern bool) {
+	// Note: EmulatorDebugToggle is handled by SDL2 backend directly
+	// Terminal backend doesn't support debug windows
+
+	inputManager.On(action.EmulatorDebugUpdate, event.Press, func() {
+		if callbacks.OnDebugMessage != nil {
+			callbacks.OnDebugMessage("debug:update_window")
+		}
+	})
+
+	inputManager.On(action.EmulatorSnapshot, event.Press, func() {
+		// Snapshot is handled by backends directly since they have access to current frame
+		if callbacks.OnDebugMessage != nil {
+			callbacks.OnDebugMessage("debug:snapshot")
+		}
+	})
+
+	inputManager.On(action.EmulatorPauseToggle, event.Press, func() {
+		if callbacks.OnDebugMessage != nil {
+			callbacks.OnDebugMessage("debug:toggle_pause")
+		}
+	})
+
+	inputManager.On(action.EmulatorQuit, event.Press, func() {
+		if callbacks.OnQuit != nil {
+			callbacks.OnQuit()
+		}
+	})
+
+	// Test pattern cycling (only in test mode)
+	if testPattern {
+		inputManager.On(action.EmulatorTestPatternCycle, event.Press, func() {
+			if callbacks.OnDebugMessage != nil {
+				callbacks.OnDebugMessage("debug:cycle_test_pattern")
+			}
+		})
+	}
+}
+
 // handleDebugCommand processes debug commands from backends
 func handleDebugCommand(emu *jeebie.Emulator, command string, emulatorBackend backend.Backend) {
 	switch command {
@@ -226,6 +267,12 @@ func handleDebugCommand(emu *jeebie.Emulator, command string, emulatorBackend ba
 		} else {
 			slog.Warn("Backend is not SDL2, cannot toggle debug window")
 		}
+	case "debug:snapshot":
+		slog.Info("Snapshot command received - handled by backend")
+		// Backends handle snapshots directly since they have the current frame
+	case "debug:cycle_test_pattern":
+		slog.Info("Test pattern cycle command received - handled by backend")
+		// Backends handle test pattern cycling directly
 	case "debug:update_window":
 		slog.Info("Handling debug:update_window")
 		// TODO: this should just be handled in the backend itself

@@ -58,13 +58,15 @@ func (m *Manager) Trigger(act action.Action, evt event.Type) {
 	// GB controls, written directly to memory (joypad)
 	if m.joypad != nil {
 		joypadKey := m.getJoypadKey(act)
-		switch evt {
-		case event.Press:
-			m.joypad.Press(joypadKey)
-		case event.Release:
-			m.joypad.Release(joypadKey)
+		if joypadKey != 0 { // Only handle actual GB controls
+			switch evt {
+			case event.Press:
+				m.joypad.Press(joypadKey)
+			case event.Release:
+				m.joypad.Release(joypadKey)
+			}
+			return // Only return for GB controls
 		}
-		return
 	}
 
 	// Other emulator actions

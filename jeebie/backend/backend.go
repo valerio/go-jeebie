@@ -2,18 +2,26 @@ package backend
 
 import (
 	"github.com/valerio/go-jeebie/jeebie/input"
-	"github.com/valerio/go-jeebie/jeebie/memory"
 	"github.com/valerio/go-jeebie/jeebie/video"
 )
 
 // Backend represents a complete emulator platform (rendering + input + audio)
+// Backends are responsible for:
+// - Rendering frames to their specific output (terminal, SDL window, etc.)
+// - Translating platform-specific input events to Actions via InputManager
+// - Handling backend-specific features (snapshots, test patterns, debug windows)
 type Backend interface {
-	// Init configures the backend
-	// This is a required step
+	// Init configures the backend with the provided configuration.
+	// The InputManager in config is used to translate platform events to actions.
+	// This is a required step before calling Update.
 	Init(config BackendConfig) error
 
-	// Update handles rendering the frame and processing platform events
-	// This is where each backend handles its specific input/audio systems
+	// Update handles rendering the frame and processing platform events.
+	// Backends should:
+	// 1. Poll for platform-specific events (keyboard, window events, etc.)
+	// 2. Translate events to Actions and call InputManager.Trigger()
+	// 3. Render the provided frame (or test pattern if configured)
+	// 4. Handle backend-specific features (debug windows, snapshots, etc.)
 	Update(frame *video.FrameBuffer) error
 
 	// Cleanup resources when shutting down
@@ -34,12 +42,6 @@ type BackendConfig struct {
 
 // BackendCallbacks allows backends to communicate with the emulator
 type BackendCallbacks struct {
-	// Input callbacks
-	// TODO: move these to input manager in all backends
-
-	OnKeyPress   func(key memory.JoypadKey)
-	OnKeyRelease func(key memory.JoypadKey)
-
 	// Control callbacks
 	OnQuit func() // Backend requests shutdown (e.g., window close)
 

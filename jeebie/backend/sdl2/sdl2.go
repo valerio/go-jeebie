@@ -112,7 +112,8 @@ func (s *Backend) Init(config backend.BackendConfig) error {
 		}
 	}
 
-	s.setupInputBindings()
+	// Register SDL2-specific callbacks
+	s.setupCallbacks()
 
 	if config.TestPattern {
 		s.testPatternFrame = video.NewFrameBuffer()
@@ -226,61 +227,52 @@ var keyMapping = map[sdl.Keycode]action.Action{
 	sdl.K_RIGHT:  action.GBDPadRight,
 }
 
-func (s *Backend) setupInputBindings() {
-	// Emulator controls
-	s.inputManager.On(action.EmulatorDebugToggle, event.Press, func() {
-		if s.callbacks.OnDebugMessage != nil {
-			s.callbacks.OnDebugMessage("debug:toggle_window")
-		}
-	})
-
-	s.inputManager.On(action.EmulatorDebugUpdate, event.Press, func() {
-		if s.callbacks.OnDebugMessage != nil {
-			s.callbacks.OnDebugMessage("debug:update_window")
-		}
-	})
-
-	s.inputManager.On(action.EmulatorSnapshot, event.Press, func() {
-		debug.TakeSnapshot(s.currentFrame, s.config.TestPattern, s.testPatternType)
-	})
-
-	s.inputManager.On(action.EmulatorPauseToggle, event.Press, func() {
-		if s.callbacks.OnDebugMessage != nil {
-			s.callbacks.OnDebugMessage("debug:toggle_pause")
-		}
-	})
+func (s *Backend) setupCallbacks() {
+	// Register callbacks for actions that need backend-specific handling
+	if s.inputManager == nil {
+		slog.Warn("No input manager available, callbacks not registered")
+		return
+	}
 
 	s.inputManager.On(action.EmulatorQuit, event.Press, func() {
 		s.running = false
-		if s.callbacks.OnQuit != nil {
-			s.callbacks.OnQuit()
-		}
 	})
 
-	// Test pattern cycling (only in test mode)
-	if s.config.TestPattern {
-		s.inputManager.On(action.EmulatorTestPatternCycle, event.Press, func() {
+	s.inputManager.On(action.EmulatorDebugToggle, event.Press, func() {
+		s.ToggleDebugWindow()
+	})
+}
+
+func (s *Backend) handleKeyDown(key sdl.Keycode, repeat uint8) {
+	// Ignore key repeat events
+	if repeat != 0 {
+		return
+	}
+
+	if act, exists := keyMapping[key]; exists {
+		// Handle backend-specific actions that need direct access to backend state
+		if act == action.EmulatorSnapshot {
+			debug.TakeSnapshot(s.currentFrame, s.config.TestPattern, s.testPatternType)
+			return
+		}
+		if act == action.EmulatorTestPatternCycle && s.config.TestPattern {
 			s.testPatternType = (s.testPatternType + 1) % display.TestPatternCount
 			s.generateTestPattern(s.testPatternType)
 			patternNames := []string{"Checkerboard", "Gradient", "Stripes", "Diagonal"}
 			slog.Info("Switched to test pattern", "pattern", patternNames[s.testPatternType])
-		})
-	}
-
-	// Game Boy controls are now handled directly by InputManager via joypad reference
-}
-
-func (s *Backend) handleKeyDown(key sdl.Keycode, repeat uint8) {
-	if act, exists := keyMapping[key]; exists {
-		// Special case for test pattern cycling
-		if act == action.EmulatorTestPatternCycle && !s.config.TestPattern {
 			return
 		}
-		s.inputManager.Trigger(act, event.Press)
+		// Pass all actions to input manager for proper handling and debouncing
+		if s.inputManager != nil {
+			s.inputManager.Trigger(act, event.Press)
+		}
 	}
 }
 
 func (s *Backend) handleKeyUp(key sdl.Keycode) {
+	if s.inputManager == nil {
+		return
+	}
 	if act, exists := keyMapping[key]; exists {
 		// Only trigger Release events for Game Boy controls
 		switch act {
