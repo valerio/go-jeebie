@@ -24,7 +24,16 @@ func NewHandler() *Handler {
 // ProcessEvent processes an input event, applying debouncing for Press/Release events
 // Returns true if the event should be handled, false if it was debounced
 func (h *Handler) ProcessEvent(evt backend.InputEvent) bool {
-	if evt.Type == event.Press || evt.Type == event.Release {
+
+	// TODO: better split of GB action vs debugger/emulator actions. GB is not debounced.
+	switch evt.Action {
+	case action.GBButtonA, action.GBButtonB, action.GBButtonStart, action.GBButtonSelect,
+		action.GBDPadUp, action.GBDPadDown, action.GBDPadLeft, action.GBDPadRight:
+		return true
+	}
+
+	switch evt.Type {
+	case event.Press:
 		now := time.Now()
 		if lastTime, exists := h.lastActionTime[evt.Action]; exists {
 			if now.Sub(lastTime) < h.debounceDelay {
@@ -32,6 +41,7 @@ func (h *Handler) ProcessEvent(evt backend.InputEvent) bool {
 			}
 		}
 		h.lastActionTime[evt.Action] = now
+	case event.Release:
 	}
 
 	return true
