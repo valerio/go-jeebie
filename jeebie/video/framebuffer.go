@@ -20,13 +20,13 @@ const (
 func ByteToColor(value byte) GBColor {
 	switch value {
 	case 0:
-		return BlackColor
+		return WhiteColor // 00 = white (lightest)
 	case 1:
-		return DarkGreyColor
+		return LightGreyColor // 01 = light grey
 	case 2:
-		return LightGreyColor
+		return DarkGreyColor // 10 = dark grey
 	case 3:
-		return WhiteColor
+		return BlackColor // 11 = black (darkest)
 	}
 
 	return 0
