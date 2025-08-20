@@ -26,8 +26,9 @@ const (
 )
 
 type GPU struct {
-	memory      *memory.MMU
-	framebuffer *FrameBuffer
+	memory        *memory.MMU
+	framebuffer   *FrameBuffer
+	bgPixelBuffer []byte
 
 	mode                 GpuMode
 	line                 int
@@ -43,9 +44,10 @@ type GPU struct {
 func NewGpu(memory *memory.MMU) *GPU {
 	fb := NewFrameBuffer()
 	gpu := &GPU{
-		framebuffer: fb,
-		memory:      memory,
-		mode:        vblankMode,
+		framebuffer:   fb,
+		memory:        memory,
+		mode:          vblankMode,
+		bgPixelBuffer: make([]byte, FramebufferSize),
 
 		line: 144,
 	}
@@ -179,6 +181,7 @@ func (g *GPU) drawBackground() {
 	if !backgroundEnabled {
 		for i := 0; i < FramebufferWidth; i++ {
 			g.framebuffer.buffer[lineWidth+i] = 0
+			g.bgPixelBuffer[lineWidth+i] = 0
 		}
 		return
 	}
@@ -245,6 +248,7 @@ func (g *GPU) drawBackground() {
 		finalColor := uint32(ByteToColor(color))
 
 		g.framebuffer.buffer[pixelPosition] = finalColor
+		g.bgPixelBuffer[pixelPosition] = color // just use the color value (0-3) for the buffer
 	}
 }
 
@@ -352,6 +356,7 @@ func (g *GPU) drawWindow() {
 			palette := g.memory.Read(addr.BGP)
 			color := (palette >> (pixel * 2)) & 0x03
 			g.framebuffer.buffer[position] = uint32(ByteToColor(color))
+			g.bgPixelBuffer[position] = color
 		}
 	}
 	g.windowLine++
@@ -376,7 +381,7 @@ func (g *GPU) drawSprites() {
 		spriteY := int(g.memory.Read(0xFE00+uint16(sprite4))) - 16
 		spriteX := int(g.memory.Read(0xFE00+uint16(sprite4)+1)) - 8
 
-		if int(spriteY) > g.line || (int(spriteY)+spriteHeight) <= g.line {
+		if spriteY > g.line || (spriteY+spriteHeight) <= g.line {
 			continue
 		}
 
@@ -463,12 +468,15 @@ func (g *GPU) drawSprites() {
 				continue
 			}
 
-			// Sprite priority: if aboveBG is false, sprite is behind background
-			// Only draw sprite pixel if aboveBG is true OR background pixel is color 0 (transparent)
+			// Sprite priority: if !aboveBG, sprite is behind background, so we should stop
+			// drawing it. If the background color is 0, we must draw it.
 			if !aboveBG {
-				// Check if the background pixel at this position is transparent (color 0)
-				// We need to re-calculate the background pixel value here
-				continue // For now, just skip behind-background sprites (simplified)
+				// check the raw BG pixels which we stored so far.
+				bgPixel := g.bgPixelBuffer[position]
+				if bgPixel != 0 {
+					// sprite pixel is 1-2-3, should not be drawn.
+					continue
+				}
 			}
 
 			palette := g.memory.Read(objPaletteAddr)
