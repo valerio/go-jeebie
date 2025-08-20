@@ -92,8 +92,6 @@ func NewWithFile(path string) (*DMG, error) {
 		return nil, err
 	}
 
-	slog.Debug("Loaded ROM data", "size", len(data))
-
 	e := &DMG{}
 	e.init(memory.NewWithCartridge(memory.NewCartridgeWithData(data)))
 
@@ -118,14 +116,10 @@ func (e *DMG) RunUntilFrame() error {
 			e.debuggerMutex.Unlock()
 
 			// Execute one CPU instruction
-			oldPC := e.cpu.GetPC()
 			cycles := e.cpu.Tick()
 			e.updateTimers(cycles)
 			e.gpu.Tick(cycles)
 			e.instructionCount++
-
-			// Log the executed instruction
-			slog.Debug("Step executed", "pc", fmt.Sprintf("0x%04X", oldPC), "new_pc", fmt.Sprintf("0x%04X", e.cpu.GetPC()))
 
 			// Pause after execution
 			e.SetDebuggerState(DebuggerPaused)
@@ -159,7 +153,6 @@ func (e *DMG) RunUntilFrame() error {
 				}
 			}
 			e.frameCount++
-			slog.Debug("Frame step completed", "frame", e.frameCount, "instructions", e.instructionCount)
 			e.SetDebuggerState(DebuggerPaused)
 		}
 		return nil
@@ -177,10 +170,6 @@ func (e *DMG) RunUntilFrame() error {
 
 		if total >= 70224 {
 			e.frameCount++
-			// Log every 60 frames (once per second at 60 FPS) only when running
-			if e.frameCount%60 == 0 {
-				slog.Debug("Frame completed", "frame", e.frameCount, "pc", fmt.Sprintf("0x%04X", e.cpu.GetPC()))
-			}
 			return nil
 		}
 	}
@@ -212,11 +201,13 @@ func (e *DMG) HandleAction(act action.Action, pressed bool) {
 	case action.EmulatorStepFrame:
 		if pressed && e.debuggerState == DebuggerPaused {
 			e.debuggerState = DebuggerStepFrame
+			e.frameRequested = true
 		}
 		return
 	case action.EmulatorStepInstruction:
 		if pressed && e.debuggerState == DebuggerPaused {
 			e.debuggerState = DebuggerStep
+			e.stepRequested = true
 		}
 		return
 	}
@@ -255,7 +246,6 @@ func (e *DMG) SetDebuggerState(state DebuggerState) {
 	e.debuggerMutex.Lock()
 	defer e.debuggerMutex.Unlock()
 	e.debuggerState = state
-	slog.Debug("Debugger state changed", "state", state)
 }
 
 func (e *DMG) GetInstructionCount() uint64 {

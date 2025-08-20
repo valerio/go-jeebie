@@ -2,7 +2,6 @@ package memory
 
 import (
 	"github.com/valerio/go-jeebie/jeebie/bit"
-	"log/slog"
 )
 
 // JoypadKey represents a key on the Gameboy joypad
@@ -69,122 +68,49 @@ func (j *Joypad) Read() uint8 {
 // Write sets the joypad line to be read
 func (j *Joypad) Write(value uint8) {
 	newLine := value & 0x30
-	if newLine != j.line {
-		groupName := "unknown"
-		switch newLine {
-		case 0x10:
-			groupName = "directions"
-		case 0x20:
-			groupName = "buttons"
-		case 0x30:
-			groupName = "none"
-		case 0x00:
-			groupName = "both"
-		}
-		slog.Debug("Joypad group selected", "value", newLine, "group", groupName)
-	}
 	j.line = newLine
-}
-
-// logKeyChange logs key press/release events only when state actually changes
-func (j *Joypad) logKeyChange(key JoypadKey, pressed bool) {
-	keyName := ""
-	switch key {
-	case JoypadRight:
-		keyName = "RIGHT"
-	case JoypadLeft:
-		keyName = "LEFT"
-	case JoypadUp:
-		keyName = "UP"
-	case JoypadDown:
-		keyName = "DOWN"
-	case JoypadA:
-		keyName = "A"
-	case JoypadB:
-		keyName = "B"
-	case JoypadSelect:
-		keyName = "SELECT"
-	case JoypadStart:
-		keyName = "START"
-	}
-
-	if pressed {
-		slog.Debug("Joypad key pressed", "key", keyName)
-	} else {
-		slog.Debug("Joypad key released", "key", keyName)
-	}
 }
 
 // Press updates the joypad state when a key is pressed
 func (j *Joypad) Press(key JoypadKey) {
-	var wasPressed bool
-
 	switch key {
 	case JoypadRight:
-		wasPressed = (j.dpad & 0x01) == 0
 		j.dpad = bit.Reset(0, j.dpad)
 	case JoypadLeft:
-		wasPressed = (j.dpad & 0x02) == 0
 		j.dpad = bit.Reset(1, j.dpad)
 	case JoypadUp:
-		wasPressed = (j.dpad & 0x04) == 0
 		j.dpad = bit.Reset(2, j.dpad)
 	case JoypadDown:
-		wasPressed = (j.dpad & 0x08) == 0
 		j.dpad = bit.Reset(3, j.dpad)
 	case JoypadA:
-		wasPressed = (j.buttons & 0x01) == 0
 		j.buttons = bit.Reset(0, j.buttons)
 	case JoypadB:
-		wasPressed = (j.buttons & 0x02) == 0
 		j.buttons = bit.Reset(1, j.buttons)
 	case JoypadSelect:
-		wasPressed = (j.buttons & 0x04) == 0
 		j.buttons = bit.Reset(2, j.buttons)
 	case JoypadStart:
-		wasPressed = (j.buttons & 0x08) == 0
 		j.buttons = bit.Reset(3, j.buttons)
-	}
-
-	// Only log if this is a new press (key wasn't already pressed)
-	if !wasPressed {
-		j.logKeyChange(key, true)
 	}
 }
 
 // Release updates the joypad state when a key is released
 func (j *Joypad) Release(key JoypadKey) {
-	var wasPressed bool
-
 	switch key {
 	case JoypadRight:
-		wasPressed = (j.dpad & 0x01) == 0
 		j.dpad = bit.Set(0, j.dpad)
 	case JoypadLeft:
-		wasPressed = (j.dpad & 0x02) == 0
 		j.dpad = bit.Set(1, j.dpad)
 	case JoypadUp:
-		wasPressed = (j.dpad & 0x04) == 0
 		j.dpad = bit.Set(2, j.dpad)
 	case JoypadDown:
-		wasPressed = (j.dpad & 0x08) == 0
 		j.dpad = bit.Set(3, j.dpad)
 	case JoypadA:
-		wasPressed = (j.buttons & 0x01) == 0
 		j.buttons = bit.Set(0, j.buttons)
 	case JoypadB:
-		wasPressed = (j.buttons & 0x02) == 0
 		j.buttons = bit.Set(1, j.buttons)
 	case JoypadSelect:
-		wasPressed = (j.buttons & 0x04) == 0
 		j.buttons = bit.Set(2, j.buttons)
 	case JoypadStart:
-		wasPressed = (j.buttons & 0x08) == 0
 		j.buttons = bit.Set(3, j.buttons)
-	}
-
-	// Only log if the key was actually pressed before (now being released)
-	if wasPressed {
-		j.logKeyChange(key, false)
 	}
 }

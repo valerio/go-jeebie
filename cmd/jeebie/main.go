@@ -120,11 +120,6 @@ func runEmulator(c *cli.Context) error {
 	}
 	defer emulatorBackend.Cleanup()
 
-	// provide access to emulator state for debugging displays
-	if terminalBackend, ok := emulatorBackend.(*terminal.Backend); ok {
-		terminalBackend.SetDebugProvider(emu)
-	}
-
 	// Create input handler for debouncing
 	inputHandler := input.NewHandler()
 

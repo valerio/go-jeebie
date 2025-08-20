@@ -12,6 +12,7 @@ import (
 	"github.com/valerio/go-jeebie/jeebie/backend"
 	"github.com/valerio/go-jeebie/jeebie/backend/terminal/render"
 	"github.com/valerio/go-jeebie/jeebie/debug"
+	"github.com/valerio/go-jeebie/jeebie/disasm"
 	"github.com/valerio/go-jeebie/jeebie/display"
 	"github.com/valerio/go-jeebie/jeebie/input/action"
 	"github.com/valerio/go-jeebie/jeebie/input/event"
@@ -64,6 +65,7 @@ func New() *Backend {
 // Init initializes the terminal backend
 func (t *Backend) Init(config backend.BackendConfig) error {
 	t.config = config
+	t.debugProvider = config.DebugProvider
 	t.eventQueue = make([]backend.InputEvent, 0)
 
 	screen, err := tcell.NewScreen()
@@ -144,11 +146,6 @@ func (t *Backend) Cleanup() error {
 		t.screen.Fini()
 	}
 	return nil
-}
-
-// SetEmulatorState allows the backend to access emulator state for debugging
-func (t *Backend) SetDebugProvider(provider backend.DebugDataProvider) {
-	t.debugProvider = provider
 }
 
 func (t *Backend) handleSignals() {
@@ -236,17 +233,16 @@ func (t *Backend) handleRuneKey(r rune) {
 		return
 	}
 
-	// Terminal-specific debug controls not in the generic action system
-	// TODO: Convert these to proper actions in the future
+	// Terminal-specific debug controls
 	switch r {
 	case 'n': // Next instruction (step)
-		// TODO: Add debug step action
+		t.eventQueue = append(t.eventQueue, backend.InputEvent{Action: action.EmulatorStepInstruction, Type: event.Press})
 	case 'f': // Next frame (step frame)
-		// TODO: Add debug frame action
+		t.eventQueue = append(t.eventQueue, backend.InputEvent{Action: action.EmulatorStepFrame, Type: event.Press})
 	case 'r': // Resume
-		// TODO: Add debug resume action
+		t.eventQueue = append(t.eventQueue, backend.InputEvent{Action: action.EmulatorPauseToggle, Type: event.Press})
 	case 'p': // Pause
-		// TODO: Add debug pause action
+		t.eventQueue = append(t.eventQueue, backend.InputEvent{Action: action.EmulatorPauseToggle, Type: event.Press})
 	case '-', '_': // Decrease log verbosity
 		t.changeLogLevel(-1)
 	case '+', '=': // Increase log verbosity
@@ -467,9 +463,269 @@ func getHalfBlockChar(topShade, bottomShade int) (rune, tcell.Color, tcell.Color
 }
 
 func (t *Backend) drawRegisters(startX, startY, width, termHeight int) {
+	if t.debugProvider == nil {
+		return
+	}
+
+	debugData := t.debugProvider.ExtractDebugData()
+	if debugData == nil || debugData.CPU == nil {
+		return
+	}
+
+	cpu := debugData.CPU
+
+	if width <= 0 || startY >= termHeight {
+		return
+	}
+
+	// determine debugger status string
+	statusStr := "RUNNING"
+	switch debugData.DebuggerState {
+	case debug.DebuggerPaused:
+		statusStr = "PAUSED"
+	case debug.DebuggerStepInstruction:
+		statusStr = "STEP"
+	case debug.DebuggerStepFrame:
+		statusStr = "FRAME"
+	}
+
+	lines := []string{
+		fmt.Sprintf("Status: %s", statusStr),
+		fmt.Sprintf("A: 0x%02X  F: 0x%02X", cpu.A, cpu.F),
+		fmt.Sprintf("B: 0x%02X  C: 0x%02X", cpu.B, cpu.C),
+		fmt.Sprintf("D: 0x%02X  E: 0x%02X", cpu.D, cpu.E),
+		fmt.Sprintf("H: 0x%02X  L: 0x%02X", cpu.H, cpu.L),
+		fmt.Sprintf("SP: 0x%04X  PC: 0x%04X", cpu.SP, cpu.PC),
+		fmt.Sprintf("IME: %s  IE: 0x%02X  IF: 0x%02X",
+			map[bool]string{true: "ON", false: "OFF"}[cpu.IME],
+			debugData.InterruptEnable, debugData.InterruptFlags),
+		"Pending: none",
+		fmt.Sprintf("Cycles: %d", cpu.Cycles),
+	}
+
+	style := tcell.StyleDefault.Foreground(tcell.ColorBlue)
+	for i, line := range lines {
+		y := startY + i
+		if y >= termHeight || y >= startY+registerHeight {
+			break
+		}
+
+		if len(line) > width {
+			line = line[:width]
+		}
+
+		x := startX
+		for j, ch := range line {
+			if j >= width || x >= startX+width || x >= 300 {
+				break
+			}
+			t.screen.SetContent(x, y, ch, nil, style)
+			x++
+		}
+	}
 }
 
 func (t *Backend) drawDisassembly(startX, startY, width, termHeight int) {
+	if t.debugProvider == nil {
+		return
+	}
+
+	debugData := t.debugProvider.ExtractDebugData()
+	if debugData == nil || debugData.CPU == nil || debugData.Memory == nil {
+		return
+	}
+
+	if width <= 0 || startY >= termHeight {
+		return
+	}
+
+	pc := debugData.CPU.PC
+
+	// create simple disassembly from memory snapshot
+	lines := t.createSimpleDisassembly(debugData.Memory, pc)
+
+	style := tcell.StyleDefault.Foreground(tcell.ColorGreen)
+	currentStyle := tcell.StyleDefault.Foreground(tcell.ColorYellow).Bold(true)
+
+	displayedLines := 0
+	for _, disasmLine := range lines {
+		if displayedLines >= disasmHeight {
+			break
+		}
+
+		y := startY + displayedLines
+		if y >= termHeight || y >= startY+disasmHeight {
+			break
+		}
+
+		line := fmt.Sprintf(" 0x%04X: %s", disasmLine.address, disasmLine.instruction)
+
+		if disasmLine.address == pc {
+			line = "→" + line[1:]
+		}
+
+		if len(line) > width {
+			line = line[:width]
+		}
+
+		useStyle := style
+		if disasmLine.address == pc {
+			useStyle = currentStyle
+		}
+
+		x := startX
+		for j, ch := range line {
+			if j >= width || x >= startX+width {
+				break
+			}
+			t.screen.SetContent(x, y, ch, nil, useStyle)
+			x++
+		}
+
+		displayedLines++
+	}
+}
+
+// simpleDisasmLine represents a simplified disassembly line
+type simpleDisasmLine struct {
+	address     uint16
+	instruction string
+}
+
+// createSimpleDisassembly creates basic disassembly from memory snapshot
+func (t *Backend) createSimpleDisassembly(snapshot *debug.MemorySnapshot, pc uint16) []simpleDisasmLine {
+	// find PC offset in snapshot
+	pcOffset := -1
+	if pc >= snapshot.StartAddr && pc < snapshot.StartAddr+uint16(len(snapshot.Bytes)) {
+		pcOffset = int(pc - snapshot.StartAddr)
+	}
+
+	// if PC not in snapshot, just show what we have
+	if pcOffset < 0 {
+		lines := []simpleDisasmLine{}
+		for i := 0; i < len(snapshot.Bytes) && len(lines) < disasmHeight; {
+			addr := snapshot.StartAddr + uint16(i)
+			instruction, length := t.disassembleInstruction(snapshot.Bytes, i)
+			lines = append(lines, simpleDisasmLine{
+				address:     addr,
+				instruction: instruction,
+			})
+			i += length
+		}
+		return lines
+	}
+
+	// first pass: find all instructions around PC
+	allLines := []simpleDisasmLine{}
+
+	// go backwards from PC to find preceding instructions
+	// this is approximate since we can't perfectly decode backwards
+	backwardBytes := 30 // look back up to 30 bytes
+	startOffset := pcOffset - backwardBytes
+	if startOffset < 0 {
+		startOffset = 0
+	}
+
+	// decode forward from startOffset
+	for i := startOffset; i < len(snapshot.Bytes); {
+		addr := snapshot.StartAddr + uint16(i)
+		instruction, length := t.disassembleInstruction(snapshot.Bytes, i)
+
+		allLines = append(allLines, simpleDisasmLine{
+			address:     addr,
+			instruction: instruction,
+		})
+
+		i += length
+
+		// stop after we have enough instructions past PC
+		if addr > pc && len(allLines) > disasmHeight*2 {
+			break
+		}
+	}
+
+	// find PC in the lines
+	pcIndex := -1
+	for i, line := range allLines {
+		if line.address == pc {
+			pcIndex = i
+			break
+		}
+	}
+
+	// if we found PC, center the window around it
+	if pcIndex >= 0 {
+		halfHeight := disasmHeight / 2
+		startIdx := pcIndex - halfHeight
+		endIdx := pcIndex + halfHeight + 1
+
+		// adjust bounds
+		if startIdx < 0 {
+			startIdx = 0
+			endIdx = disasmHeight
+		}
+		if endIdx > len(allLines) {
+			endIdx = len(allLines)
+			startIdx = endIdx - disasmHeight
+			if startIdx < 0 {
+				startIdx = 0
+			}
+		}
+
+		return allLines[startIdx:endIdx]
+	}
+
+	// PC not found (shouldn't happen), return first instructions
+	if len(allLines) > disasmHeight {
+		return allLines[:disasmHeight]
+	}
+	return allLines
+}
+
+// disassembleInstruction decodes a single instruction from the bytes
+func (t *Backend) disassembleInstruction(bytes []uint8, offset int) (string, int) {
+	if offset >= len(bytes) {
+		return "???", 1
+	}
+
+	opcode := bytes[offset]
+
+	// CB-prefixed instruction
+	if opcode == 0xCB {
+		if offset+1 < len(bytes) {
+			cbOpcode := bytes[offset+1]
+			return disasm.CBInstructionTemplates[cbOpcode], 2
+		}
+		return "CB ???", 1
+	}
+
+	// regular instruction
+	template := disasm.InstructionTemplates[opcode]
+	length := disasm.InstructionLengths[opcode]
+
+	// format with immediate values based on length
+	switch length {
+	case 1:
+		return template, 1
+	case 2:
+		if offset+1 < len(bytes) {
+			n := bytes[offset+1]
+			return fmt.Sprintf(template, n), 2
+		}
+		return fmt.Sprintf(template, 0), 1
+	case 3:
+		if offset+2 < len(bytes) {
+			low := bytes[offset+1]
+			high := bytes[offset+2]
+			nn := uint16(high)<<8 | uint16(low)
+			return fmt.Sprintf(template, nn), 3
+		} else if offset+1 < len(bytes) {
+			return fmt.Sprintf(template, 0), 2
+		}
+		return fmt.Sprintf(template, 0), 1
+	default:
+		return template, 1
+	}
 }
 
 func (t *Backend) drawLogs(startX, startY, width, termHeight int) {
