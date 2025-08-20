@@ -8,16 +8,13 @@ import (
 
 	"github.com/urfave/cli"
 	"github.com/valerio/go-jeebie/jeebie"
-	"github.com/valerio/go-jeebie/jeebie/addr"
 	"github.com/valerio/go-jeebie/jeebie/backend"
 	"github.com/valerio/go-jeebie/jeebie/backend/headless"
 	"github.com/valerio/go-jeebie/jeebie/backend/sdl2"
 	"github.com/valerio/go-jeebie/jeebie/backend/terminal"
-	"github.com/valerio/go-jeebie/jeebie/debug"
 	"github.com/valerio/go-jeebie/jeebie/input"
 	"github.com/valerio/go-jeebie/jeebie/input/action"
 	"github.com/valerio/go-jeebie/jeebie/input/event"
-	"github.com/valerio/go-jeebie/jeebie/video"
 )
 
 func main() {
@@ -81,10 +78,12 @@ func runEmulator(c *cli.Context) error {
 	testPattern := c.Bool("test-pattern")
 
 	var romPath string
-	var emu *jeebie.Emulator
+	var emu jeebie.Emulator
 	var err error
 
-	if !testPattern {
+	if testPattern {
+		emu = jeebie.NewTestPatternEmulator()
+	} else {
 		romPath = c.String("rom")
 		if romPath == "" {
 			if c.NArg() > 0 {
@@ -107,28 +106,13 @@ func runEmulator(c *cli.Context) error {
 	}
 
 	running := true
-	callbacks := backend.BackendCallbacks{
-		OnQuit: func() { running = false },
-	}
-
-	var inputManager *input.Manager
-	if emu != nil {
-		callbacks.OnDebugMessage = func(message string) {
-			handleDebugCommand(emu, message, emulatorBackend)
-		}
-		inputManager = input.NewManager(emu.GetJoypad())
-	} else {
-		inputManager = input.NewManager(nil)
-	}
-	setupInputCallbacks(inputManager, &callbacks, testPattern)
 
 	config := backend.BackendConfig{
-		Title:        "Jeebie",
-		Scale:        2,
-		ShowDebug:    c.Bool("debug"),
-		TestPattern:  testPattern,
-		Callbacks:    callbacks,
-		InputManager: inputManager,
+		Title:         "Jeebie",
+		Scale:         2,
+		ShowDebug:     c.Bool("debug"),
+		TestPattern:   testPattern,
+		DebugProvider: emu,
 	}
 
 	if err := emulatorBackend.Init(config); err != nil {
@@ -137,25 +121,27 @@ func runEmulator(c *cli.Context) error {
 	defer emulatorBackend.Cleanup()
 
 	// provide access to emulator state for debugging displays
-	if emu != nil {
-		if terminalBackend, ok := emulatorBackend.(*terminal.Backend); ok {
-			terminalBackend.SetEmulatorState(
-				func() terminal.CPUState { return emu.GetCPU() },
-				func() terminal.MMUState { return emu.GetMMU() },
-			)
-		}
+	if terminalBackend, ok := emulatorBackend.(*terminal.Backend); ok {
+		terminalBackend.SetDebugProvider(emu)
 	}
 
-	for running {
-		var frame *video.FrameBuffer
-		if emu != nil {
-			emu.RunUntilFrame()
-			frame = emu.GetCurrentFrame()
-		}
-		// frame can be nil for test pattern mode - backends handle this
+	// Create input handler for debouncing
+	inputHandler := input.NewHandler()
 
-		if err := emulatorBackend.Update(frame); err != nil {
+	for running {
+		emu.RunUntilFrame()
+		frame := emu.GetCurrentFrame()
+
+		events, err := emulatorBackend.Update(frame)
+		if err != nil {
 			return fmt.Errorf("backend update failed: %v", err)
+		}
+
+		// Process events from backend with debouncing
+		for _, evt := range events {
+			if inputHandler.ProcessEvent(evt) {
+				handleEvent(emu, emulatorBackend, evt, &running)
+			}
 		}
 	}
 
@@ -195,105 +181,27 @@ func createBackend(c *cli.Context, romPath string) (backend.Backend, error) {
 	}
 }
 
-// setupInputCallbacks registers all input callbacks with the input manager
-func setupInputCallbacks(inputManager *input.Manager, callbacks *backend.BackendCallbacks, testPattern bool) {
-	// Note: EmulatorDebugToggle is handled by SDL2 backend directly
-	// Terminal backend doesn't support debug windows
-
-	inputManager.On(action.EmulatorDebugUpdate, event.Press, func() {
-		if callbacks.OnDebugMessage != nil {
-			callbacks.OnDebugMessage("debug:update_window")
+func handleEvent(emu jeebie.Emulator, b backend.Backend, evt backend.InputEvent, running *bool) {
+	switch evt.Action {
+	case action.EmulatorQuit:
+		if evt.Type == event.Press {
+			*running = false
 		}
-	})
-
-	inputManager.On(action.EmulatorSnapshot, event.Press, func() {
-		// Snapshot is handled by backends directly since they have access to current frame
-		if callbacks.OnDebugMessage != nil {
-			callbacks.OnDebugMessage("debug:snapshot")
+	case action.EmulatorPauseToggle:
+		if evt.Type == event.Press {
+			// HandleAction will toggle pause state internally
+			emu.HandleAction(action.EmulatorPauseToggle, true)
 		}
-	})
-
-	inputManager.On(action.EmulatorPauseToggle, event.Press, func() {
-		if callbacks.OnDebugMessage != nil {
-			callbacks.OnDebugMessage("debug:toggle_pause")
-		}
-	})
-
-	inputManager.On(action.EmulatorQuit, event.Press, func() {
-		if callbacks.OnQuit != nil {
-			callbacks.OnQuit()
-		}
-	})
-
-	// Test pattern cycling (only in test mode)
-	if testPattern {
-		inputManager.On(action.EmulatorTestPatternCycle, event.Press, func() {
-			if callbacks.OnDebugMessage != nil {
-				callbacks.OnDebugMessage("debug:cycle_test_pattern")
+	// Backend-specific actions that need special handling
+	case action.EmulatorSnapshot, action.EmulatorTestPatternCycle,
+		action.EmulatorDebugToggle, action.EmulatorDebugUpdate:
+		if evt.Type == event.Press {
+			// Let SDL2 backend handle its specific actions
+			if sdlBackend, ok := b.(*sdl2.Backend); ok {
+				sdlBackend.HandleBackendAction(evt.Action)
 			}
-		})
-	}
-}
-
-// handleDebugCommand processes debug commands from backends
-func handleDebugCommand(emu *jeebie.Emulator, command string, emulatorBackend backend.Backend) {
-	switch command {
-	// TODO: move debug: strings to constants
-	case "debug:toggle_pause":
-		if emu.GetDebuggerState() == 1 { // DebuggerPaused
-			slog.Info("Debugger: Resuming execution")
-			emu.DebuggerResume()
-		} else {
-			slog.Info("Debugger: Pausing execution")
-			emu.DebuggerPause()
-		}
-	case "debug:step_instruction":
-		slog.Info("Debugger: Step instruction")
-		emu.DebuggerStepInstruction()
-	case "debug:step_frame":
-		slog.Info("Debugger: Step frame")
-		emu.DebuggerStepFrame()
-	case "debug:resume":
-		slog.Info("Debugger: Resume")
-		emu.DebuggerResume()
-	case "debug:pause":
-		slog.Info("Debugger: Pause")
-		emu.DebuggerPause()
-	case "debug:toggle_window":
-		slog.Info("Handling debug:toggle_window")
-		// TODO: this should just be handled in the backend itself
-		if sdl2Backend, ok := emulatorBackend.(*sdl2.Backend); ok {
-			sdl2Backend.ToggleDebugWindow()
-		} else {
-			slog.Warn("Backend is not SDL2, cannot toggle debug window")
-		}
-	case "debug:snapshot":
-		slog.Info("Snapshot command received - handled by backend")
-		// Backends handle snapshots directly since they have the current frame
-	case "debug:cycle_test_pattern":
-		slog.Info("Test pattern cycle command received - handled by backend")
-		// Backends handle test pattern cycling directly
-	case "debug:update_window":
-		slog.Info("Handling debug:update_window")
-		// TODO: this should just be handled in the backend itself
-		if sdl2Backend, ok := emulatorBackend.(*sdl2.Backend); ok {
-			// Extract debug data and update
-			mmu := emu.GetMMU()
-			spriteHeight := 8
-			if mmu.ReadBit(2, addr.LCDC) {
-				spriteHeight = 16
-			}
-			currentLine := int(mmu.Read(addr.LY))
-
-			oamData := debug.ExtractOAMData(mmu, currentLine, spriteHeight)
-			vramData := debug.ExtractVRAMData(mmu)
-
-			slog.Info("Extracted debug data", "oam_entries", len(oamData.Sprites), "vram_tiles", "extracted")
-			sdl2Backend.UpdateDebugData(oamData, vramData)
-		} else {
-			slog.Warn("Backend is not SDL2, cannot update debug data")
 		}
 	default:
-		slog.Debug("Unknown debug command", "command", command)
+		emu.HandleAction(evt.Action, evt.Type == event.Press)
 	}
 }

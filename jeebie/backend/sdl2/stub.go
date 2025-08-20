@@ -23,8 +23,8 @@ func (s *Backend) Init(config backend.BackendConfig) error {
 }
 
 // Update returns an error
-func (s *Backend) Update(frame *video.FrameBuffer) error {
-	return fmt.Errorf("SDL2 backend not available")
+func (s *Backend) Update(frame *video.FrameBuffer) ([]backend.InputEvent, error) {
+	return nil, fmt.Errorf("SDL2 backend not available")
 }
 
 // Cleanup does nothing
@@ -39,5 +39,10 @@ func (s *Backend) UpdateDebugData(oam interface{}, vram interface{}) {
 
 // ToggleDebugWindow does nothing
 func (s *Backend) ToggleDebugWindow() {
+	// No-op
+}
+
+// HandleBackendAction does nothing in the stub
+func (s *Backend) HandleBackendAction(act interface{}) {
 	// No-op
 }

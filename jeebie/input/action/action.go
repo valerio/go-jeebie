@@ -19,6 +19,8 @@ const (
 	EmulatorDebugUpdate
 	EmulatorSnapshot
 	EmulatorPauseToggle
+	EmulatorStepFrame
+	EmulatorStepInstruction
 	EmulatorTestPatternCycle
 	EmulatorQuit
 )

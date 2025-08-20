@@ -10,7 +10,6 @@ import (
 	"github.com/valerio/go-jeebie/jeebie/backend"
 	"github.com/valerio/go-jeebie/jeebie/debug"
 	"github.com/valerio/go-jeebie/jeebie/display"
-	"github.com/valerio/go-jeebie/jeebie/input"
 	"github.com/valerio/go-jeebie/jeebie/input/action"
 	"github.com/valerio/go-jeebie/jeebie/input/event"
 	"github.com/valerio/go-jeebie/jeebie/video"
@@ -27,12 +26,12 @@ const (
 // Note: building this requires SDL2 development libraries installed.
 // Default builds skip this and use a stubbed renderer, see build tags (sdl2)
 type Backend struct {
-	window    *sdl.Window
-	renderer  *sdl.Renderer
-	texture   *sdl.Texture
-	running   bool
-	callbacks backend.BackendCallbacks
-	config    backend.BackendConfig
+	window        *sdl.Window
+	renderer      *sdl.Renderer
+	texture       *sdl.Texture
+	running       bool
+	config        backend.BackendConfig
+	debugProvider backend.DebugDataProvider // For extracting debug data
 
 	// Test pattern state
 	testPatternFrame *video.FrameBuffer
@@ -44,9 +43,6 @@ type Backend struct {
 
 	// Debug window
 	debugWindow *DebugWindow
-
-	// Input management
-	inputManager *input.Manager
 }
 
 // New creates a new SDL2 backend
@@ -59,8 +55,7 @@ func New() *Backend {
 // Init initializes the SDL2 backend
 func (s *Backend) Init(config backend.BackendConfig) error {
 	s.config = config
-	s.callbacks = config.Callbacks
-	s.inputManager = config.InputManager
+	s.debugProvider = config.DebugProvider
 
 	if err := sdl.Init(sdl.INIT_VIDEO | sdl.INIT_EVENTS); err != nil {
 		return fmt.Errorf("failed to initialize SDL2: %v", err)
@@ -103,6 +98,9 @@ func (s *Backend) Init(config backend.BackendConfig) error {
 	}
 	s.texture = texture
 
+	// Show the window
+	s.window.Show()
+
 	s.running = true
 
 	// Initialize debug window if ShowDebug is enabled
@@ -113,7 +111,6 @@ func (s *Backend) Init(config backend.BackendConfig) error {
 	}
 
 	// Register SDL2-specific callbacks
-	s.setupCallbacks()
 
 	if config.TestPattern {
 		s.testPatternFrame = video.NewFrameBuffer()
@@ -127,18 +124,17 @@ func (s *Backend) Init(config backend.BackendConfig) error {
 }
 
 // Update renders a frame and processes events
-func (s *Backend) Update(frame *video.FrameBuffer) error {
-	if !s.running {
-		return nil
-	}
-
-	// Process SDL events
+func (s *Backend) Update(frame *video.FrameBuffer) ([]backend.InputEvent, error) {
+	// Collect events directly while processing SDL events
+	var events []backend.InputEvent
 	for event := sdl.PollEvent(); event != nil; event = sdl.PollEvent() {
-		s.handleEvent(event)
+		if inputEvents := s.handleEvent(event); inputEvents != nil {
+			events = append(events, inputEvents...)
+		}
 	}
 
 	if !s.running {
-		return nil
+		return events, nil
 	}
 
 	// Use test pattern frame if in test pattern mode
@@ -160,7 +156,7 @@ func (s *Backend) Update(frame *video.FrameBuffer) error {
 		s.debugWindow.Render()
 	}
 
-	return nil
+	return events, nil
 }
 
 // Cleanup cleans up SDL2 resources
@@ -184,26 +180,26 @@ func (s *Backend) Cleanup() error {
 	return nil
 }
 
-func (s *Backend) handleEvent(event sdl.Event) {
-	switch e := event.(type) {
+func (s *Backend) handleEvent(evt sdl.Event) []backend.InputEvent {
+	// Pass event to debug window first
+	if s.debugWindow != nil {
+		s.debugWindow.ProcessEvent(evt)
+	}
+
+	switch e := evt.(type) {
 	case *sdl.QuitEvent:
 		s.running = false
-		if s.callbacks.OnQuit != nil {
-			s.callbacks.OnQuit()
-		}
+		return []backend.InputEvent{{Action: action.EmulatorQuit, Type: event.Press}}
 
 	case *sdl.KeyboardEvent:
 		if e.Type == sdl.KEYDOWN {
-			s.handleKeyDown(e.Keysym.Sym, e.Repeat)
+			return s.handleKeyDown(e.Keysym.Sym, e.Repeat)
 		} else if e.Type == sdl.KEYUP {
-			s.handleKeyUp(e.Keysym.Sym)
+			return s.handleKeyUp(e.Keysym.Sym)
 		}
 	}
 
-	// Pass event to debug window
-	if s.debugWindow != nil {
-		s.debugWindow.ProcessEvent(event)
-	}
+	return nil
 }
 
 // keyMapping maps SDL2 keys to actions
@@ -227,60 +223,45 @@ var keyMapping = map[sdl.Keycode]action.Action{
 	sdl.K_RIGHT:  action.GBDPadRight,
 }
 
-func (s *Backend) setupCallbacks() {
-	// Register callbacks for actions that need backend-specific handling
-	if s.inputManager == nil {
-		slog.Warn("No input manager available, callbacks not registered")
-		return
-	}
-
-	s.inputManager.On(action.EmulatorQuit, event.Press, func() {
-		s.running = false
-	})
-
-	s.inputManager.On(action.EmulatorDebugToggle, event.Press, func() {
-		s.ToggleDebugWindow()
-	})
+// saveSnapshot takes a screenshot
+func (s *Backend) saveSnapshot() {
+	debug.TakeSnapshot(s.currentFrame, s.config.TestPattern, s.testPatternType)
 }
 
-func (s *Backend) handleKeyDown(key sdl.Keycode, repeat uint8) {
-	// Ignore key repeat events
-	if repeat != 0 {
-		return
+// cycleTestPattern switches to the next test pattern
+func (s *Backend) cycleTestPattern() {
+	if s.config.TestPattern {
+		s.testPatternType = (s.testPatternType + 1) % display.TestPatternCount
+		s.generateTestPattern(s.testPatternType)
+		patternNames := []string{"Checkerboard", "Gradient", "Stripes", "Diagonal"}
+		slog.Info("Switched to test pattern", "pattern", patternNames[s.testPatternType])
 	}
+}
 
+func (s *Backend) handleKeyDown(key sdl.Keycode, repeat uint8) []backend.InputEvent {
 	if act, exists := keyMapping[key]; exists {
-		// Handle backend-specific actions that need direct access to backend state
-		if act == action.EmulatorSnapshot {
-			debug.TakeSnapshot(s.currentFrame, s.config.TestPattern, s.testPatternType)
-			return
-		}
-		if act == action.EmulatorTestPatternCycle && s.config.TestPattern {
-			s.testPatternType = (s.testPatternType + 1) % display.TestPatternCount
-			s.generateTestPattern(s.testPatternType)
-			patternNames := []string{"Checkerboard", "Gradient", "Stripes", "Diagonal"}
-			slog.Info("Switched to test pattern", "pattern", patternNames[s.testPatternType])
-			return
-		}
-		// Pass all actions to input manager for proper handling and debouncing
-		if s.inputManager != nil {
-			s.inputManager.Trigger(act, event.Press)
+		// For initial press, send Press event
+		// For held keys (repeat > 0), send Hold event
+		if repeat == 0 {
+			return []backend.InputEvent{{Action: act, Type: event.Press}}
+		} else {
+			// Generate Hold event for held keys (not debounced)
+			return []backend.InputEvent{{Action: act, Type: event.Hold}}
 		}
 	}
+	return nil
 }
 
-func (s *Backend) handleKeyUp(key sdl.Keycode) {
-	if s.inputManager == nil {
-		return
-	}
+func (s *Backend) handleKeyUp(key sdl.Keycode) []backend.InputEvent {
 	if act, exists := keyMapping[key]; exists {
 		// Only trigger Release events for Game Boy controls
 		switch act {
 		case action.GBButtonA, action.GBButtonB, action.GBButtonStart, action.GBButtonSelect,
 			action.GBDPadUp, action.GBDPadDown, action.GBDPadLeft, action.GBDPadRight:
-			s.inputManager.Trigger(act, event.Release)
+			return []backend.InputEvent{{Action: act, Type: event.Release}}
 		}
 	}
+	return nil
 }
 
 func (s *Backend) renderFrame(frame *video.FrameBuffer) {
@@ -330,10 +311,7 @@ func (s *Backend) gbColorToRGBA(gbColor uint32) (r, g, b, a uint8) {
 	}
 
 	// For any non-standard colors, extract the red channel and convert to grayscale
-	// This handles test pattern gradients properly
 	red := uint8((gbColor >> display.RGBARShift) & display.RGBAColorMask)
-
-	// Convert to grayscale by using the red channel value
 	return red, red, red, display.FullAlpha
 }
 
@@ -436,6 +414,28 @@ func (s *Backend) UpdateDebugData(oam *debug.OAMData, vram *debug.VRAMData) {
 	}
 }
 
+// HandleBackendAction processes backend-specific actions after debouncing
+func (s *Backend) HandleBackendAction(act action.Action) {
+	switch act {
+	case action.EmulatorSnapshot:
+		s.saveSnapshot()
+	case action.EmulatorTestPatternCycle:
+		if s.config.TestPattern {
+			s.cycleTestPattern()
+		}
+	case action.EmulatorDebugToggle:
+		s.ToggleDebugWindow()
+	case action.EmulatorDebugUpdate:
+		// Update debug window data if it's visible
+		if s.debugWindow != nil && s.debugWindow.IsVisible() && s.debugProvider != nil {
+			debugData := s.debugProvider.ExtractDebugData()
+			if debugData != nil && debugData.OAM != nil && debugData.VRAM != nil {
+				s.UpdateDebugData(debugData.OAM, debugData.VRAM)
+			}
+		}
+	}
+}
+
 // ToggleDebugWindow shows/hides the debug window
 func (s *Backend) ToggleDebugWindow() {
 	if s.debugWindow == nil {
@@ -455,8 +455,36 @@ func (s *Backend) ToggleDebugWindow() {
 	slog.Debug("Debug window visibility changed", "was_visible", wasVisible, "now_visible", !wasVisible)
 
 	// If we're showing the window, trigger a debug data update
-	if !wasVisible && s.callbacks.OnDebugMessage != nil {
+	if !wasVisible {
 		slog.Debug("Triggering debug data update")
-		s.callbacks.OnDebugMessage("debug:update_window")
+		s.handleDebugMessage("debug:update_window")
+	}
+}
+
+// handleDebugMessage processes debug messages internally
+func (s *Backend) handleDebugMessage(message string) {
+	switch message {
+	case "debug:toggle_window":
+		s.ToggleDebugWindow()
+	case "debug:update_window":
+		// Extract debug data through the minimal interface
+		if s.debugProvider != nil {
+			debugData := s.debugProvider.ExtractDebugData()
+			if debugData != nil && debugData.OAM != nil && debugData.VRAM != nil {
+				slog.Debug("Extracted debug data", "oam_entries", len(debugData.OAM.Sprites))
+				s.UpdateDebugData(debugData.OAM, debugData.VRAM)
+			}
+		}
+	case "debug:snapshot":
+		// Handle snapshot - we already have currentFrame
+		if s.currentFrame != nil {
+			s.saveSnapshot()
+		}
+	case "debug:cycle_test_pattern":
+		if s.config.TestPattern {
+			s.cycleTestPattern()
+		}
+	default:
+		// Ignore unhandled messages
 	}
 }

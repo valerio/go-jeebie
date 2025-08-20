@@ -2,12 +2,14 @@ package jeebie
 
 import (
 	"fmt"
-	"io/ioutil"
 	"log/slog"
+	"os"
 	"sync"
 
 	"github.com/valerio/go-jeebie/jeebie/addr"
 	"github.com/valerio/go-jeebie/jeebie/cpu"
+	"github.com/valerio/go-jeebie/jeebie/debug"
+	"github.com/valerio/go-jeebie/jeebie/input/action"
 	"github.com/valerio/go-jeebie/jeebie/memory"
 	"github.com/valerio/go-jeebie/jeebie/video"
 )
@@ -46,8 +48,8 @@ func NewTestCompletionDetector() *TestCompletionDetector {
 	}
 }
 
-// Emulator represents the root struct and entry point for running the emulation
-type Emulator struct {
+// DMG represents the Game Boy emulator (Dot Matrix Game)
+type DMG struct {
 	cpu *cpu.CPU
 	gpu *video.GPU
 	mem *memory.MMU
@@ -70,7 +72,7 @@ type Emulator struct {
 	completionDetector *TestCompletionDetector
 }
 
-func (e *Emulator) init(mem *memory.MMU) {
+func (e *DMG) init(mem *memory.MMU) {
 	e.cpu = cpu.New(mem)
 	e.gpu = video.NewGpu(mem)
 	e.mem = mem
@@ -83,37 +85,29 @@ func (e *Emulator) init(mem *memory.MMU) {
 	mem.Write(addr.DIV, byte(e.systemCounter>>8))
 }
 
-// New creates a new emulator instance
-func New() *Emulator {
-	e := &Emulator{}
-	e.init(memory.NewWithCartridge(memory.NewCartridge()))
-
-	return e
-}
-
 // NewWithFile creates a new emulator instance and loads the file specified into it.
-func NewWithFile(path string) (*Emulator, error) {
-	data, err := ioutil.ReadFile(path)
+func NewWithFile(path string) (*DMG, error) {
+	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
 	}
 
 	slog.Debug("Loaded ROM data", "size", len(data))
 
-	e := &Emulator{}
+	e := &DMG{}
 	e.init(memory.NewWithCartridge(memory.NewCartridgeWithData(data)))
 
 	return e, nil
 }
 
-func (e *Emulator) RunUntilFrame() {
+func (e *DMG) RunUntilFrame() error {
 	e.debuggerMutex.RLock()
 	state := e.debuggerState
 	e.debuggerMutex.RUnlock()
 
 	// Handle paused state - don't execute anything
 	if state == DebuggerPaused {
-		return
+		return nil
 	}
 
 	// Handle step instruction - execute one instruction then pause
@@ -138,7 +132,7 @@ func (e *Emulator) RunUntilFrame() {
 		} else {
 			e.debuggerMutex.Unlock()
 		}
-		return
+		return nil
 	}
 
 	// Handle step frame - execute one frame then pause
@@ -168,7 +162,7 @@ func (e *Emulator) RunUntilFrame() {
 			slog.Debug("Frame step completed", "frame", e.frameCount, "instructions", e.instructionCount)
 			e.SetDebuggerState(DebuggerPaused)
 		}
-		return
+		return nil
 	}
 
 	// Normal execution (DebuggerRunning)
@@ -187,84 +181,172 @@ func (e *Emulator) RunUntilFrame() {
 			if e.frameCount%60 == 0 {
 				slog.Debug("Frame completed", "frame", e.frameCount, "pc", fmt.Sprintf("0x%04X", e.cpu.GetPC()))
 			}
-			return
+			return nil
 		}
 	}
 }
 
-func (e *Emulator) GetCurrentFrame() *video.FrameBuffer {
+func (e *DMG) GetCurrentFrame() *video.FrameBuffer {
 	return e.gpu.GetFrameBuffer()
 }
 
-func (e *Emulator) HandleKeyPress(key memory.JoypadKey) {
+func (e *DMG) HandleKeyPress(key memory.JoypadKey) {
 	e.mem.HandleKeyPress(key)
 }
 
-func (e *Emulator) HandleKeyRelease(key memory.JoypadKey) {
+func (e *DMG) HandleKeyRelease(key memory.JoypadKey) {
 	e.mem.HandleKeyRelease(key)
 }
 
-func (e *Emulator) GetCPU() *cpu.CPU {
-	return e.cpu
+func (e *DMG) HandleAction(act action.Action, pressed bool) {
+	switch act {
+	case action.EmulatorPauseToggle:
+		if pressed {
+			if e.debuggerState == DebuggerPaused {
+				e.debuggerState = DebuggerRunning
+			} else {
+				e.debuggerState = DebuggerPaused
+			}
+		}
+		return
+	case action.EmulatorStepFrame:
+		if pressed && e.debuggerState == DebuggerPaused {
+			e.debuggerState = DebuggerStepFrame
+		}
+		return
+	case action.EmulatorStepInstruction:
+		if pressed && e.debuggerState == DebuggerPaused {
+			e.debuggerState = DebuggerStep
+		}
+		return
+	}
+
+	var key memory.JoypadKey
+	switch act {
+	case action.GBButtonA:
+		key = memory.JoypadA
+	case action.GBButtonB:
+		key = memory.JoypadB
+	case action.GBButtonStart:
+		key = memory.JoypadStart
+	case action.GBButtonSelect:
+		key = memory.JoypadSelect
+	case action.GBDPadUp:
+		key = memory.JoypadUp
+	case action.GBDPadDown:
+		key = memory.JoypadDown
+	case action.GBDPadLeft:
+		key = memory.JoypadLeft
+	case action.GBDPadRight:
+		key = memory.JoypadRight
+	default:
+		return
+	}
+
+	if pressed {
+		e.mem.HandleKeyPress(key)
+	} else {
+		e.mem.HandleKeyRelease(key)
+	}
 }
 
-// Debugger control methods
-func (e *Emulator) SetDebuggerState(state DebuggerState) {
+// Debugger control methods (internal use)
+func (e *DMG) SetDebuggerState(state DebuggerState) {
 	e.debuggerMutex.Lock()
 	defer e.debuggerMutex.Unlock()
 	e.debuggerState = state
 	slog.Debug("Debugger state changed", "state", state)
 }
 
-func (e *Emulator) GetDebuggerState() DebuggerState {
-	e.debuggerMutex.RLock()
-	defer e.debuggerMutex.RUnlock()
-	return e.debuggerState
-}
-
-func (e *Emulator) DebuggerPause() {
-	e.SetDebuggerState(DebuggerPaused)
-	slog.Info("Emulator paused")
-}
-
-func (e *Emulator) DebuggerResume() {
-	e.SetDebuggerState(DebuggerRunning)
-	slog.Info("Emulator resumed")
-}
-
-func (e *Emulator) DebuggerStepInstruction() {
-	e.debuggerMutex.Lock()
-	defer e.debuggerMutex.Unlock()
-	e.stepRequested = true
-	e.debuggerState = DebuggerStep
-	slog.Info("Step instruction requested")
-}
-
-func (e *Emulator) DebuggerStepFrame() {
-	e.debuggerMutex.Lock()
-	defer e.debuggerMutex.Unlock()
-	e.frameRequested = true
-	e.debuggerState = DebuggerStepFrame
-	slog.Info("Step frame requested")
-}
-
-func (e *Emulator) GetInstructionCount() uint64 {
+func (e *DMG) GetInstructionCount() uint64 {
 	return e.instructionCount
 }
 
-func (e *Emulator) GetFrameCount() uint64 {
+func (e *DMG) GetFrameCount() uint64 {
 	return e.frameCount
 }
 
-func (e *Emulator) GetMMU() *memory.MMU {
-	return e.mem
+func (e *DMG) ExtractDebugData() *debug.CompleteDebugData {
+	if e.mem == nil || e.cpu == nil {
+		return nil
+	}
+
+	spriteHeight := 8
+	if e.mem.ReadBit(2, addr.LCDC) {
+		spriteHeight = 16
+	}
+
+	// Get current scanline
+	currentLine := int(e.mem.Read(addr.LY))
+	oamData := debug.ExtractOAMData(e.mem, currentLine, spriteHeight)
+	vramData := debug.ExtractVRAMData(e.mem)
+
+	cpuState := &debug.CPUState{
+		A:      e.cpu.GetA(),
+		F:      e.cpu.GetF(),
+		B:      e.cpu.GetB(),
+		C:      e.cpu.GetC(),
+		D:      e.cpu.GetD(),
+		E:      e.cpu.GetE(),
+		H:      e.cpu.GetH(),
+		L:      e.cpu.GetL(),
+		SP:     e.cpu.GetSP(),
+		PC:     e.cpu.GetPC(),
+		IME:    e.cpu.GetIME(),
+		Cycles: e.instructionCount,
+	}
+
+	const snapshotSize = 200 // Enough for disassembly before and after PC
+	const beforePC = 50      // Bytes before PC to capture
+	pc := e.cpu.GetPC()
+
+	// Calculate start address, handling underflow
+	startAddr := pc
+	if pc >= beforePC {
+		startAddr = pc - beforePC
+	} else {
+		startAddr = 0
+	}
+
+	memSnapshot := &debug.MemorySnapshot{
+		StartAddr: startAddr,
+		Bytes:     make([]uint8, snapshotSize),
+	}
+	for i := 0; i < snapshotSize; i++ {
+		addr := startAddr + uint16(i)
+		if addr < 0x8000 || (addr >= 0xA000 && addr < 0xE000) || addr >= 0xFE00 {
+			// Safe to read from these areas
+			memSnapshot.Bytes[i] = e.mem.Read(addr)
+		} else {
+			// VRAM/OAM might be inaccessible, use NOP
+			memSnapshot.Bytes[i] = 0x00
+		}
+	}
+
+	var debuggerState debug.DebuggerState
+	switch e.debuggerState {
+	case DebuggerPaused:
+		debuggerState = debug.DebuggerPaused
+	case DebuggerStep:
+		debuggerState = debug.DebuggerStepInstruction
+	case DebuggerStepFrame:
+		debuggerState = debug.DebuggerStepFrame
+	default:
+		debuggerState = debug.DebuggerRunning
+	}
+
+	return &debug.CompleteDebugData{
+		OAM:             oamData,
+		VRAM:            vramData,
+		CPU:             cpuState,
+		Memory:          memSnapshot,
+		DebuggerState:   debuggerState,
+		InterruptEnable: e.mem.Read(addr.IE),
+		InterruptFlags:  e.mem.Read(addr.IF),
+	}
 }
 
-func (e *Emulator) GetJoypad() *memory.Joypad {
-	return e.mem.GetJoypad()
-}
-
-func (e *Emulator) updateTimers(cycles int) {
+func (e *DMG) updateTimers(cycles int) {
 	if e.timaDelayInt {
 		e.mem.RequestInterrupt(addr.TimerInterrupt)
 		e.timaDelayInt = false
@@ -324,7 +406,7 @@ func (e *Emulator) updateTimers(cycles int) {
 }
 
 // UpdateCompletionDetection updates the completion detector with current execution state
-func (e *Emulator) UpdateCompletionDetection() {
+func (e *DMG) UpdateCompletionDetection() {
 	if !e.completionDetector.Enabled {
 		return
 	}
@@ -353,7 +435,7 @@ func (e *Emulator) UpdateCompletionDetection() {
 }
 
 // IsTestComplete checks if the test appears to have completed
-func (e *Emulator) IsTestComplete() bool {
+func (e *DMG) IsTestComplete() bool {
 	if !e.completionDetector.Enabled {
 		return false
 	}
@@ -389,7 +471,7 @@ func (e *Emulator) IsTestComplete() bool {
 }
 
 // RunUntilComplete runs the emulator until test completion is detected
-func (e *Emulator) RunUntilComplete() {
+func (e *DMG) RunUntilComplete() {
 	for !e.IsTestComplete() {
 		e.UpdateCompletionDetection()
 		e.RunUntilFrame()
@@ -399,12 +481,12 @@ func (e *Emulator) RunUntilComplete() {
 }
 
 // EnableCompletionDetection enables or disables test completion detection
-func (e *Emulator) EnableCompletionDetection(enabled bool) {
+func (e *DMG) EnableCompletionDetection(enabled bool) {
 	e.completionDetector.Enabled = enabled
 }
 
 // ConfigureCompletionDetection allows customizing completion detection parameters
-func (e *Emulator) ConfigureCompletionDetection(maxFrames uint64, minLoopCount int) {
+func (e *DMG) ConfigureCompletionDetection(maxFrames uint64, minLoopCount int) {
 	e.completionDetector.MaxFrames = maxFrames
 	e.completionDetector.MaxCycles = maxFrames * 70224
 	e.completionDetector.MinLoopCount = minLoopCount

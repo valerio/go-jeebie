@@ -94,8 +94,6 @@ func (g *GPU) Tick(cycles int) {
 			// if enabled on STAT, trigger the LCDStat interrupt
 			g.memory.RequestInterrupt(addr.LCDSTATInterrupt)
 		}
-
-		break
 	case vblankMode:
 		g.modeCounterAux += cycles
 
@@ -121,15 +119,12 @@ func (g *GPU) Tick(cycles int) {
 				g.memory.RequestInterrupt(addr.LCDSTATInterrupt)
 			}
 		}
-
-		break
 	case oamReadMode:
 		if g.cycles >= oamScanlineCycles {
 			g.cycles -= oamScanlineCycles
 			g.setMode(vramReadMode)
 			g.isScanLineTransfered = false
 		}
-		break
 	case vramReadMode:
 		// Render the entire scanline once when entering VRAM mode
 		if !g.isScanLineTransfered {
@@ -151,7 +146,6 @@ func (g *GPU) Tick(cycles int) {
 				g.memory.RequestInterrupt(addr.LCDSTATInterrupt)
 			}
 		}
-		break
 	}
 
 	if g.cycles >= 70224 {

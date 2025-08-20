@@ -39,7 +39,7 @@ type FrameBuffer struct {
 }
 
 func NewFrameBuffer() *FrameBuffer {
-	colorSlice := make([]uint32, FramebufferSize, FramebufferSize)
+	colorSlice := make([]uint32, FramebufferSize)
 
 	return &FrameBuffer{
 		width:  FramebufferWidth,
@@ -75,16 +75,12 @@ func (fb *FrameBuffer) DrawNoise() {
 		switch rand.Uint32() % 4 {
 		case 0:
 			color = WhiteColor
-			break
 		case 1:
 			color = BlackColor
-			break
 		case 2:
 			color = LightGreyColor
-			break
 		case 3:
 			color = DarkGreyColor
-			break
 		default:
 			color = BlackColor
 		}

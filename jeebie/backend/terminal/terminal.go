@@ -10,14 +10,11 @@ import (
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/valerio/go-jeebie/jeebie/backend"
+	"github.com/valerio/go-jeebie/jeebie/backend/terminal/render"
 	"github.com/valerio/go-jeebie/jeebie/debug"
-	"github.com/valerio/go-jeebie/jeebie/disasm"
 	"github.com/valerio/go-jeebie/jeebie/display"
-	"github.com/valerio/go-jeebie/jeebie/input"
 	"github.com/valerio/go-jeebie/jeebie/input/action"
 	"github.com/valerio/go-jeebie/jeebie/input/event"
-	"github.com/valerio/go-jeebie/jeebie/memory"
-	"github.com/valerio/go-jeebie/jeebie/render"
 	"github.com/valerio/go-jeebie/jeebie/video"
 )
 
@@ -36,21 +33,17 @@ const (
 	minTermHeight  = 24
 )
 
-var shadeChars = []rune{'█', '▓', '▒', '░'}
-
 // Backend implements the Backend interface using tcell for terminal rendering
 type Backend struct {
-	screen       tcell.Screen
-	running      bool
-	logBuffer    *render.LogBuffer
-	logLevel     slog.Level
-	callbacks    backend.BackendCallbacks
-	config       backend.BackendConfig
-	inputManager *input.Manager
+	screen     tcell.Screen
+	running    bool
+	logBuffer  *render.LogBuffer
+	logLevel   slog.Level
+	config     backend.BackendConfig
+	eventQueue []backend.InputEvent // Collect events to return
 
-	// For accessing emulator state (will be passed via interface)
-	getCPU func() CPUState
-	getMMU func() MMUState
+	// For accessing emulator state
+	debugProvider backend.DebugDataProvider
 
 	// Test pattern state
 	testPatternFrame *video.FrameBuffer
@@ -59,26 +52,6 @@ type Backend struct {
 
 	// Snapshot state
 	currentFrame *video.FrameBuffer // Store current frame for snapshot generation
-}
-
-// CPUState represents the CPU state needed for debugging display
-type CPUState interface {
-	GetA() uint8
-	GetF() uint8
-	GetB() uint8
-	GetC() uint8
-	GetD() uint8
-	GetE() uint8
-	GetH() uint8
-	GetL() uint8
-	GetSP() uint16
-	GetPC() uint16
-	GetIME() bool
-}
-
-// MMUState represents the MMU state needed for debugging display
-type MMUState interface {
-	Read(addr uint16) uint8
 }
 
 // New creates a new terminal backend
@@ -91,8 +64,7 @@ func New() *Backend {
 // Init initializes the terminal backend
 func (t *Backend) Init(config backend.BackendConfig) error {
 	t.config = config
-	t.callbacks = config.Callbacks
-	t.inputManager = config.InputManager
+	t.eventQueue = make([]backend.InputEvent, 0)
 
 	screen, err := tcell.NewScreen()
 	if err != nil {
@@ -137,9 +109,13 @@ func (t *Backend) Init(config backend.BackendConfig) error {
 }
 
 // Update renders a frame and processes events
-func (t *Backend) Update(frame *video.FrameBuffer) error {
+func (t *Backend) Update(frame *video.FrameBuffer) ([]backend.InputEvent, error) {
+	// Collect and return any queued events
+	events := t.eventQueue
+	t.eventQueue = nil
+
 	if !t.running {
-		return nil
+		return events, nil
 	}
 
 	// Use test pattern frame if in test pattern mode
@@ -158,7 +134,7 @@ func (t *Backend) Update(frame *video.FrameBuffer) error {
 	t.render(renderFrame)
 	t.screen.Show()
 
-	return nil
+	return events, nil
 }
 
 // Cleanup cleans up terminal resources
@@ -171,9 +147,8 @@ func (t *Backend) Cleanup() error {
 }
 
 // SetEmulatorState allows the backend to access emulator state for debugging
-func (t *Backend) SetEmulatorState(getCPU func() CPUState, getMMU func() MMUState) {
-	t.getCPU = getCPU
-	t.getMMU = getMMU
+func (t *Backend) SetDebugProvider(provider backend.DebugDataProvider) {
+	t.debugProvider = provider
 }
 
 func (t *Backend) handleSignals() {
@@ -182,9 +157,8 @@ func (t *Backend) handleSignals() {
 
 	<-signals
 	t.running = false
-	if t.callbacks.OnQuit != nil {
-		t.callbacks.OnQuit()
-	}
+	// Signal quit via event queue
+	t.eventQueue = append(t.eventQueue, backend.InputEvent{Action: action.EmulatorQuit, Type: event.Press})
 }
 
 func (t *Backend) handleInput() {
@@ -235,8 +209,8 @@ func (t *Backend) handleKeyEvent(ev *tcell.EventKey) {
 		if act == action.EmulatorQuit {
 			t.running = false
 		}
-		// Pass action to input manager
-		t.inputManager.Trigger(act, event.Press)
+		// Queue event to be returned from Update()
+		t.eventQueue = append(t.eventQueue, backend.InputEvent{Action: act, Type: event.Press})
 		return
 	}
 
@@ -257,29 +231,22 @@ func (t *Backend) handleRuneKey(r rune) {
 			slog.Info("Switched to test pattern", "pattern", patternNames[t.testPatternType])
 			return
 		}
-		// Pass action to input manager
-		t.inputManager.Trigger(act, event.Press)
+		// Queue event to be returned from Update()
+		t.eventQueue = append(t.eventQueue, backend.InputEvent{Action: act, Type: event.Press})
 		return
 	}
 
 	// Terminal-specific debug controls not in the generic action system
+	// TODO: Convert these to proper actions in the future
 	switch r {
 	case 'n': // Next instruction (step)
-		if t.callbacks.OnDebugMessage != nil {
-			t.callbacks.OnDebugMessage("debug:step_instruction")
-		}
+		// TODO: Add debug step action
 	case 'f': // Next frame (step frame)
-		if t.callbacks.OnDebugMessage != nil {
-			t.callbacks.OnDebugMessage("debug:step_frame")
-		}
+		// TODO: Add debug frame action
 	case 'r': // Resume
-		if t.callbacks.OnDebugMessage != nil {
-			t.callbacks.OnDebugMessage("debug:resume")
-		}
+		// TODO: Add debug resume action
 	case 'p': // Pause
-		if t.callbacks.OnDebugMessage != nil {
-			t.callbacks.OnDebugMessage("debug:pause")
-		}
+		// TODO: Add debug pause action
 	case '-', '_': // Decrease log verbosity
 		t.changeLogLevel(-1)
 	case '+', '=': // Increase log verbosity
@@ -341,7 +308,7 @@ func (t *Backend) render(frame *video.FrameBuffer) {
 	t.drawBorders(termWidth, termHeight, dividerX)
 	t.drawGameBoy(frame)
 
-	if t.config.ShowDebug && t.getCPU != nil && t.getMMU != nil {
+	if t.config.ShowDebug && t.debugProvider != nil {
 		t.drawRegisters(rightPanelX, 1, rightPanelWidth, termHeight)
 		disasmY := registerHeight + 2
 		t.drawDisassembly(rightPanelX, disasmY, rightPanelWidth, termHeight)
@@ -500,114 +467,9 @@ func getHalfBlockChar(topShade, bottomShade int) (rune, tcell.Color, tcell.Color
 }
 
 func (t *Backend) drawRegisters(startX, startY, width, termHeight int) {
-	if t.getCPU == nil || t.getMMU == nil {
-		return
-	}
-
-	cpu := t.getCPU()
-	mmu := t.getMMU()
-
-	if width <= 0 || startY >= termHeight {
-		return
-	}
-
-	lines := []string{
-		"Status: RUNNING",
-		fmt.Sprintf("A: 0x%02X  F: 0x%02X", cpu.GetA(), cpu.GetF()),
-		fmt.Sprintf("B: 0x%02X  C: 0x%02X", cpu.GetB(), cpu.GetC()),
-		fmt.Sprintf("D: 0x%02X  E: 0x%02X", cpu.GetD(), cpu.GetE()),
-		fmt.Sprintf("H: 0x%02X  L: 0x%02X", cpu.GetH(), cpu.GetL()),
-		fmt.Sprintf("SP: 0x%04X  PC: 0x%04X", cpu.GetSP(), cpu.GetPC()),
-		fmt.Sprintf("IME: %s  IE: 0x%02X  IF: 0x%02X",
-			map[bool]string{true: "ON", false: "OFF"}[cpu.GetIME()],
-			mmu.Read(0xFFFF), mmu.Read(0xFF0F)),
-		"Pending: none",
-		fmt.Sprintf("Joypad: 0x%02X", mmu.Read(0xFF00)),
-	}
-
-	style := tcell.StyleDefault.Foreground(tcell.ColorBlue)
-	for i, line := range lines {
-		y := startY + i
-		if y >= termHeight || y >= startY+registerHeight {
-			break
-		}
-
-		if len(line) > width {
-			line = line[:width]
-		}
-
-		x := startX
-		for j, ch := range line {
-			if j >= width || x >= startX+width || x >= 300 {
-				break
-			}
-			t.screen.SetContent(x, y, ch, nil, style)
-			x++
-		}
-	}
 }
 
 func (t *Backend) drawDisassembly(startX, startY, width, termHeight int) {
-	if t.getCPU == nil || t.getMMU == nil {
-		return
-	}
-
-	cpu := t.getCPU()
-	mmu := t.getMMU()
-
-	if width <= 0 || startY >= termHeight {
-		return
-	}
-
-	pc := cpu.GetPC()
-	halfHeight := disasmHeight / 2
-
-	// cast to *memory.MMU since disasm functions expect that type
-	var lines []disasm.DisassemblyLine
-	if realMMU, ok := mmu.(*memory.MMU); ok {
-		lines = disasm.DisassembleAround(pc, halfHeight, disasmHeight-halfHeight-1, realMMU)
-		if len(lines) == 0 {
-			lines = disasm.DisassembleRange(pc, disasmHeight, realMMU)
-		}
-	} else {
-		lines = []disasm.DisassemblyLine{
-			{Address: pc, Instruction: "???"},
-		}
-	}
-
-	style := tcell.StyleDefault.Foreground(tcell.ColorGreen)
-	currentStyle := tcell.StyleDefault.Foreground(tcell.ColorYellow).Bold(true)
-
-	for i, disasmLine := range lines {
-		y := startY + i
-		if y >= termHeight || y >= startY+disasmHeight || i >= disasmHeight {
-			break
-		}
-
-		line := fmt.Sprintf(" 0x%04X: %s", disasmLine.Address, disasmLine.Instruction)
-
-		if disasmLine.Address == pc {
-			line = "→" + line[1:]
-		}
-
-		if len(line) > width {
-			line = line[:width]
-		}
-
-		useStyle := style
-		if disasmLine.Address == pc {
-			useStyle = currentStyle
-		}
-
-		x := startX
-		for j, ch := range line {
-			if j >= width || x >= startX+width {
-				break
-			}
-			t.screen.SetContent(x, y, ch, nil, useStyle)
-			x++
-		}
-	}
 }
 
 func (t *Backend) drawLogs(startX, startY, width, termHeight int) {

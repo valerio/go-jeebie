@@ -9,13 +9,14 @@ import (
 
 	"github.com/valerio/go-jeebie/jeebie/backend"
 	"github.com/valerio/go-jeebie/jeebie/debug"
+	"github.com/valerio/go-jeebie/jeebie/input/action"
+	"github.com/valerio/go-jeebie/jeebie/input/event"
 	"github.com/valerio/go-jeebie/jeebie/video"
 )
 
 // Backend implements the Backend interface for automated testing and batch processing
 type Backend struct {
 	config         backend.BackendConfig
-	callbacks      backend.BackendCallbacks
 	frameCount     int
 	maxFrames      int
 	snapshotConfig SnapshotConfig
@@ -38,14 +39,10 @@ func New(maxFrames int, snapshotConfig SnapshotConfig) *Backend {
 
 func (h *Backend) Init(config backend.BackendConfig) error {
 	h.config = config
-	h.callbacks = config.Callbacks
 
 	if config.TestPattern {
 		slog.Info("Headless test pattern mode - test patterns verified, exiting")
-		// Signal completion immediately for test pattern mode
-		if h.callbacks.OnQuit != nil {
-			h.callbacks.OnQuit()
-		}
+		// Will signal quit on first Update() call for test pattern mode
 		return nil
 	}
 
@@ -65,7 +62,14 @@ func (h *Backend) Init(config backend.BackendConfig) error {
 }
 
 // Update processes a frame and handles snapshots
-func (h *Backend) Update(frame *video.FrameBuffer) error {
+func (h *Backend) Update(frame *video.FrameBuffer) ([]backend.InputEvent, error) {
+	var events []backend.InputEvent
+
+	// For test pattern mode, quit immediately
+	if h.config.TestPattern {
+		return []backend.InputEvent{{Action: action.EmulatorQuit, Type: event.Press}}, nil
+	}
+
 	h.frameCount++
 
 	// Save snapshot if needed
@@ -91,13 +95,11 @@ func (h *Backend) Update(frame *video.FrameBuffer) error {
 			slog.Info("Headless execution completed", "frames", h.maxFrames)
 		}
 
-		// Signal completion
-		if h.callbacks.OnQuit != nil {
-			h.callbacks.OnQuit()
-		}
+		// Signal completion via quit event
+		events = append(events, backend.InputEvent{Action: action.EmulatorQuit, Type: event.Press})
 	}
 
-	return nil
+	return events, nil
 }
 
 func (h *Backend) Cleanup() error {
