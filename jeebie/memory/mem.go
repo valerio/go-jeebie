@@ -83,142 +83,155 @@ func (m *MMU) RequestInterrupt(interrupt addr.Interrupt) {
 	m.Write(addr.IF, newFlags)
 }
 
-func (m *MMU) ReadBit(index uint8, addr uint16) bool {
-	return bit.IsSet(index, m.Read(addr))
+func (m *MMU) ReadBit(index uint8, address uint16) bool {
+	return bit.IsSet(index, m.Read(address))
 }
 
-func (m *MMU) SetBit(index uint8, addr uint16, set bool) {
-	value := m.Read(addr)
+func (m *MMU) SetBit(index uint8, address uint16, set bool) {
+	value := m.Read(address)
 	if set {
 		value = bit.Set(index, value)
 	} else {
 		value = bit.Reset(index, value)
 	}
-	m.Write(addr, value)
+	m.Write(address, value)
 }
 
-func (m *MMU) Read(addr uint16) byte {
+func (m *MMU) Read(address uint16) byte {
 	// ROM / RAM
-	if isBetween(addr, 0, 0x7FFF) || isBetween(addr, 0xA000, 0xBFFF) {
+	if isBetween(address, 0, 0x7FFF) || isBetween(address, 0xA000, 0xBFFF) {
 		if m.mbc == nil {
-			slog.Warn("Reading from ROM/external RAM with no cartridge", "addr", fmt.Sprintf("0x%04X", addr))
+			slog.Warn("Reading from ROM/external RAM with no cartridge", "addr", fmt.Sprintf("0x%04X", address))
 			return 0xFF // simulate no cartridge behavior
 		}
-		return m.mbc.Read(addr)
+		return m.mbc.Read(address)
 	}
 
 	// VRAM
-	if isBetween(addr, 0x8000, 0x9FFF) {
-		return m.memory[addr]
+	if isBetween(address, 0x8000, 0x9FFF) {
+		return m.memory[address]
 	}
 
 	// RAM
-	if isBetween(addr, 0xC000, 0xDFFF) {
-		return m.memory[addr]
+	if isBetween(address, 0xC000, 0xDFFF) {
+		return m.memory[address]
 	}
 
 	// RAM mirror
-	if isBetween(addr, 0xE000, 0xFDFF) {
-		mirroredAddr := addr - 0x2000
+	if isBetween(address, 0xE000, 0xFDFF) {
+		mirroredAddr := address - 0x2000
 		return m.memory[mirroredAddr]
 	}
 
 	// OAM
-	if isBetween(addr, 0xFE00, 0xFE9F) {
-		return m.memory[addr]
+	if isBetween(address, 0xFE00, 0xFE9F) {
+		return m.memory[address]
 	}
 
 	// Unused
-	if isBetween(addr, 0xFEA0, 0xFEFF) {
-		return m.memory[addr]
+	if isBetween(address, 0xFEA0, 0xFEFF) {
+		return m.memory[address]
 	}
 
 	// IO registers
-	if isBetween(addr, 0xFF00, 0xFF7F) {
-		if addr == 0xFF00 {
+	if isBetween(address, 0xFF00, 0xFF7F) {
+		if address == 0xFF00 {
 			return m.joypad.Read()
 		}
-		return m.memory[addr]
+		return m.memory[address]
 	}
 
 	// Zero Page RAM & I/O registers
-	if isBetween(addr, 0xFF80, 0xFFFF) {
-		return m.memory[addr]
+	if isBetween(address, 0xFF80, 0xFFFF) {
+		return m.memory[address]
 	}
 
-	panic(fmt.Sprintf("Attempted read at unused/unmapped address: 0x%X", addr))
+	panic(fmt.Sprintf("Attempted read at unused/unmapped address: 0x%X", address))
 }
 
-func (m *MMU) Write(addr uint16, value byte) {
+func (m *MMU) Write(address uint16, value byte) {
 
 	// ROM
-	if isBetween(addr, 0, 0x7FFF) {
+	if isBetween(address, 0, 0x7FFF) {
 		if m.mbc == nil {
-			slog.Warn("Writing to ROM with no cartridge", "addr", fmt.Sprintf("0x%04X", addr), "value", fmt.Sprintf("0x%02X", value))
+			slog.Warn("Writing to ROM with no cartridge", "addr", fmt.Sprintf("0x%04X", address), "value", fmt.Sprintf("0x%02X", value))
 			return
 		}
-		m.mbc.Write(addr, value)
+		m.mbc.Write(address, value)
 		return
 	}
 
 	// VRAM
-	if isBetween(addr, 0x8000, 0x9FFF) {
-		m.memory[addr] = value
+	if isBetween(address, 0x8000, 0x9FFF) {
+		m.memory[address] = value
 		return
 	}
 
 	// external RAM
-	if isBetween(addr, 0xA000, 0xBFFF) {
+	if isBetween(address, 0xA000, 0xBFFF) {
 		if m.mbc == nil {
-			slog.Warn("Writing to external RAM with no cartridge", "addr", fmt.Sprintf("0x%04X", addr), "value", fmt.Sprintf("0x%02X", value))
+			slog.Warn("Writing to external RAM with no cartridge", "addr", fmt.Sprintf("0x%04X", address), "value", fmt.Sprintf("0x%02X", value))
 			return
 		}
-		m.mbc.Write(addr, value)
+		m.mbc.Write(address, value)
 		return
 	}
 
 	// RAM
-	if isBetween(addr, 0xC000, 0xDFFF) {
-		m.memory[addr] = value
+	if isBetween(address, 0xC000, 0xDFFF) {
+		m.memory[address] = value
 		return
 	}
 
 	// RAM mirror
-	if isBetween(addr, 0xE000, 0xFDFF) {
-		mirroredAddr := addr - 0x2000
+	if isBetween(address, 0xE000, 0xFDFF) {
+		mirroredAddr := address - 0x2000
 		m.memory[mirroredAddr] = value
 		return
 	}
 
 	// OAM
-	if isBetween(addr, 0xFE00, 0xFE9F) {
-		m.memory[addr] = value
+	if isBetween(address, 0xFE00, 0xFE9F) {
+		m.memory[address] = value
 		return
 	}
 
 	// Unused
-	if isBetween(addr, 0xFEA0, 0xFEFF) {
-		m.memory[addr] = value
+	if isBetween(address, 0xFEA0, 0xFEFF) {
+		m.memory[address] = value
 		return
 	}
 
 	// IO registers
-	if isBetween(addr, 0xFF00, 0xFF7F) {
-		if addr == 0xFF00 {
+	if isBetween(address, 0xFF00, 0xFF7F) {
+		if address == 0xFF00 {
 			m.joypad.Write(value)
 			return
 		}
-		m.memory[addr] = value
+		// handle DMA transfer
+		if address == addr.DMA {
+			sourceAddr := uint16(value) << 8
+			slog.Debug("DMA transfer", "source", fmt.Sprintf("0x%04X", sourceAddr), "value", fmt.Sprintf("0x%02X", value))
+			// DMA transfer copies 160 bytes from source to OAM
+			for i := range uint16(160) {
+				m.memory[0xFE00+i] = m.Read(sourceAddr + i)
+			}
+			// still store the value in the DMA register
+			m.memory[address] = value
+			// TODO: update timers according to DMA transfer timing, cpu should detect it most likely.
+			return
+		}
+		m.memory[address] = value
 		return
 	}
 
 	// Zero Page RAM + I/O registers
-	if isBetween(addr, 0xFF80, 0xFFFF) {
-		m.memory[addr] = value
+	if isBetween(address, 0xFF80, 0xFFFF) {
+		m.memory[address] = value
 		return
 	}
 
-	panic(fmt.Sprintf("Attempted write at unused/unmapped address: 0x%X", addr))
+	panic(fmt.Sprintf("Attempted write at unused/unmapped address: 0x%X", address))
 }
 
 func (m *MMU) HandleKeyPress(key JoypadKey) {
