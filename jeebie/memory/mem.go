@@ -8,22 +8,39 @@ import (
 	"github.com/valerio/go-jeebie/jeebie/bit"
 )
 
+type memRegion uint8
+
+const (
+	regionROM memRegion = iota
+	regionVRAM
+	regionExtRAM
+	regionWRAM
+	regionEcho
+	regionOAM
+	regionUnused
+	regionIO
+	regionHRAM
+)
+
 // MMU allows access to all memory mapped I/O and data/registers
 type MMU struct {
-	cart   *Cartridge
-	mbc    MBC
-	memory []byte
-	joypad *Joypad
+	cart      *Cartridge
+	mbc       MBC
+	memory    []byte
+	joypad    *Joypad
+	regionMap [256]memRegion
 }
 
 // New creates a new memory unity with default data, i.e. nothing cartridge loaded.
 // Equivalent to turning on a Gameboy without a cartridge in.
 func New() *MMU {
-	return &MMU{
+	mmu := &MMU{
 		memory: make([]byte, 0x10000),
 		cart:   NewCartridge(),
 		joypad: NewJoypad(),
 	}
+	initRegionMap(mmu)
+	return mmu
 }
 
 // NewWithCartridge creates a new memory unit with the provided cartridge data loaded.
@@ -56,6 +73,33 @@ func NewWithCartridge(cart *Cartridge) *MMU {
 
 func isBetween(addr, start, end uint16) bool {
 	return addr >= start && addr <= end
+}
+
+func initRegionMap(m *MMU) {
+	// ROM: 0x0000-0x7FFF
+	for i := 0x00; i <= 0x7F; i++ {
+		m.regionMap[i] = regionROM
+	}
+	// VRAM: 0x8000-0x9FFF
+	for i := 0x80; i <= 0x9F; i++ {
+		m.regionMap[i] = regionVRAM
+	}
+	// External RAM: 0xA000-0xBFFF
+	for i := 0xA0; i <= 0xBF; i++ {
+		m.regionMap[i] = regionExtRAM
+	}
+	// Work RAM: 0xC000-0xDFFF
+	for i := 0xC0; i <= 0xDF; i++ {
+		m.regionMap[i] = regionWRAM
+	}
+	// Echo RAM: 0xE000-0xFDFF
+	for i := 0xE0; i <= 0xFD; i++ {
+		m.regionMap[i] = regionEcho
+	}
+	// OAM: 0xFE00-0xFE9F, Unused: 0xFEA0-0xFEFF
+	m.regionMap[0xFE] = regionOAM
+	// IO + HRAM: 0xFF00-0xFFFF
+	m.regionMap[0xFF] = regionIO
 }
 
 // RequestInterrupt sets the interrupt flag (IF register) of the chosen interrupt to 1.
@@ -98,139 +142,94 @@ func (m *MMU) SetBit(index uint8, address uint16, set bool) {
 }
 
 func (m *MMU) Read(address uint16) byte {
-	// ROM / RAM
-	if isBetween(address, 0, 0x7FFF) || isBetween(address, 0xA000, 0xBFFF) {
+	switch m.regionMap[address>>8] {
+	case regionROM, regionExtRAM:
 		if m.mbc == nil {
 			slog.Warn("Reading from ROM/external RAM with no cartridge", "addr", fmt.Sprintf("0x%04X", address))
-			return 0xFF // simulate no cartridge behavior
+			return 0xFF
 		}
 		return m.mbc.Read(address)
-	}
-
-	// VRAM
-	if isBetween(address, 0x8000, 0x9FFF) {
+	case regionVRAM, regionWRAM:
 		return m.memory[address]
-	}
-
-	// RAM
-	if isBetween(address, 0xC000, 0xDFFF) {
+	case regionEcho:
+		if address <= 0xFDFF {
+			return m.memory[address-0x2000]
+		}
+		return m.memory[address-0x2000]
+	case regionOAM:
+		if address <= 0xFE9F {
+			return m.memory[address]
+		}
+		// Unused area 0xFEA0-0xFEFF
 		return m.memory[address]
-	}
-
-	// RAM mirror
-	if isBetween(address, 0xE000, 0xFDFF) {
-		mirroredAddr := address - 0x2000
-		return m.memory[mirroredAddr]
-	}
-
-	// OAM
-	if isBetween(address, 0xFE00, 0xFE9F) {
-		return m.memory[address]
-	}
-
-	// Unused
-	if isBetween(address, 0xFEA0, 0xFEFF) {
-		return m.memory[address]
-	}
-
-	// IO registers
-	if isBetween(address, 0xFF00, 0xFF7F) {
+	case regionIO:
 		if address == 0xFF00 {
 			return m.joypad.Read()
 		}
+		if address >= 0xFF80 {
+			// HRAM
+			return m.memory[address]
+		}
+		// Other IO registers
 		return m.memory[address]
+	default:
+		panic(fmt.Sprintf("Attempted read at unmapped address: 0x%X", address))
 	}
-
-	// Zero Page RAM & I/O registers
-	if isBetween(address, 0xFF80, 0xFFFF) {
-		return m.memory[address]
-	}
-
-	panic(fmt.Sprintf("Attempted read at unused/unmapped address: 0x%X", address))
 }
 
 func (m *MMU) Write(address uint16, value byte) {
-
-	// ROM
-	if isBetween(address, 0, 0x7FFF) {
+	switch m.regionMap[address>>8] {
+	case regionROM:
 		if m.mbc == nil {
 			slog.Warn("Writing to ROM with no cartridge", "addr", fmt.Sprintf("0x%04X", address), "value", fmt.Sprintf("0x%02X", value))
 			return
 		}
 		m.mbc.Write(address, value)
-		return
-	}
-
-	// VRAM
-	if isBetween(address, 0x8000, 0x9FFF) {
+	case regionVRAM:
 		m.memory[address] = value
-		return
-	}
-
-	// external RAM
-	if isBetween(address, 0xA000, 0xBFFF) {
+	case regionExtRAM:
 		if m.mbc == nil {
 			slog.Warn("Writing to external RAM with no cartridge", "addr", fmt.Sprintf("0x%04X", address), "value", fmt.Sprintf("0x%02X", value))
 			return
 		}
 		m.mbc.Write(address, value)
-		return
-	}
-
-	// RAM
-	if isBetween(address, 0xC000, 0xDFFF) {
+	case regionWRAM:
 		m.memory[address] = value
-		return
-	}
-
-	// RAM mirror
-	if isBetween(address, 0xE000, 0xFDFF) {
-		mirroredAddr := address - 0x2000
-		m.memory[mirroredAddr] = value
-		return
-	}
-
-	// OAM
-	if isBetween(address, 0xFE00, 0xFE9F) {
-		m.memory[address] = value
-		return
-	}
-
-	// Unused
-	if isBetween(address, 0xFEA0, 0xFEFF) {
-		m.memory[address] = value
-		return
-	}
-
-	// IO registers
-	if isBetween(address, 0xFF00, 0xFF7F) {
+	case regionEcho:
+		if address <= 0xFDFF {
+			m.memory[address-0x2000] = value
+		}
+	case regionOAM:
+		if address <= 0xFE9F {
+			m.memory[address] = value
+		} else {
+			// Unused area 0xFEA0-0xFEFF
+			m.memory[address] = value
+		}
+	case regionIO:
 		if address == 0xFF00 {
 			m.joypad.Write(value)
 			return
 		}
-		// handle DMA transfer
 		if address == addr.DMA {
 			sourceAddr := uint16(value) << 8
 			// DMA transfer copies 160 bytes from source to OAM
 			for i := range uint16(160) {
 				m.memory[0xFE00+i] = m.Read(sourceAddr + i)
 			}
-			// still store the value in the DMA register
 			m.memory[address] = value
-			// TODO: update timers according to DMA transfer timing, cpu should detect it most likely.
 			return
 		}
+		if address >= 0xFF80 {
+			// HRAM
+			m.memory[address] = value
+			return
+		}
+		// Other IO registers
 		m.memory[address] = value
-		return
+	default:
+		panic(fmt.Sprintf("Attempted write at unmapped address: 0x%X", address))
 	}
-
-	// Zero Page RAM + I/O registers
-	if isBetween(address, 0xFF80, 0xFFFF) {
-		m.memory[address] = value
-		return
-	}
-
-	panic(fmt.Sprintf("Attempted write at unused/unmapped address: 0x%X", address))
 }
 
 func (m *MMU) HandleKeyPress(key JoypadKey) {
