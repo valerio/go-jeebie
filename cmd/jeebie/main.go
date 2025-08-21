@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"runtime"
+	"runtime/pprof"
 
 	"github.com/urfave/cli"
 	"github.com/valerio/go-jeebie/jeebie"
@@ -60,6 +62,14 @@ func main() {
 			Name:  "debug",
 			Usage: "Enable debug information display",
 		},
+		cli.StringFlag{
+			Name:  "cpuprofile",
+			Usage: "Write CPU profile to file",
+		},
+		cli.StringFlag{
+			Name:  "memprofile",
+			Usage: "Write memory profile to file",
+		},
 	}
 	app.Action = runEmulator
 
@@ -74,6 +84,22 @@ func runEmulator(c *cli.Context) error {
 	// Set log level based on debug flag
 	if c.Bool("debug") {
 		slog.SetLogLoggerLevel(slog.LevelDebug)
+	}
+
+	// Start CPU profiling if requested
+	if cpuProfile := c.String("cpuprofile"); cpuProfile != "" {
+		f, err := os.Create(cpuProfile)
+		if err != nil {
+			return fmt.Errorf("could not create CPU profile: %v", err)
+		}
+		defer f.Close()
+
+		if err := pprof.StartCPUProfile(f); err != nil {
+			return fmt.Errorf("could not start CPU profile: %v", err)
+		}
+		defer pprof.StopCPUProfile()
+
+		slog.Info("CPU profiling enabled", "file", cpuProfile)
 	}
 
 	testPattern := c.Bool("test-pattern")
@@ -143,6 +169,22 @@ func runEmulator(c *cli.Context) error {
 				handleEvent(emu, emulatorBackend, evt, &running)
 			}
 		}
+	}
+
+	// Write memory profile if requested
+	if memProfile := c.String("memprofile"); memProfile != "" {
+		f, err := os.Create(memProfile)
+		if err != nil {
+			return fmt.Errorf("could not create memory profile: %v", err)
+		}
+		defer f.Close()
+
+		runtime.GC()
+		if err := pprof.WriteHeapProfile(f); err != nil {
+			return fmt.Errorf("could not write memory profile: %v", err)
+		}
+
+		slog.Info("Memory profile written", "file", memProfile)
 	}
 
 	return nil

@@ -51,13 +51,6 @@ func (h *Backend) Init(config backend.BackendConfig) error {
 		"snapshot_interval", h.snapshotConfig.Interval,
 		"snapshot_dir", h.snapshotConfig.Directory)
 
-	// Set up debug logging for headless mode
-	handler := slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
-		Level: slog.LevelDebug,
-	})
-	logger := slog.New(handler)
-	slog.SetDefault(logger)
-
 	return nil
 }
 
@@ -79,7 +72,7 @@ func (h *Backend) Update(frame *video.FrameBuffer) ([]backend.InputEvent, error)
 
 	// Log progress periodically
 	if h.frameCount%10 == 0 {
-		slog.Info("Frame progress", "completed", h.frameCount, "total", h.maxFrames)
+		slog.Debug("Frame progress", "completed", h.frameCount, "total", h.maxFrames)
 	}
 
 	// Check if we've reached the target frame count

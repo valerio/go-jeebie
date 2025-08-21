@@ -43,6 +43,9 @@ type Backend struct {
 
 	// Debug window
 	debugWindow *DebugWindow
+
+	pixelBuffer []byte
+	eventBuffer []backend.InputEvent
 }
 
 // New creates a new SDL2 backend
@@ -101,6 +104,12 @@ func (s *Backend) Init(config backend.BackendConfig) error {
 	// Show the window
 	s.window.Show()
 
+	// Pre-allocate pixel buffer for rendering
+	s.pixelBuffer = make([]byte, video.FramebufferWidth*video.FramebufferHeight*display.RGBABytesPerPixel)
+
+	// Pre-allocate event buffer with reasonable capacity
+	s.eventBuffer = make([]backend.InputEvent, 0, 10)
+
 	s.running = true
 
 	// Initialize debug window if ShowDebug is enabled
@@ -125,16 +134,17 @@ func (s *Backend) Init(config backend.BackendConfig) error {
 
 // Update renders a frame and processes events
 func (s *Backend) Update(frame *video.FrameBuffer) ([]backend.InputEvent, error) {
+	s.eventBuffer = s.eventBuffer[:0]
+
 	// Collect events directly while processing SDL events
-	var events []backend.InputEvent
 	for event := sdl.PollEvent(); event != nil; event = sdl.PollEvent() {
 		if inputEvents := s.handleEvent(event); inputEvents != nil {
-			events = append(events, inputEvents...)
+			s.eventBuffer = append(s.eventBuffer, inputEvents...)
 		}
 	}
 
 	if !s.running {
-		return events, nil
+		return s.eventBuffer, nil
 	}
 
 	// Use test pattern frame if in test pattern mode
@@ -156,7 +166,7 @@ func (s *Backend) Update(frame *video.FrameBuffer) ([]backend.InputEvent, error)
 		s.debugWindow.Render()
 	}
 
-	return events, nil
+	return s.eventBuffer, nil
 }
 
 // Cleanup cleans up SDL2 resources
@@ -267,9 +277,6 @@ func (s *Backend) handleKeyUp(key sdl.Keycode) []backend.InputEvent {
 func (s *Backend) renderFrame(frame *video.FrameBuffer) {
 	frameData := frame.ToSlice()
 
-	// Convert to ABGR byte order for little-endian RGBA8888
-	sdlPixels := make([]byte, video.FramebufferWidth*video.FramebufferHeight*display.RGBABytesPerPixel)
-
 	for y := 0; y < video.FramebufferHeight; y++ {
 		for x := 0; x < video.FramebufferWidth; x++ {
 			srcIdx := y*video.FramebufferWidth + x
@@ -279,15 +286,15 @@ func (s *Backend) renderFrame(frame *video.FrameBuffer) {
 			r, g, b, a := s.gbColorToRGBA(gbPixel)
 
 			// ABGR byte order for little-endian RGBA8888
-			sdlPixels[dstIdx] = byte(a)   // Alpha (first byte)
-			sdlPixels[dstIdx+1] = byte(b) // Blue
-			sdlPixels[dstIdx+2] = byte(g) // Green
-			sdlPixels[dstIdx+3] = byte(r) // Red (last byte)
+			s.pixelBuffer[dstIdx] = byte(a)   // Alpha (first byte)
+			s.pixelBuffer[dstIdx+1] = byte(b) // Blue
+			s.pixelBuffer[dstIdx+2] = byte(g) // Green
+			s.pixelBuffer[dstIdx+3] = byte(r) // Red (last byte)
 		}
 	}
 
 	// Update texture with SDL2 pixel data
-	s.texture.Update(nil, unsafe.Pointer(&sdlPixels[0]), video.FramebufferWidth*display.RGBABytesPerPixel)
+	s.texture.Update(nil, unsafe.Pointer(&s.pixelBuffer[0]), video.FramebufferWidth*display.RGBABytesPerPixel)
 
 	// Clear renderer and draw texture scaled up
 	s.renderer.SetDrawColor(display.GrayscaleBlack, display.GrayscaleBlack, display.GrayscaleBlack, display.FullAlpha)

@@ -52,6 +52,7 @@ func (s *Sprite) HasPriorityForPixel(pixelX int) bool {
 type OAM struct {
 	memory         *memory.MMU
 	priorityBuffer SpritePriorityBuffer
+	spriteBuffer   [10]Sprite // scanline sprites (hardware limit is 10)
 }
 
 func NewOAM(memory *memory.MMU) *OAM {
@@ -67,7 +68,7 @@ func NewOAM(memory *memory.MMU) *OAM {
 // Priority is essentially sorting pixels by (X pos, OAM index), see priority
 // buffer for a more thorough explanation.
 func (o *OAM) GetSpritesForScanline(scanline int) []Sprite {
-	var sprites []Sprite
+	sprites := o.spriteBuffer[:0]
 	o.priorityBuffer.Clear()
 
 	lcdc := o.memory.Read(addr.LCDC)
@@ -129,7 +130,10 @@ func (o *OAM) GetSpritesForScanline(scanline int) []Sprite {
 		sprites[i].PixelMask = mask
 	}
 
-	return sprites
+	for i := range sprites {
+		o.spriteBuffer[i] = sprites[i]
+	}
+	return o.spriteBuffer[:len(sprites)]
 }
 
 func (o *OAM) readSprite(index int) Sprite {
