@@ -171,19 +171,6 @@ func (dw *DebugWindow) renderTileGrid() {
 func (dw *DebugWindow) renderTileToPixels(tile debug.TilePattern, pixelData []byte, row, col int) {
 	baseOffset := (row*debug.TilePixelHeight*debug.TilesPerRow*debug.TilePixelWidth + col*debug.TilePixelWidth) * 4
 
-	// Log tiles with non-white pixels to find interesting tiles
-	nonWhiteCount := 0
-	for y := 0; y < debug.TilePixelHeight; y++ {
-		for x := 0; x < debug.TilePixelWidth; x++ {
-			if tile.Pixels[y][x] != 0 { // Not white
-				nonWhiteCount++
-			}
-		}
-	}
-	if nonWhiteCount > 0 && tile.Index < 50 { // Show first 50 tiles with data
-		slog.Info("Active tile found", "tile_index", tile.Index, "non_white_pixels", nonWhiteCount, "row", row, "col", col)
-	}
-
 	for y := 0; y < debug.TilePixelHeight; y++ {
 		for x := 0; x < debug.TilePixelWidth; x++ {
 			pixelOffset := baseOffset + (y*debug.TilesPerRow*debug.TilePixelWidth+x)*4
@@ -193,7 +180,6 @@ func (dw *DebugWindow) renderTileToPixels(tile debug.TilePattern, pixelData []by
 			}
 
 			r, g, b, a := dw.gbColorToRGBA(tile.Pixels[y][x])
-			// Use ABGR byte order for little-endian RGBA8888 (same as main renderer)
 			pixelData[pixelOffset] = a   // Alpha (first byte)
 			pixelData[pixelOffset+1] = b // Blue
 			pixelData[pixelOffset+2] = g // Green
