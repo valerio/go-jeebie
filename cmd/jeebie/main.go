@@ -15,6 +15,7 @@ import (
 	"github.com/valerio/go-jeebie/jeebie/input"
 	"github.com/valerio/go-jeebie/jeebie/input/action"
 	"github.com/valerio/go-jeebie/jeebie/input/event"
+	"github.com/valerio/go-jeebie/jeebie/timing"
 )
 
 func main() {
@@ -120,8 +121,13 @@ func runEmulator(c *cli.Context) error {
 	}
 	defer emulatorBackend.Cleanup()
 
-	// Create input handler for debouncing
 	inputHandler := input.NewHandler()
+
+	if c.Bool("headless") {
+		emu.SetFrameLimiter(nil)
+	} else {
+		emu.SetFrameLimiter(timing.NewAdaptiveLimiter())
+	}
 
 	for running {
 		emu.RunUntilFrame()
@@ -132,7 +138,6 @@ func runEmulator(c *cli.Context) error {
 			return fmt.Errorf("backend update failed: %v", err)
 		}
 
-		// Process events from backend with debouncing
 		for _, evt := range events {
 			if inputHandler.ProcessEvent(evt) {
 				handleEvent(emu, emulatorBackend, evt, &running)
@@ -186,6 +191,7 @@ func handleEvent(emu jeebie.Emulator, b backend.Backend, evt backend.InputEvent,
 		if evt.Type == event.Press {
 			// HandleAction will toggle pause state internally
 			emu.HandleAction(action.EmulatorPauseToggle, true)
+			emu.ResetFrameTiming()
 		}
 	// Backend-specific actions that need special handling
 	case action.EmulatorSnapshot, action.EmulatorTestPatternCycle,

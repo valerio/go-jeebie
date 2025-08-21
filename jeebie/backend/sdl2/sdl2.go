@@ -75,7 +75,7 @@ func (s *Backend) Init(config backend.BackendConfig) error {
 	}
 	s.window = window
 
-	renderer, err := sdl.CreateRenderer(window, -1, sdl.RENDERER_ACCELERATED|sdl.RENDERER_PRESENTVSYNC)
+	renderer, err := sdl.CreateRenderer(window, -1, sdl.RENDERER_ACCELERATED)
 	if err != nil {
 		window.Destroy()
 		sdl.Quit()

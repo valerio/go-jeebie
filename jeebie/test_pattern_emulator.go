@@ -4,6 +4,7 @@ import (
 	"github.com/valerio/go-jeebie/jeebie/debug"
 	"github.com/valerio/go-jeebie/jeebie/display"
 	"github.com/valerio/go-jeebie/jeebie/input/action"
+	"github.com/valerio/go-jeebie/jeebie/timing"
 	"github.com/valerio/go-jeebie/jeebie/video"
 )
 
@@ -12,12 +13,14 @@ type TestPatternEmulator struct {
 	frameBuffer      *video.FrameBuffer
 	patternType      int
 	animationCounter int
+	limiter          timing.Limiter
 }
 
 func NewTestPatternEmulator() Emulator {
 	e := &TestPatternEmulator{
 		frameBuffer: video.NewFrameBuffer(),
 		patternType: 0,
+		limiter:     timing.NewNoOpLimiter(),
 	}
 	e.generateTestPattern(0)
 	return e
@@ -28,6 +31,7 @@ func (e *TestPatternEmulator) RunUntilFrame() error {
 	if e.animationCounter%display.TestPatternAnimationFrames == 0 {
 		e.animateTestPattern()
 	}
+	e.limiter.WaitForNextFrame()
 	return nil
 }
 
@@ -144,6 +148,18 @@ func (e *TestPatternEmulator) animateTestPattern() {
 			}
 		}
 	}
+}
+
+func (e *TestPatternEmulator) SetFrameLimiter(limiter timing.Limiter) {
+	if limiter == nil {
+		e.limiter = timing.NewNoOpLimiter()
+	} else {
+		e.limiter = limiter
+	}
+}
+
+func (e *TestPatternEmulator) ResetFrameTiming() {
+	e.limiter.Reset()
 }
 
 var _ Emulator = (*TestPatternEmulator)(nil)

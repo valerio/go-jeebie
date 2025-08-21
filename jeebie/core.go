@@ -11,6 +11,7 @@ import (
 	"github.com/valerio/go-jeebie/jeebie/debug"
 	"github.com/valerio/go-jeebie/jeebie/input/action"
 	"github.com/valerio/go-jeebie/jeebie/memory"
+	"github.com/valerio/go-jeebie/jeebie/timing"
 	"github.com/valerio/go-jeebie/jeebie/video"
 )
 
@@ -70,6 +71,9 @@ type DMG struct {
 
 	// Test completion detection
 	completionDetector *TestCompletionDetector
+
+	// Frame timing
+	limiter timing.Limiter
 }
 
 func (e *DMG) init(mem *memory.MMU) {
@@ -82,6 +86,7 @@ func (e *DMG) init(mem *memory.MMU) {
 	e.timaOverflow = 0
 	e.timaDelayInt = false
 	e.completionDetector = NewTestCompletionDetector()
+	e.limiter = timing.NewNoOpLimiter()
 	mem.Write(addr.DIV, byte(e.systemCounter>>8))
 }
 
@@ -170,6 +175,7 @@ func (e *DMG) RunUntilFrame() error {
 
 		if total >= 70224 {
 			e.frameCount++
+			e.limiter.WaitForNextFrame()
 			return nil
 		}
 	}
@@ -480,4 +486,20 @@ func (e *DMG) ConfigureCompletionDetection(maxFrames uint64, minLoopCount int) {
 	e.completionDetector.MaxFrames = maxFrames
 	e.completionDetector.MaxCycles = maxFrames * 70224
 	e.completionDetector.MinLoopCount = minLoopCount
+}
+
+// SetFrameLimiter sets the frame rate limiter for the emulator.
+// Pass nil to disable frame limiting (useful for headless mode).
+func (e *DMG) SetFrameLimiter(limiter timing.Limiter) {
+	if limiter == nil {
+		e.limiter = timing.NewNoOpLimiter()
+	} else {
+		e.limiter = limiter
+	}
+}
+
+// ResetFrameTiming resets the frame limiter timing.
+// Useful after pauses or when resuming emulation.
+func (e *DMG) ResetFrameTiming() {
+	e.limiter.Reset()
 }
