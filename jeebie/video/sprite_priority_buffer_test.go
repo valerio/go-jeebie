@@ -200,30 +200,30 @@ func TestSpritePriorityBuffer_DocExample1(t *testing.T) {
 	// Sprite 0: X=5, OAM=0, covers pixels 5-12
 	// Sprite 1: X=10, OAM=1, covers pixels 10-17
 	// Expected: Sprite 0 wins all its pixels due to lower X
-	
+
 	buffer := &SpritePriorityBuffer{}
 	buffer.Clear()
-	
+
 	// sprite 0 at X=5
 	for i := 0; i < 8; i++ {
 		buffer.TryClaimPixel(5+i, 0, 5)
 	}
-	
-	// sprite 1 at X=10 
+
+	// sprite 1 at X=10
 	for i := 0; i < 8; i++ {
 		buffer.TryClaimPixel(10+i, 1, 10)
 	}
-	
+
 	// verify: pixels 5-9 owned by sprite 0 (no overlap)
 	for i := 5; i <= 9; i++ {
 		assert.Equal(t, 0, buffer.GetOwner(i), "pixel %d should be owned by sprite 0", i)
 	}
-	
+
 	// verify: pixels 10-12 still owned by sprite 0 (wins overlap due to lower X)
 	for i := 10; i <= 12; i++ {
 		assert.Equal(t, 0, buffer.GetOwner(i), "pixel %d should be owned by sprite 0 (lower X)", i)
 	}
-	
+
 	// verify: pixels 13-17 owned by sprite 1 (no overlap)
 	for i := 13; i <= 17; i++ {
 		assert.Equal(t, 1, buffer.GetOwner(i), "pixel %d should be owned by sprite 1", i)
@@ -233,42 +233,42 @@ func TestSpritePriorityBuffer_DocExample1(t *testing.T) {
 // Test documentation Example 2: Same X coordinates with priority
 func TestSpritePriorityBuffer_DocExample2(t *testing.T) {
 	// Example 2 from documentation:
-	// Sprite 1: X=12, OAM=1, covers pixels 12-19 
+	// Sprite 1: X=12, OAM=1, covers pixels 12-19
 	// Sprite 3: X=12, OAM=3, covers pixels 12-19
 	// Sprite 5: X=10, OAM=5, covers pixels 10-17
-	// Expected: 
+	// Expected:
 	// - Pixels 10-17: Sprite 5 (lowest X)
 	// - Pixels 18-19: Sprite 1 (same X as 3, lower OAM)
-	
+
 	buffer := &SpritePriorityBuffer{}
 	buffer.Clear()
-	
+
 	// add sprites in OAM order (1, 3, 5)
 	// sprite 1 at X=12
 	for i := 0; i < 8; i++ {
 		buffer.TryClaimPixel(12+i, 1, 12)
 	}
-	
+
 	// sprite 3 at X=12
 	for i := 0; i < 8; i++ {
 		buffer.TryClaimPixel(12+i, 3, 12)
 	}
-	
+
 	// sprite 5 at X=10
 	for i := 0; i < 8; i++ {
 		buffer.TryClaimPixel(10+i, 5, 10)
 	}
-	
+
 	// verify: pixels 10-11 owned by sprite 5 (no overlap)
 	for i := 10; i <= 11; i++ {
 		assert.Equal(t, 5, buffer.GetOwner(i), "pixel %d should be owned by sprite 5", i)
 	}
-	
+
 	// verify: pixels 12-17 owned by sprite 5 (lowest X wins)
 	for i := 12; i <= 17; i++ {
 		assert.Equal(t, 5, buffer.GetOwner(i), "pixel %d should be owned by sprite 5 (lowest X)", i)
 	}
-	
+
 	// verify: pixels 18-19 owned by sprite 1 (lower OAM than sprite 3)
 	for i := 18; i <= 19; i++ {
 		assert.Equal(t, 1, buffer.GetOwner(i), "pixel %d should be owned by sprite 1 (lower OAM)", i)
