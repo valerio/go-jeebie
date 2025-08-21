@@ -27,3 +27,9 @@ go-jeebie
 
 # bin folder
 bin/
+
+# Test roms dir
+test-roms/*.gb
+!test-roms/dmg-acid2.gb
+!test-roms/*blargg*.gb
+*.gb:Zone.Identifier
