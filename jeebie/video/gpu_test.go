@@ -44,10 +44,10 @@ func TestGPUBackgroundTileDrawing(t *testing.T) {
 				x, y  int
 				color uint32
 			}{
-				{0, 0, uint32(WhiteColor)},
-				{7, 0, uint32(WhiteColor)},
-				{0, 7, uint32(WhiteColor)},
-				{7, 7, uint32(WhiteColor)},
+				{0, 0, uint32(BlackColor)},
+				{7, 0, uint32(BlackColor)},
+				{0, 7, uint32(BlackColor)},
+				{7, 7, uint32(BlackColor)},
 			},
 		},
 		{
@@ -72,10 +72,10 @@ func TestGPUBackgroundTileDrawing(t *testing.T) {
 				x, y  int
 				color uint32
 			}{
-				{0, 0, uint32(DarkGreyColor)}, // 0xAA bit 7=1, 0x00 bit 7=0 → color 1 → DarkGrey
-				{1, 0, uint32(BlackColor)},    // 0xAA bit 6=0, 0x00 bit 6=0 → color 0 → Black
-				{0, 1, uint32(BlackColor)},    // 0x55 bit 7=0, 0x00 bit 7=0 → color 0 → Black
-				{1, 1, uint32(DarkGreyColor)}, // 0x55 bit 6=1, 0x00 bit 6=0 → color 1 → DarkGrey
+				{0, 0, uint32(LightGreyColor)}, // 0xAA bit 7=1, 0x00 bit 7=0 → color 1 → light grey
+				{1, 0, uint32(WhiteColor)},     // 0xAA bit 6=0, 0x00 bit 6=0 → color 0 → white
+				{0, 1, uint32(WhiteColor)},     // 0x55 bit 7=0, 0x00 bit 7=0 → color 0 → white
+				{1, 1, uint32(LightGreyColor)}, // 0x55 bit 6=1, 0x00 bit 6=0 → color 1 → light grey
 			},
 		},
 		{
@@ -100,7 +100,7 @@ func TestGPUBackgroundTileDrawing(t *testing.T) {
 				x, y  int
 				color uint32
 			}{
-				{0, 0, uint32(DarkGreyColor)}, // Should show tile data offset by scroll
+				{0, 0, uint32(LightGreyColor)}, // Should show tile data offset by scroll
 			},
 		},
 	}
