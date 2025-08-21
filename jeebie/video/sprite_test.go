@@ -9,6 +9,54 @@ import (
 )
 
 // ============================================================================
+// Sprite Rendering Smoke Test
+// ============================================================================
+
+// TestSpriteRenderingSmoke is a simple test to ensure sprites are actually rendered
+// This catches issues where OAM scanning is broken but other tests still pass
+func TestSpriteRenderingSmoke(t *testing.T) {
+	mmu := memory.New()
+	gpu := NewGpu(mmu)
+
+	// enable LCD and sprites (no background)
+	mmu.Write(addr.LCDC, 0x82) // LCD on, sprites on, bg off
+
+	// set up a sprite in the middle of the screen
+	mmu.Write(addr.OAMStart, 80+16)  // Y = 80
+	mmu.Write(addr.OAMStart+1, 80+8) // X = 80
+	mmu.Write(addr.OAMStart+2, 1)    // tile 1
+	mmu.Write(addr.OAMStart+3, 0)    // no flags
+
+	// create a non-empty tile (all pixels set)
+	tileAddr := addr.TileData0 + 16 // tile 1
+	for i := 0; i < 16; i++ {
+		mmu.Write(tileAddr+uint16(i), 0xFF)
+	}
+
+	// set sprite palette
+	mmu.Write(addr.OBP0, 0xE4) // standard palette
+
+	// capture framebuffer before rendering
+	fbBefore := make([]uint32, len(gpu.framebuffer.buffer))
+	copy(fbBefore, gpu.framebuffer.buffer)
+
+	// render the scanline where the sprite is
+	gpu.line = 80
+	gpu.drawScanline()
+
+	// check that something changed in the framebuffer
+	changed := false
+	for i, pixel := range gpu.framebuffer.buffer {
+		if pixel != fbBefore[i] {
+			changed = true
+			break
+		}
+	}
+
+	assert.True(t, changed, "Sprite rendering should change the framebuffer")
+}
+
+// ============================================================================
 // Sprite Priority Tests
 // These tests verify Game Boy hardware sprite priority rules:
 // 1. Sprites with lower X coordinate have priority
@@ -25,7 +73,7 @@ func TestSpritePriorityXCoordinate(t *testing.T) {
 			x, y     int
 			tileData [16]byte // tile pattern for 8x8 sprite
 		}
-		expectedPixelOwner []int // which sprite index owns each pixel at y=50
+		expectedPixelPriority []int // which sprite index owns each pixel at y=50
 	}{
 		{
 			name: "Lower X coordinate has priority",
@@ -50,7 +98,7 @@ func TestSpritePriorityXCoordinate(t *testing.T) {
 				},
 			},
 			// sprite 1 (x=10) should win over sprite 0 (x=20) in overlap
-			expectedPixelOwner: []int{
+			expectedPixelPriority: []int{
 				-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, // 0-9: no sprite
 				1, 1, 1, 1, 1, 1, 1, 1, // 10-17: sprite 1
 				-1, -1, // 18-19: no sprite
@@ -81,7 +129,7 @@ func TestSpritePriorityXCoordinate(t *testing.T) {
 				},
 			},
 			// sprite 0 should win (lower OAM index)
-			expectedPixelOwner: []int{
+			expectedPixelPriority: []int{
 				-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, // 0-9: no sprite
 				-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, // 10-19: no sprite
 				0, 0, 0, 0, 0, 0, 0, 0, // 20-27: sprite 0 wins
@@ -117,7 +165,7 @@ func TestSpritePriorityXCoordinate(t *testing.T) {
 						0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00}, // all light grey
 				},
 			},
-			expectedPixelOwner: []int{
+			expectedPixelPriority: []int{
 				-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, // 0-9: no sprite
 				1, 1, 1, 1, 1, // 10-14: sprite 1 (lowest X)
 				1, 1, 1, // 15-17: sprite 1 still wins (lower X than sprite 0/2)
@@ -155,13 +203,13 @@ func TestSpritePriorityXCoordinate(t *testing.T) {
 			gpu.line = 50
 			gpu.drawScanline()
 
-			// check which sprite "owns" each pixel
+			// check which sprite has priority for each pixel
 			fb := gpu.GetFrameBuffer()
-			for x := 0; x < len(tt.expectedPixelOwner); x++ {
+			for x := 0; x < len(tt.expectedPixelPriority); x++ {
 				pixel := fb.GetPixel(uint(x), 50)
-				expectedOwner := tt.expectedPixelOwner[x]
+				expectedPriority := tt.expectedPixelPriority[x]
 
-				if expectedOwner == -1 {
+				if expectedPriority == -1 {
 					// should show background (white with default palette)
 					if pixel != uint32(WhiteColor) {
 						t.Logf("Pixel %d: expected white (0x%08X), got 0x%08X", x, uint32(WhiteColor), pixel)
@@ -170,7 +218,7 @@ func TestSpritePriorityXCoordinate(t *testing.T) {
 						"Pixel %d should be background", x)
 				} else {
 					// should show the expected sprite's color
-					sprite := tt.sprites[expectedOwner]
+					sprite := tt.sprites[expectedPriority]
 					// determine what color this sprite shows
 					// for our test patterns:
 					// 0xFF, 0xFF = black
@@ -186,7 +234,7 @@ func TestSpritePriorityXCoordinate(t *testing.T) {
 					}
 
 					assert.Equal(t, expectedColor, pixel,
-						"Pixel %d should show sprite %d", x, expectedOwner)
+						"Pixel %d should show sprite %d", x, expectedPriority)
 				}
 			}
 		})
@@ -331,7 +379,7 @@ func TestSpritePriorityOverBackground(t *testing.T) {
 		{"Sprite above BG color 3", 3, false, 1, true},
 
 		// sprite with priority=1 (behind BG)
-		{"Sprite behind BG, over color 0", 0, true, 1, true},  // visible over BG color 0
+		{"Sprite behind BG, over color 0", 0, true, 1, true},   // visible over BG color 0
 		{"Sprite behind BG, under color 1", 1, true, 1, false}, // hidden by BG colors 1-3
 		{"Sprite behind BG, under color 2", 2, true, 1, false},
 		{"Sprite behind BG, under color 3", 3, true, 1, false},

@@ -5,6 +5,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/valerio/go-jeebie/jeebie/memory"
+	"github.com/valerio/go-jeebie/jeebie/video"
 )
 
 func TestExtractOAMData(t *testing.T) {
@@ -35,19 +36,19 @@ func TestExtractOAMData(t *testing.T) {
 	// Test sprite 0 (should be visible on line 55)
 	sprite0 := oamData.Sprites[0]
 	assert.Equal(t, 0, sprite0.Index)
-	assert.Equal(t, 50, sprite0.Y)
-	assert.Equal(t, 30, sprite0.X)
-	assert.Equal(t, uint8(0x42), sprite0.TileIndex)
-	assert.Equal(t, uint8(0x80), sprite0.Attributes)
+	assert.Equal(t, uint8(50), sprite0.Sprite.Y)
+	assert.Equal(t, uint8(30), sprite0.Sprite.X)
+	assert.Equal(t, uint8(0x42), sprite0.Sprite.TileIndex)
+	assert.Equal(t, uint8(0x80), sprite0.Sprite.Flags)
 	assert.True(t, sprite0.IsVisible) // Y=50, line=55, height=8 -> visible (50 <= 55 < 58)
 
 	// Test sprite 1 (should NOT be visible on line 55)
 	sprite1 := oamData.Sprites[1]
 	assert.Equal(t, 1, sprite1.Index)
-	assert.Equal(t, 60, sprite1.Y)
-	assert.Equal(t, 40, sprite1.X)
-	assert.Equal(t, uint8(0x24), sprite1.TileIndex)
-	assert.Equal(t, uint8(0x00), sprite1.Attributes)
+	assert.Equal(t, uint8(60), sprite1.Sprite.Y)
+	assert.Equal(t, uint8(40), sprite1.Sprite.X)
+	assert.Equal(t, uint8(0x24), sprite1.Sprite.TileIndex)
+	assert.Equal(t, uint8(0x00), sprite1.Sprite.Flags)
 	assert.False(t, sprite1.IsVisible) // Y=60, line=55, height=8 -> not visible (60 > 55)
 
 	// Test active sprite count
@@ -92,43 +93,88 @@ func TestDecodeAttributes(t *testing.T) {
 	tests := []struct {
 		name       string
 		attributes uint8
-		expected   SpriteAttributes
+		expected   struct {
+			BackgroundPriority bool
+			FlipY              bool
+			FlipX              bool
+			PaletteNumber      int
+		}
 	}{
 		{
 			name:       "No flags set",
 			attributes: 0x00,
-			expected:   SpriteAttributes{false, false, false, 0},
+			expected: struct {
+				BackgroundPriority bool
+				FlipY              bool
+				FlipX              bool
+				PaletteNumber      int
+			}{false, false, false, 0},
 		},
 		{
 			name:       "Background priority",
 			attributes: 0x80,
-			expected:   SpriteAttributes{true, false, false, 0},
+			expected: struct {
+				BackgroundPriority bool
+				FlipY              bool
+				FlipX              bool
+				PaletteNumber      int
+			}{true, false, false, 0},
 		},
 		{
 			name:       "Flip Y",
 			attributes: 0x40,
-			expected:   SpriteAttributes{false, true, false, 0},
+			expected: struct {
+				BackgroundPriority bool
+				FlipY              bool
+				FlipX              bool
+				PaletteNumber      int
+			}{false, true, false, 0},
 		},
 		{
 			name:       "Flip X",
 			attributes: 0x20,
-			expected:   SpriteAttributes{false, false, true, 0},
+			expected: struct {
+				BackgroundPriority bool
+				FlipY              bool
+				FlipX              bool
+				PaletteNumber      int
+			}{false, false, true, 0},
 		},
 		{
 			name:       "Palette 1",
 			attributes: 0x10,
-			expected:   SpriteAttributes{false, false, false, 1},
+			expected: struct {
+				BackgroundPriority bool
+				FlipY              bool
+				FlipX              bool
+				PaletteNumber      int
+			}{false, false, false, 1},
 		},
 		{
 			name:       "All flags",
 			attributes: 0xF0,
-			expected:   SpriteAttributes{true, true, true, 1},
+			expected: struct {
+				BackgroundPriority bool
+				FlipY              bool
+				FlipX              bool
+				PaletteNumber      int
+			}{true, true, true, 1},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			sprite := SpriteInfo{Attributes: tt.attributes}
+			sprite := SpriteInfo{
+				Sprite: video.Sprite{
+					Flags: tt.attributes,
+				},
+			}
+			// manually parse flags for the test
+			sprite.Sprite.BehindBG = (tt.attributes & 0x80) != 0
+			sprite.Sprite.FlipY = (tt.attributes & 0x40) != 0
+			sprite.Sprite.FlipX = (tt.attributes & 0x20) != 0
+			sprite.Sprite.PaletteOBP1 = (tt.attributes & 0x10) != 0
+
 			decoded := sprite.DecodeAttributes()
 
 			assert.Equal(t, tt.expected.BackgroundPriority, decoded.BackgroundPriority)

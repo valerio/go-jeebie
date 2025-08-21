@@ -21,11 +21,6 @@ const (
 	TilemapSize           = 0x400
 )
 
-type TilePattern struct {
-	Index  int
-	Pixels [TilePixelHeight][TilePixelWidth]video.GBColor
-}
-
 type TilemapInfo struct {
 	BackgroundActive bool
 	WindowActive     bool
@@ -33,7 +28,7 @@ type TilemapInfo struct {
 }
 
 type VRAMData struct {
-	TilePatterns []TilePattern
+	TilePatterns []video.Tile
 	TilemapInfo  TilemapInfo
 }
 
@@ -41,11 +36,11 @@ func ExtractVRAMData(reader MemoryReader) *VRAMData {
 	return ExtractVRAMDataFromReader(reader)
 }
 
-func (data *VRAMData) GetTileGrid() [][]TilePattern {
-	grid := make([][]TilePattern, TileRows)
+func (data *VRAMData) GetTileGrid() [][]video.Tile {
+	grid := make([][]video.Tile, TileRows)
 
 	for row := 0; row < TileRows; row++ {
-		grid[row] = make([]TilePattern, TilesPerRow)
+		grid[row] = make([]video.Tile, TilesPerRow)
 		for col := 0; col < TilesPerRow; col++ {
 			tileIndex := row*TilesPerRow + col
 			if tileIndex < TilePatternCount {

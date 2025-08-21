@@ -168,8 +168,9 @@ func (dw *DebugWindow) renderTileGrid() {
 	dw.renderer.Copy(dw.texture, srcRect, dstRect)
 }
 
-func (dw *DebugWindow) renderTileToPixels(tile debug.TilePattern, pixelData []byte, row, col int) {
+func (dw *DebugWindow) renderTileToPixels(tile video.Tile, pixelData []byte, row, col int) {
 	baseOffset := (row*debug.TilePixelHeight*debug.TilesPerRow*debug.TilePixelWidth + col*debug.TilePixelWidth) * 4
+	pixels := tile.Pixels()
 
 	for y := 0; y < debug.TilePixelHeight; y++ {
 		for x := 0; x < debug.TilePixelWidth; x++ {
@@ -179,7 +180,7 @@ func (dw *DebugWindow) renderTileToPixels(tile debug.TilePattern, pixelData []by
 				continue
 			}
 
-			r, g, b, a := dw.gbColorToRGBA(tile.Pixels[y][x])
+			r, g, b, a := dw.gbColorToRGBA(pixels[y][x])
 			pixelData[pixelOffset] = a   // Alpha (first byte)
 			pixelData[pixelOffset+1] = b // Blue
 			pixelData[pixelOffset+2] = g // Green
@@ -204,8 +205,8 @@ func (dw *DebugWindow) renderOAMInfo() {
 
 	// Count visible sprites for display
 	visibleCount := 0
-	for _, sprite := range dw.oamData.Sprites {
-		if sprite.IsVisible {
+	for _, spriteInfo := range dw.oamData.Sprites {
+		if spriteInfo.IsVisible {
 			visibleCount++
 		}
 	}
@@ -220,11 +221,11 @@ func (dw *DebugWindow) renderOAMInfo() {
 	}
 
 	for i := 0; i < maxDisplay; i++ {
-		sprite := dw.oamData.Sprites[i]
+		spriteInfo := dw.oamData.Sprites[i]
 		y := int32(60 + i*20)
 
 		// Draw sprite info as colored rectangles
-		if sprite.IsVisible {
+		if spriteInfo.IsVisible {
 			dw.renderer.SetDrawColor(100, 200, 100, 255) // Green for visible
 		} else {
 			dw.renderer.SetDrawColor(100, 100, 100, 255) // Gray for hidden
@@ -234,7 +235,7 @@ func (dw *DebugWindow) renderOAMInfo() {
 		dw.renderer.FillRect(spriteRect)
 
 		// Show tile index as a second rectangle
-		tileColor := uint8(sprite.TileIndex%200 + 55) // Vary color by tile index
+		tileColor := uint8(spriteInfo.Sprite.TileIndex%200 + 55) // Vary color by tile index
 		dw.renderer.SetDrawColor(tileColor, tileColor, tileColor, 255)
 		tileRect := &sdl.Rect{40, y, 10, 15}
 		dw.renderer.FillRect(tileRect)

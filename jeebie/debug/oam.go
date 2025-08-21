@@ -2,6 +2,8 @@ package debug
 
 import (
 	"fmt"
+
+	"github.com/valerio/go-jeebie/jeebie/video"
 )
 
 const (
@@ -22,19 +24,9 @@ const (
 )
 
 type SpriteInfo struct {
-	Index      int
-	Y          int
-	X          int
-	TileIndex  uint8
-	Attributes uint8
-	IsVisible  bool
-}
-
-type SpriteAttributes struct {
-	BackgroundPriority bool
-	FlipY              bool
-	FlipX              bool
-	PaletteNumber      int
+	Index     int
+	Sprite    video.Sprite // embed the shared sprite structure
+	IsVisible bool
 }
 
 type OAMData struct {
@@ -48,12 +40,24 @@ func ExtractOAMData(reader MemoryReader, currentLine int, spriteHeight int) *OAM
 	return ExtractOAMDataFromReader(reader, currentLine, spriteHeight)
 }
 
-func (s *SpriteInfo) DecodeAttributes() SpriteAttributes {
-	return SpriteAttributes{
-		BackgroundPriority: (s.Attributes & (1 << AttrBackgroundPriority)) != 0,
-		FlipY:              (s.Attributes & (1 << AttrFlipY)) != 0,
-		FlipX:              (s.Attributes & (1 << AttrFlipX)) != 0,
-		PaletteNumber:      int((s.Attributes & (1 << AttrPaletteNumber)) >> AttrPaletteNumber),
+// DecodeAttributes returns the parsed sprite attributes
+// Now delegates to the embedded Sprite structure
+func (s *SpriteInfo) DecodeAttributes() struct {
+	BackgroundPriority bool
+	FlipY              bool
+	FlipX              bool
+	PaletteNumber      int
+} {
+	return struct {
+		BackgroundPriority bool
+		FlipY              bool
+		FlipX              bool
+		PaletteNumber      int
+	}{
+		BackgroundPriority: s.Sprite.BehindBG,
+		FlipY:              s.Sprite.FlipY,
+		FlipX:              s.Sprite.FlipX,
+		PaletteNumber:      map[bool]int{false: 0, true: 1}[s.Sprite.PaletteOBP1],
 	}
 }
 
@@ -63,7 +67,7 @@ func (s *SpriteInfo) String() string {
 		status = "ACTIVE"
 	}
 	return fmt.Sprintf("Sprite %2d: Y=%3d X=%3d  Tile=0x%02X Flags=0x%02X [%s]",
-		s.Index, s.Y, s.X, s.TileIndex, s.Attributes, status)
+		s.Index, s.Sprite.Y, s.Sprite.X, s.Sprite.TileIndex, s.Sprite.Flags, status)
 }
 
 func (data *OAMData) GetVisibleSprites() []SpriteInfo {

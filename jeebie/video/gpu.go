@@ -32,10 +32,10 @@ const (
 )
 
 type GPU struct {
-	memory         *memory.MMU
-	framebuffer    *FrameBuffer
-	bgPixelBuffer  []byte // stores background/window pixel colors for sprite priority
-	spritePriority SpritePriorityBuffer
+	memory        *memory.MMU
+	framebuffer   *FrameBuffer
+	bgPixelBuffer []byte // stores background/window pixel colors for sprite priority
+	oam           *OAM   // OAM scanner for sprite management
 
 	// PPU state - these map to Game Boy hardware registers/behavior
 	mode                 GpuMode // current PPU mode (matches STAT bits 1-0)
@@ -56,6 +56,7 @@ func NewGpu(memory *memory.MMU) *GPU {
 		memory:        memory,
 		mode:          vblankMode,
 		bgPixelBuffer: make([]byte, FramebufferSize),
+		oam:           NewOAM(memory),
 
 		line: 144,
 	}
@@ -182,198 +183,207 @@ func (g *GPU) drawScanline() {
 }
 
 func (g *GPU) drawBackground() {
-	lineWidth := g.line * FramebufferWidth
-	backgroundEnabled := g.readLCDCVariable(bgDisplay) == 1
-
-	if !backgroundEnabled {
-		// when background is disabled, display color 0 from BGP palette
-		palette := g.memory.Read(addr.BGP)
-		color0 := palette & 0x03 // extract bits 1:0 for color index 0
-		displayColor := uint32(ByteToColor(color0))
-
-		for i := range FramebufferWidth {
-			g.framebuffer.buffer[lineWidth+i] = displayColor
-			g.bgPixelBuffer[lineWidth+i] = 0 // background is disabled, so BG priority is 0
-		}
+	if !g.isBackgroundEnabled() {
+		g.clearBackground()
 		return
 	}
 
-	useSignedTileSet := g.readLCDCVariable(bgWindowTileDataSelect) == 0
-	useTileMapZero := g.readLCDCVariable(bgTileMapDisplaySelect) == 0
+	g.renderBackgroundTiles()
+}
 
-	tilesAddr := addr.TileData0 // unsigned mode
-	if useSignedTileSet {
-		tilesAddr = addr.TileData2 // signed mode
-	}
+func (g *GPU) isBackgroundEnabled() bool {
+	return g.readLCDCVariable(bgDisplay) == 1
+}
 
-	tileMapAddr := addr.TileMap1
-	if useTileMapZero {
-		tileMapAddr = addr.TileMap0
-	}
+// call when background is disabled, fill with color 0 from BGP
+func (g *GPU) clearBackground() {
+	lineWidth := g.line * FramebufferWidth
+	palette := g.memory.Read(addr.BGP)
+	color0 := palette & 0x03
+	displayColor := uint32(ByteToColor(color0))
 
-	scrollX := g.memory.Read(addr.SCX)
-	scrollY := g.memory.Read(addr.SCY)
-	lineScrolled := (g.line + int(scrollY)) & 0xFF // Y coordinate wraps at 256
-	lineScrolled32 := (lineScrolled / 8) * 32
-	tilePixelY := lineScrolled % 8
-	tilePixelY2 := tilePixelY * 2
-
-	// Render the entire scanline (160 pixels)
-	for screenPixelX := 0; screenPixelX < FramebufferWidth; screenPixelX++ {
-		mapPixelX := (screenPixelX + int(scrollX)) & 0xFF
-		mapTileX := mapPixelX / 8
-		mapTileXOffset := mapPixelX % 8
-		mapTileAddr := tileMapAddr + uint16(lineScrolled32+mapTileX)
-
-		mapTileValue := g.memory.Read(mapTileAddr)
-
-		var tileAddr uint16
-		if useSignedTileSet {
-			// signed addressing: tile numbers -128 to 127
-			signedTile := int8(mapTileValue)
-			tileOffset := int(signedTile) * 16
-			tileAddr = uint16(int(tilesAddr) + tileOffset + int(tilePixelY2))
-		} else {
-			// unsigned addressing: tile numbers 0 to 255
-			mapTile := int(mapTileValue)
-			mapTile16 := mapTile * 16
-			tileAddr = tilesAddr + uint16(mapTile16) + uint16(tilePixelY2)
-		}
-
-		low := g.memory.Read(tileAddr)
-		high := g.memory.Read(tileAddr + 1)
-
-		pixelIndex := uint8(7 - mapTileXOffset)
-		// the pixel is the bitwise OR of the low/high bit at
-		// the current X index (from 7 to 0)
-		pixel := 0
-		if bit.IsSet(pixelIndex, low) {
-			pixel |= 1
-		}
-		if bit.IsSet(pixelIndex, high) {
-			pixel |= 2
-		}
-
-		pixelPosition := lineWidth + screenPixelX
-
-		palette := g.memory.Read(addr.BGP)
-		color := (palette >> (pixel * 2)) & 0x03
-		finalColor := uint32(ByteToColor(color))
-
-		g.framebuffer.buffer[pixelPosition] = finalColor
-		g.bgPixelBuffer[pixelPosition] = color // just use the color value (0-3) for the buffer
+	for i := range FramebufferWidth {
+		g.framebuffer.buffer[lineWidth+i] = displayColor
+		g.bgPixelBuffer[lineWidth+i] = 0
 	}
 }
 
+func (g *GPU) renderBackgroundTiles() {
+	lineWidth := g.line * FramebufferWidth
+	tileDataAddr := g.getTileDataAddress()
+	tileMapAddr := g.getBackgroundTileMapAddress()
+	useSigned := g.readLCDCVariable(bgWindowTileDataSelect) == 0
+	scrollX, scrollY := g.getBackgroundScroll()
+	scrolledY := (g.line + scrollY) & 0xFF
+
+	// render each pixel of the scanline
+	for screenX := range FramebufferWidth {
+		// calculate position in background map (with wrapping)
+		bgX := (screenX + scrollX) & 0xFF
+		bgY := scrolledY
+
+		pixelColor := g.fetchBackgroundPixel(bgX, bgY, tileDataAddr, tileMapAddr, useSigned)
+
+		position := lineWidth + screenX
+		g.drawBackgroundPixel(position, pixelColor)
+	}
+}
+
+func (g *GPU) getTileDataAddress() uint16 {
+	if g.readLCDCVariable(bgWindowTileDataSelect) == 0 {
+		return addr.TileData2 // signed addressing mode (0x8800-0x97FF)
+	}
+	return addr.TileData0 // unsigned addressing mode (0x8000-0x8FFF)
+}
+
+func (g *GPU) getBackgroundTileMapAddress() uint16 {
+	if g.readLCDCVariable(bgTileMapDisplaySelect) == 0 {
+		return addr.TileMap0
+	}
+	return addr.TileMap1
+}
+
+func (g *GPU) getBackgroundScroll() (x, y int) {
+	return int(g.memory.Read(addr.SCX)), int(g.memory.Read(addr.SCY))
+}
+
+func (g *GPU) fetchBackgroundPixel(bgX, bgY int, tileDataAddr, tileMapAddr uint16, useSigned bool) int {
+	// calculate tile coordinates
+	tileX := bgX / 8
+	tileY := bgY / 8
+	pixelXInTile := bgX % 8
+	pixelYInTile := bgY % 8
+
+	// fetch tile index from tilemap
+	tileMapOffset := tileY*32 + tileX
+	tileIndex := g.memory.Read(tileMapAddr + uint16(tileMapOffset))
+
+	tileRow := g.fetchTileRow(tileIndex, pixelYInTile, tileDataAddr, useSigned)
+	return tileRow.GetPixel(pixelXInTile)
+}
+
+func (g *GPU) fetchTileRow(tileIndex byte, row int, baseAddr uint16, signed bool) TileRow {
+	var tileAddr uint16
+
+	if signed {
+		// signed addressing: interpret as -128 to 127
+		signedIndex := int8(tileIndex)
+		tileAddr = uint16(int(baseAddr) + int(signedIndex)*16 + row*2)
+	} else {
+		// unsigned addressing: 0 to 255
+		tileAddr = baseAddr + uint16(tileIndex)*16 + uint16(row*2)
+	}
+
+	return TileRow{
+		Low:  g.memory.Read(tileAddr),
+		High: g.memory.Read(tileAddr + 1),
+	}
+}
+
+func (g *GPU) drawBackgroundPixel(position int, pixelColor int) {
+	palette := g.memory.Read(addr.BGP)
+	paletteColor := (palette >> (pixelColor * 2)) & 0x03
+
+	g.framebuffer.buffer[position] = uint32(ByteToColor(paletteColor))
+	g.bgPixelBuffer[position] = paletteColor
+}
+
 func (g *GPU) drawWindow() {
+	if !g.shouldRenderWindow() {
+		return
+	}
+
+	g.renderWindowTiles()
+	g.windowLine++
+}
+
+func (g *GPU) shouldRenderWindow() bool {
+	// check if window should be rendered on this scanline
 	if g.windowLine > 143 {
-		return
+		return false
 	}
 
-	windowEnabled := g.readLCDCVariable(windowDisplayEnable) == 1
-	if !windowEnabled {
-		return
+	if g.readLCDCVariable(windowDisplayEnable) != 1 {
+		return false
 	}
 
-	wx := g.memory.Read(addr.WX) - 7
 	wy := g.memory.Read(addr.WY)
-
-	if wx > 159 {
-		return
-	}
-
 	if wy > 143 || int(wy) > g.line {
-		return
+		return false
 	}
 
-	// Debug window rendering
-	if g.line < 5 { // Only log first few lines to avoid spam
-		slog.Debug("Window rendering", "line", g.line, "windowLine", g.windowLine, "wx", wx, "wy", wy)
+	wx := g.memory.Read(addr.WX)
+	if wx > 166 { // WX - 7 > 159
+		return false
 	}
 
-	useSignedTileSet := g.readLCDCVariable(bgWindowTileDataSelect) == 0
-	useTileMapZero := g.readLCDCVariable(windowTileMapSelect) == 0
+	return true
+}
 
-	tilesAddr := addr.TileData0 // unsigned mode
-	if useSignedTileSet {
-		tilesAddr = addr.TileData2 // signed mode
-	}
-
-	tileMapAddr := addr.TileMap1
-	if useTileMapZero {
-		tileMapAddr = addr.TileMap0
-	}
-
-	lineAdj := g.windowLine
-
-	y32 := (lineAdj / 8) * 32
-	pixelY := lineAdj & 7
-	pixelY2 := pixelY * 2
+func (g *GPU) renderWindowTiles() {
 	lineWidth := g.line * FramebufferWidth
 
-	// Only render tiles where the window is actually visible
-	startTileX := 0
-	if wx > 0 {
-		startTileX = 0 // Window starts from tile 0 in window space
+	// get window position
+	wx := int(g.memory.Read(addr.WX)) - 7
+
+	// determine tile data and tilemap sources
+	tileDataAddr := g.getTileDataAddress()
+	tileMapAddr := g.getWindowTileMapAddress()
+	useSigned := g.readLCDCVariable(bgWindowTileDataSelect) == 0
+
+	// calculate visible tile range
+	startX := wx
+	if startX < 0 {
+		startX = 0
 	}
-	endTileX := (FramebufferWidth - int(wx) + 7) / 8 // Calculate how many tiles are visible
-	if endTileX > 32 {
-		endTileX = 32
+
+	// render each visible pixel of the window
+	for screenX := startX; screenX < FramebufferWidth; screenX++ {
+		// calculate window-relative coordinates
+		windowX := screenX - wx
+		windowY := g.windowLine
+
+		// fetch and decode the pixel
+		pixelColor := g.fetchWindowPixel(windowX, windowY, tileDataAddr, tileMapAddr, useSigned)
+
+		// apply palette and write to buffers
+		position := lineWidth + screenX
+		g.drawWindowPixel(position, pixelColor)
 	}
+}
 
-	for x := startTileX; x < endTileX; x++ {
-		tileIndexAddr := tileMapAddr + uint16(y32+x)
-		tileValue := g.memory.Read(tileIndexAddr)
-		xOffset := x * 8
-
-		var tileAddr uint16
-		if useSignedTileSet {
-			// signed addressing: base 0x9000, tile numbers -128 to 127
-			signedTile := int8(tileValue)
-			tileOffset := int(signedTile) * 16
-			tileAddr = uint16(int(tilesAddr) + tileOffset + int(pixelY2))
-		} else {
-			// unsigned addressing: base 0x8000, tile numbers 0 to 255
-			tile := int(tileValue)
-			tile16 := tile * 16
-			tileAddr = tilesAddr + uint16(tile16) + uint16(pixelY2)
-		}
-
-		low := g.memory.Read(tileAddr)
-		high := g.memory.Read(tileAddr + 1)
-
-		for pixelX := 0; pixelX < 8; pixelX++ {
-			bufferX := xOffset + pixelX + int(wx)
-
-			// Only draw pixels that are within the window area and on screen
-			if bufferX < int(wx) || bufferX >= FramebufferWidth {
-				continue
-			}
-
-			// the pixel is the bitwise OR of the low/high bit at
-			// the current X index (from 7 to 0)
-			pixel := 0
-			if bit.IsSet(uint8(7-pixelX), low) {
-				pixel |= 1
-			}
-			if bit.IsSet(uint8(7-pixelX), high) {
-				pixel |= 2
-			}
-
-			position := lineWidth + bufferX
-
-			// Safety check to prevent buffer overflow
-			if position >= len(g.framebuffer.buffer) {
-				continue
-			}
-
-			palette := g.memory.Read(addr.BGP)
-			color := (palette >> (pixel * 2)) & 0x03
-			g.framebuffer.buffer[position] = uint32(ByteToColor(color))
-			g.bgPixelBuffer[position] = color
-		}
+func (g *GPU) getWindowTileMapAddress() uint16 {
+	if g.readLCDCVariable(windowTileMapSelect) == 0 {
+		return addr.TileMap0 // 0x9800-0x9BFF
 	}
-	g.windowLine++
+	return addr.TileMap1 // 0x9C00-0x9FFF
+}
+
+func (g *GPU) fetchWindowPixel(windowX, windowY int, tileDataAddr, tileMapAddr uint16, useSigned bool) int {
+	// calculate tile coordinates within window
+	tileX := windowX / 8
+	tileY := windowY / 8
+	pixelXInTile := windowX % 8
+	pixelYInTile := windowY % 8
+
+	// fetch tile index from tilemap
+	tileMapOffset := tileY*32 + tileX
+	tileIndex := g.memory.Read(tileMapAddr + uint16(tileMapOffset))
+
+	// fetch tile data (reuse background tile fetching)
+	tileRow := g.fetchTileRow(tileIndex, pixelYInTile, tileDataAddr, useSigned)
+
+	// extract pixel from tile row
+	return tileRow.GetPixel(pixelXInTile)
+}
+
+func (g *GPU) drawWindowPixel(position int, pixelColor int) {
+	// window uses same palette as background
+	palette := g.memory.Read(addr.BGP)
+	paletteColor := (palette >> (pixelColor * 2)) & 0x03
+
+	g.framebuffer.buffer[position] = uint32(ByteToColor(paletteColor))
+	g.bgPixelBuffer[position] = paletteColor
 }
 
 func (g *GPU) drawSprites() {
@@ -381,162 +391,93 @@ func (g *GPU) drawSprites() {
 		return
 	}
 
-	spriteHeight := 8
-	if g.readLCDCVariable(spriteSize) == 1 {
-		spriteHeight = 16
+	sprites := g.oam.GetSpritesForScanline(g.line)
+	for _, sprite := range sprites {
+		if !sprite.HasPriorityForAnyPixel() {
+			continue // no priority = no rendery
+		}
+		g.renderSprite(sprite)
 	}
+}
 
+func (g *GPU) renderSprite(sprite Sprite) {
 	lineWidth := g.line * FramebufferWidth
-	var spritesToDraw []int
+	tileRow := g.fetchSpriteTileRow(sprite)
+	paletteAddr := g.getSpritePaletteAddress(sprite)
 
-	// OAM selection phase (Pan Docs: https://gbdev.io/pandocs/OAM.html#selection-priority)
-	// During OAM scan, the PPU scans OAM sequentially
-	// from 0xFE00 to 0xFE9F, comparing LY (g.line) to each sprite's Y position.
-	// Important: Only Y coordinate affects selection. Sprites with X outside
-	// visible range (X < -7 or X >= 160) still count toward the 10-sprite limit.
-	for sprite := 0; sprite < 40; sprite++ {
-		sprite4 := sprite * 4
-		oamAddr := addr.OAMStart + uint16(sprite4)
-
-		// OAM byte 0: Y position with +16 offset (Y=0 means sprite at Y=-16)
-		spriteY := int(g.memory.Read(oamAddr)) - 16
-
-		// check if sprite overlaps current scanline
-		// sprite is visible on this line if: spriteY <= LY < spriteY + height
-		if spriteY > g.line || (spriteY+spriteHeight) <= g.line {
-			continue
-		}
-		spritesToDraw = append(spritesToDraw, sprite)
-
-		// hardware limit: maximum 10 sprites per scanline
-		if len(spritesToDraw) >= 10 {
-			break
-		}
-	}
-
-	// clear priority buffer for this scanline
-	g.spritePriority.Clear()
-
-	// Determine sprite ownership for each pixel in each sprite. Rules of priority
-	// are encapsulated in g.spritePriority.
-	for _, sprite := range spritesToDraw {
-		sprite4 := sprite * 4
-		oamAddr := addr.OAMStart + uint16(sprite4)
-		// X position with +8 offset (X=0 means sprite at X=-8)
-		spriteX := int(g.memory.Read(oamAddr+1)) - 8
-
-		// attempt to claim each pixel this sprite covers
-		for pixelOffset := range 8 {
-			bufferX := spriteX + pixelOffset
-			g.spritePriority.TryClaimPixel(bufferX, sprite, spriteX)
-		}
-	}
-
-	// phase 2: render sprites based on pixel ownership
-	// Only draw the pixels that each sprite owns after priority resolution.
-	for _, sprite := range spritesToDraw {
-		sprite4 := sprite * 4
-		oamAddr := addr.OAMStart + uint16(sprite4)
-		spriteY := int(g.memory.Read(oamAddr)) - 16  // byte 0: Y position
-		spriteX := int(g.memory.Read(oamAddr+1)) - 8 // byte 1: X position
-		spriteTile := g.memory.Read(oamAddr + 2)     // byte 2: tile index
-		spriteFlags := g.memory.Read(oamAddr + 3)    // byte 3: attributes
-
-		// quick check: does this sprite own any visible pixels?
-		hasPixels := false
-		for x := 0; x < 8; x++ {
-			bufferX := spriteX + x
-			if g.spritePriority.GetOwner(bufferX) == sprite {
-				hasPixels = true
-				break
-			}
-		}
-
-		// skip sprites that lost all their pixels to higher priority sprites
-		if !hasPixels {
+	// render each pixel of the sprite
+	for pixelX := range 8 {
+		if !sprite.HasPriorityForPixel(pixelX) {
 			continue
 		}
 
-		// fetch sprite tile data
-		spriteMask := 0xFF
-		if spriteHeight == 16 {
-			spriteMask = 0xFE
+		bufferX := int(sprite.X) + pixelX
+		if bufferX < 0 || bufferX >= FramebufferWidth {
+			continue // out of screen bounds
 		}
 
-		spriteTile16 := (int(spriteTile) & spriteMask) * 16
-		objPaletteAddr := addr.OBP0
-		if bit.IsSet(4, spriteFlags) {
-			objPaletteAddr = addr.OBP1
-		}
-
-		flipX := bit.IsSet(5, spriteFlags)
-		flipY := bit.IsSet(6, spriteFlags)
-		aboveBG := !bit.IsSet(7, spriteFlags)
-
-		pixelY := g.line - spriteY
-		if flipY {
-			pixelY = spriteHeight - 1 - pixelY
-		}
-
-		pixelY2 := 0
-		offset := 0
-
-		if spriteHeight == 16 && pixelY >= 8 {
-			pixelY2 = (pixelY - 8) * 2
-			offset = 16
+		var pixelColor int
+		if sprite.FlipX {
+			pixelColor = tileRow.GetPixelFlipped(pixelX)
 		} else {
-			pixelY2 = pixelY * 2
+			pixelColor = tileRow.GetPixel(pixelX)
 		}
 
-		// sprites always use unsigned addressing from 0x8000
-		tileAddr := addr.TileData0 + uint16(spriteTile16+pixelY2+offset)
-		low := g.memory.Read(tileAddr)
-		high := g.memory.Read(tileAddr + 1)
-
-		// draw only the pixels this sprite owns
-		for pixelX := 0; pixelX < 8; pixelX++ {
-			bufferX := spriteX + pixelX
-
-			// skip if this sprite doesn't own this pixel
-			if g.spritePriority.GetOwner(bufferX) != sprite {
-				continue
-			}
-
-			// calculate pixel value from tile data
-			pixelIdx := 7 - pixelX
-			if flipX {
-				pixelIdx = pixelX
-			}
-
-			pixel := 0
-			if bit.IsSet(uint8(pixelIdx), low) {
-				pixel |= 1
-			}
-			if bit.IsSet(uint8(pixelIdx), high) {
-				pixel |= 2
-			}
-
-			// transparent pixels don't get drawn
-			if pixel == 0 {
-				continue
-			}
-
-			position := lineWidth + bufferX
-
-			// handle background priority
-			if !aboveBG {
-				bgPixel := g.bgPixelBuffer[position]
-				if bgPixel != 0 {
-					continue // sprite is behind non-transparent background
-				}
-			}
-
-			// draw the pixel
-			palette := g.memory.Read(objPaletteAddr)
-			color := (palette >> (pixel * 2)) & 0x03
-			g.framebuffer.buffer[position] = uint32(ByteToColor(color))
+		if pixelColor == 0 {
+			continue // transparent
 		}
+
+		// check background priority
+		position := lineWidth + bufferX
+		if sprite.BehindBG && g.bgPixelBuffer[position] != 0 {
+			continue
+		}
+
+		g.drawSpritePixel(position, pixelColor, paletteAddr)
 	}
+}
+
+func (g *GPU) fetchSpriteTileRow(sprite Sprite) TileRow {
+	// calculate which row of the tile we're rendering
+	pixelY := g.line - int(sprite.Y)
+	if sprite.FlipY {
+		pixelY = sprite.Height - 1 - pixelY
+	}
+
+	// calculate tile address
+	tileIndex := sprite.TileIndex
+	if sprite.Height == 16 {
+		tileIndex &= 0xFE // ignore bit 0 for 8x16 sprites
+	}
+
+	// calculate the offset within the tile
+	var tileRowOffset int
+	if sprite.Height == 16 && pixelY >= 8 {
+		tileRowOffset = (pixelY-8)*2 + 16 // second tile
+	} else {
+		tileRowOffset = pixelY * 2
+	}
+
+	// sprites always use unsigned addressing from 0x8000
+	tileAddr := addr.TileData0 + uint16(int(tileIndex)*16+tileRowOffset)
+
+	return TileRow{
+		Low:  g.memory.Read(tileAddr),
+		High: g.memory.Read(tileAddr + 1),
+	}
+}
+
+func (g *GPU) getSpritePaletteAddress(sprite Sprite) uint16 {
+	if sprite.PaletteOBP1 {
+		return addr.OBP1
+	}
+	return addr.OBP0
+}
+
+func (g *GPU) drawSpritePixel(position int, pixelColor int, paletteAddr uint16) {
+	palette := g.memory.Read(paletteAddr)
+	color := (palette >> (pixelColor * 2)) & 0x03
+	g.framebuffer.buffer[position] = uint32(ByteToColor(color))
 }
 
 // LCD Stat (Status) Register bit values

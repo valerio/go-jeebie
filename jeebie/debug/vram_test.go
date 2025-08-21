@@ -45,15 +45,16 @@ func TestExtractVRAMData(t *testing.T) {
 		video.GBColor(1), video.GBColor(1), video.GBColor(1), video.GBColor(1),
 	}
 
+	pixels0 := tile0.Pixels()
 	for x := 0; x < TilePixelWidth; x++ {
-		assert.Equal(t, expectedRow0[x], tile0.Pixels[0][x], "Row 0, pixel %d", x)
-		assert.Equal(t, expectedRow1[x], tile0.Pixels[1][x], "Row 1, pixel %d", x)
+		assert.Equal(t, expectedRow0[x], pixels0[0][x], "Row 0, pixel %d", x)
+		assert.Equal(t, expectedRow1[x], pixels0[1][x], "Row 1, pixel %d", x)
 	}
 
 	// Check remaining rows are zeros (color 0)
 	for y := 2; y < TilePixelHeight; y++ {
 		for x := 0; x < TilePixelWidth; x++ {
-			assert.Equal(t, video.GBColor(0), tile0.Pixels[y][x], "Row %d, pixel %d should be 0", y, x)
+			assert.Equal(t, video.GBColor(0), pixels0[y][x], "Row %d, pixel %d should be 0", y, x)
 		}
 	}
 
@@ -117,13 +118,15 @@ func TestExtractTilePattern(t *testing.T) {
 			mmu.Write(tileAddr, tt.lowByte)
 			mmu.Write(tileAddr+1, tt.highByte)
 
-			tile := extractTilePatternFromReader(mmu, tt.tileIndex)
+			baseAddr := uint16(VRAMBaseAddr + tt.tileIndex*TileDataSize)
+			tile := video.FetchTileWithIndex(mmu, baseAddr, tt.tileIndex)
+			pixels := tile.Pixels()
 
 			assert.Equal(t, tt.tileIndex, tile.Index)
 
 			// Check first row pixels
 			for x := 0; x < TilePixelWidth; x++ {
-				assert.Equal(t, tt.expected[x], tile.Pixels[0][x],
+				assert.Equal(t, tt.expected[x], pixels[0][x],
 					"Pixel %d should be color %d", x, tt.expected[x])
 			}
 		})
@@ -276,7 +279,8 @@ func TestTilePatternExtraction(t *testing.T) {
 		mmu.Write(tileAddr+uint16(i), data)
 	}
 
-	tile := extractTilePatternFromReader(mmu, tileIndex)
+	tile := video.FetchTileWithIndex(mmu, tileAddr, tileIndex)
+	pixels := tile.Pixels()
 
 	// Expected cross pattern
 	expectedRows := [][]video.GBColor{
@@ -293,7 +297,7 @@ func TestTilePatternExtraction(t *testing.T) {
 	for y := 0; y < TilePixelHeight; y++ {
 		for x := 0; x < TilePixelWidth; x++ {
 			expected := video.GBColor(expectedRows[y][x])
-			actual := tile.Pixels[y][x]
+			actual := pixels[y][x]
 			assert.Equal(t, expected, actual,
 				"Cross pattern mismatch at row %d, col %d", y, x)
 		}

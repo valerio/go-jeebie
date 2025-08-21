@@ -1,6 +1,7 @@
 package debug
 
 import (
+	"github.com/valerio/go-jeebie/jeebie/bit"
 	"github.com/valerio/go-jeebie/jeebie/video"
 )
 
@@ -42,13 +43,23 @@ func ExtractOAMDataFromReader(reader MemoryReader, currentLine int, spriteHeight
 			activeCount++
 		}
 
+		// create a Sprite structure matching the video package format
+		sprite := video.Sprite{
+			Y:         uint8(adjustedY),
+			X:         uint8(adjustedX),
+			TileIndex: tileIndex,
+			Flags:     attributes,
+		}
+		// parse the flags
+		sprite.PaletteOBP1 = bit.IsSet(4, attributes)
+		sprite.FlipX = bit.IsSet(5, attributes)
+		sprite.FlipY = bit.IsSet(6, attributes)
+		sprite.BehindBG = bit.IsSet(7, attributes)
+
 		data.Sprites[i] = SpriteInfo{
-			Index:      i,
-			Y:          adjustedY,
-			X:          adjustedX,
-			TileIndex:  tileIndex,
-			Attributes: attributes,
-			IsVisible:  isVisible,
+			Index:     i,
+			Sprite:    sprite,
+			IsVisible: isVisible,
 		}
 	}
 
@@ -59,43 +70,19 @@ func ExtractOAMDataFromReader(reader MemoryReader, currentLine int, spriteHeight
 // ExtractVRAMDataFromReader extracts VRAM data using the generic memory reader interface
 func ExtractVRAMDataFromReader(reader MemoryReader) *VRAMData {
 	data := &VRAMData{
-		TilePatterns: make([]TilePattern, TilePatternCount),
+		TilePatterns: make([]video.Tile, TilePatternCount),
 	}
 
 	// Extract all 384 tile patterns from VRAM
-	for i := 0; i < TilePatternCount; i++ {
-		data.TilePatterns[i] = extractTilePatternFromReader(reader, i)
+	for i := range TilePatternCount {
+		baseAddr := uint16(VRAMBaseAddr + i*TileDataSize)
+		data.TilePatterns[i] = video.FetchTileWithIndex(reader, baseAddr, i)
 	}
 
 	// Extract tilemap information
 	data.TilemapInfo = extractTilemapInfoFromReader(reader)
 
 	return data
-}
-
-func extractTilePatternFromReader(reader MemoryReader, tileIndex int) TilePattern {
-	pattern := TilePattern{Index: tileIndex}
-
-	baseAddr := uint16(VRAMBaseAddr + tileIndex*TileDataSize)
-
-	for y := 0; y < TilePixelHeight; y++ {
-		// Each row is 2 bytes (low bit plane + high bit plane)
-		lowByte := reader.Read(baseAddr + uint16(y*2))
-		highByte := reader.Read(baseAddr + uint16(y*2) + 1)
-
-		for x := 0; x < TilePixelWidth; x++ {
-			// Extract bit from each plane
-			bitPos := uint(7 - x)
-			lowBit := (lowByte >> bitPos) & 1
-			highBit := (highByte >> bitPos) & 1
-
-			// Combine to get 2-bit color value
-			colorValue := (highBit << 1) | lowBit
-			pattern.Pixels[y][x] = video.GBColor(colorValue)
-		}
-	}
-
-	return pattern
 }
 
 func extractTilemapInfoFromReader(reader MemoryReader) TilemapInfo {
