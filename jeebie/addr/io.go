@@ -44,7 +44,7 @@ const (
 	TileData1 uint16 = 0x8800
 	// TileData2 is the continuation of signed tile data (tiles 0-127)
 	TileData2 uint16 = 0x9000
-	
+
 	// TileMap0 is background/window tile map 0
 	TileMap0 uint16 = 0x9800
 	// TileMap1 is background/window tile map 1
