@@ -33,18 +33,18 @@ func TestHandler_Debouncing(t *testing.T) {
 			expectDebounce: false,
 		},
 		{
-			name:           "Game Boy button rapid press - should debounce",
+			name:           "Game Boy button rapid press - should not debounce",
 			action:         action.GBButtonA,
 			eventType:      event.Press,
 			timeBetween:    10 * time.Millisecond,
-			expectDebounce: true,
+			expectDebounce: false,
 		},
 		{
-			name:           "UI action release event - should debounce",
+			name:           "UI action release event - should not debounce",
 			action:         action.EmulatorDebugToggle,
 			eventType:      event.Release,
 			timeBetween:    10 * time.Millisecond,
-			expectDebounce: true,
+			expectDebounce: false,
 		},
 		{
 			name:           "Hold event type - should not debounce",

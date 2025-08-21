@@ -11,14 +11,14 @@ func TestPaletteMapping(t *testing.T) {
 		colorVal int
 		expected GBColor
 	}{
-		{"Default palette 0xE4, color 0", 0xE4, 0, BlackColor},     // bits 1,0 = 00
-		{"Default palette 0xE4, color 1", 0xE4, 1, DarkGreyColor},  // bits 3,2 = 01
-		{"Default palette 0xE4, color 2", 0xE4, 2, LightGreyColor}, // bits 5,4 = 10
-		{"Default palette 0xE4, color 3", 0xE4, 3, WhiteColor},     // bits 7,6 = 11
-		{"Custom palette 0x1B, color 0", 0x1B, 0, WhiteColor},      // bits 1,0 = 11
-		{"Custom palette 0x1B, color 1", 0x1B, 1, LightGreyColor},  // bits 3,2 = 10
-		{"Custom palette 0x1B, color 2", 0x1B, 2, DarkGreyColor},   // bits 5,4 = 01
-		{"Custom palette 0x1B, color 3", 0x1B, 3, BlackColor},      // bits 7,6 = 00
+		{"Default palette 0xE4, color 0", 0xE4, 0, WhiteColor},     // bits 1,0 = 00 → palette 0 → white
+		{"Default palette 0xE4, color 1", 0xE4, 1, LightGreyColor}, // bits 3,2 = 01 → palette 1 → light grey
+		{"Default palette 0xE4, color 2", 0xE4, 2, DarkGreyColor},  // bits 5,4 = 10 → palette 2 → dark grey
+		{"Default palette 0xE4, color 3", 0xE4, 3, BlackColor},     // bits 7,6 = 11 → palette 3 → black
+		{"Custom palette 0x1B, color 0", 0x1B, 0, BlackColor},      // bits 1,0 = 11 → palette 3 → black
+		{"Custom palette 0x1B, color 1", 0x1B, 1, DarkGreyColor},   // bits 3,2 = 10 → palette 2 → dark grey
+		{"Custom palette 0x1B, color 2", 0x1B, 2, LightGreyColor},  // bits 5,4 = 01 → palette 1 → light grey
+		{"Custom palette 0x1B, color 3", 0x1B, 3, WhiteColor},      // bits 7,6 = 00 → palette 0 → white
 	}
 
 	for _, tt := range tests {
