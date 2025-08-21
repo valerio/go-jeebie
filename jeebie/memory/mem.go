@@ -211,7 +211,6 @@ func (m *MMU) Write(address uint16, value byte) {
 		// handle DMA transfer
 		if address == addr.DMA {
 			sourceAddr := uint16(value) << 8
-			slog.Debug("DMA transfer", "source", fmt.Sprintf("0x%04X", sourceAddr), "value", fmt.Sprintf("0x%02X", value))
 			// DMA transfer copies 160 bytes from source to OAM
 			for i := range uint16(160) {
 				m.memory[0xFE00+i] = m.Read(sourceAddr + i)

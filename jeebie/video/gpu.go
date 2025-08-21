@@ -175,11 +175,10 @@ func (g *GPU) drawScanline() {
 
 func (g *GPU) drawBackground() {
 	lineWidth := g.line * FramebufferWidth
-
 	backgroundEnabled := g.readLCDCVariable(bgDisplay) == 1
 
 	if !backgroundEnabled {
-		for i := 0; i < FramebufferWidth; i++ {
+		for i := range FramebufferWidth {
 			g.framebuffer.buffer[lineWidth+i] = 0
 			g.bgPixelBuffer[lineWidth+i] = 0
 		}
@@ -192,7 +191,7 @@ func (g *GPU) drawBackground() {
 	// select the correct starting address based on which tileMap/tileSet is set
 	tilesAddr := uint16(0x8000)
 	if useTileSetZero {
-		tilesAddr = 0x9000 // Signed mode uses base 0x9000
+		tilesAddr = 0x9000
 	}
 
 	tileMapAddr := 0x9C00
@@ -214,18 +213,20 @@ func (g *GPU) drawBackground() {
 		mapTileXOffset := mapPixelX % 8
 		mapTileAddr := uint16(tileMapAddr + lineScrolled32 + mapTileX)
 
-		mapTile := 0
 		mapTileValue := g.memory.Read(mapTileAddr)
 
+		var tileAddr uint16
 		if useTileSetZero {
-			offset := int8(mapTileValue)
-			mapTile = int(offset) + 128
+			// signed addressing: base 0x9000, tile numbers -128 to 127
+			signedTile := int8(mapTileValue)
+			tileOffset := int(signedTile) * 16
+			tileAddr = uint16(int(tilesAddr) + tileOffset + int(tilePixelY2))
 		} else {
-			mapTile = int(mapTileValue)
+			// unsigned addressing: base 0x8000, tile numbers 0 to 255
+			mapTile := int(mapTileValue)
+			mapTile16 := mapTile * 16
+			tileAddr = tilesAddr + uint16(mapTile16) + uint16(tilePixelY2)
 		}
-
-		mapTile16 := mapTile * 16
-		tileAddr := tilesAddr + uint16(mapTile16) + uint16(tilePixelY2)
 
 		low := g.memory.Read(tileAddr)
 		high := g.memory.Read(tileAddr + 1)
@@ -311,19 +312,21 @@ func (g *GPU) drawWindow() {
 
 	for x := startTileX; x < endTileX; x++ {
 		tileIndexAddr := uint16(tileMapAddr + y32 + x)
-		tile := 0
-
-		if useTileSetZero {
-			offset := int8(g.memory.Read(tileIndexAddr))
-			tile = int(offset) + 128
-		} else {
-			tile = int(g.memory.Read(tileIndexAddr))
-		}
-
+		tileValue := g.memory.Read(tileIndexAddr)
 		xOffset := x * 8
-		tile16 := tile * 16
 
-		tileAddr := tilesAddr + uint16(tile16) + uint16(pixelY2)
+		var tileAddr uint16
+		if useTileSetZero {
+			// signed addressing: base 0x9000, tile numbers -128 to 127
+			signedTile := int8(tileValue)
+			tileOffset := int(signedTile) * 16
+			tileAddr = uint16(int(tilesAddr) + tileOffset + int(pixelY2))
+		} else {
+			// unsigned addressing: base 0x8000, tile numbers 0 to 255
+			tile := int(tileValue)
+			tile16 := tile * 16
+			tileAddr = tilesAddr + uint16(tile16) + uint16(pixelY2)
+		}
 
 		low := g.memory.Read(tileAddr)
 		high := g.memory.Read(tileAddr + 1)
@@ -373,10 +376,12 @@ func (g *GPU) drawSprites() {
 	}
 
 	lineWidth := g.line * FramebufferWidth
-	spritesOnLine := 0
-	maxSpritesPerLine := 10
+	var spritesToDraw []int
 
-	for sprite := 39; sprite >= 0; sprite-- {
+	// Handle "selection priority": there's a maximum of 10 sprites per scanline, but 2 priorities
+	// we have to respect. First, we scan the OAM in ascending order to pick up the first 10 visible
+	// objects/sprites, these will be the ones we'll draw.
+	for sprite := 0; sprite < 40; sprite++ {
 		sprite4 := sprite * 4
 		spriteY := int(g.memory.Read(0xFE00+uint16(sprite4))) - 16
 		spriteX := int(g.memory.Read(0xFE00+uint16(sprite4)+1)) - 8
@@ -389,11 +394,22 @@ func (g *GPU) drawSprites() {
 			continue
 		}
 
-		// Game Boy hardware limit: maximum 10 sprites per scanline
-		if spritesOnLine >= maxSpritesPerLine {
-			continue
+		spritesToDraw = append(spritesToDraw, sprite)
+
+		// Hit the limit, stop collecting and move on to drawing
+		if len(spritesToDraw) >= 10 {
+			break
 		}
-		spritesOnLine++
+	}
+
+	// Handle "drawing priority": we have a list of up to 10 objects/sprites here, but now their
+	// priority is different, we go in *descending* order and draw sequentially.
+	// in essence, a lower-indexed sprite gets drawn on top of others.
+	for i := len(spritesToDraw) - 1; i >= 0; i-- {
+		sprite := spritesToDraw[i]
+		sprite4 := sprite * 4
+		spriteY := int(g.memory.Read(0xFE00+uint16(sprite4))) - 16
+		spriteX := int(g.memory.Read(0xFE00+uint16(sprite4)+1)) - 8
 
 		spriteTile := g.memory.Read(0xFE00 + uint16(sprite4) + 2)
 
