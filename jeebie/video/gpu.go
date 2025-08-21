@@ -9,13 +9,19 @@ import (
 	"github.com/valerio/go-jeebie/jeebie/memory"
 )
 
+// GpuMode represents the PPU's current rendering stage.
+// These values match the STAT register bits 1-0.
 type GpuMode int
 
 const (
-	hblankMode GpuMode = iota
-	vblankMode
-	oamReadMode
-	vramReadMode
+	// hblankMode (Mode 0): Horizontal blank period, CPU can access VRAM/OAM
+	hblankMode GpuMode = 0
+	// vblankMode (Mode 1): Vertical blank period, CPU can access VRAM/OAM
+	vblankMode GpuMode = 1
+	// oamReadMode (Mode 2): PPU is reading OAM, CPU cannot access OAM
+	oamReadMode GpuMode = 2
+	// vramReadMode (Mode 3): PPU is reading VRAM, CPU cannot access VRAM/OAM
+	vramReadMode GpuMode = 3
 )
 
 const (
@@ -25,20 +31,136 @@ const (
 	scanlineCycles     = oamScanlineCycles + vramScanlineCycles + hblankCycles
 )
 
-type GPU struct {
-	memory        *memory.MMU
-	framebuffer   *FrameBuffer
-	bgPixelBuffer []byte
+// SpritePriorityBuffer manages sprite-to-pixel ownership for priority in
+// DMG (non-color) rendering, see https://gbdev.io/pandocs/OAM.html#drawing-priority.
+//
+// In this mode, the PPU enforces strict priority rules:
+//   - sprites with lower X coordinates have priority
+//   - when X coordinates match, lower OAM indices win.
+//
+// Example 1: overlap with different X coordinates
+//
+//	Pixels:     0  1  2  3  4  5  6  7  8  9 10 11 12 13 14 15 16 17
+//	Sprite 0:                  [-----A-----]                    (X=5, OAM=0)
+//	Sprite 1:                           [-----B-----]           (X=10, OAM=1)
+//	Result:                    [-----A-----]--B-----]
+//
+// Sprite 0 wins all its pixels because it has lower X coordinate.
+//
+// Example 2: overlap with same X coordinates
+//
+//	Pixels:    10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25
+//	Sprite 1:           [-----D-----]                          (X=12, OAM=1)
+//	Sprite 3:           [-----C-----]                          (X=12, OAM=3)
+//	Sprite 5:  [-----E-----]                                   (X=10, OAM=5)
+//	Result:    [-----E-----]--D-----]
+//
+// - Pixels 10-17: Sprite 5 wins (lowest X=10, beats both Sprites 1 and 3)
+// - Pixels 18-19: Sprite 1 wins (same X=12, lower OAM than Sprite 3)
+//
+// How the priority buffer works:
+//
+// Instead of sorting sprites by priority, we use a per-pixel ownership model:
+//
+// 1. Initialize: Clear buffer, marking all pixels as unowned (-1)
+// 2. Selection phase: For each sprite (in OAM order):
+//
+//		For each pixel the sprite covers (8 pixels wide):
+//		  	Check current owner of that pixel
+//	  		If unowned OR this sprite has higher priority:
+//	  			Claim the pixel (store sprite index and X coordinate)
+//
+// 3. Render phase:
+//
+//		For each sprite:
+//	 		Only draw pixels that this sprite owns
+//	  		Skip transparent pixels and background priority checks
+//
+// A simpler solution would be to collect sprites by looking at their Y coord
+// in a first loop (0 to 40, selection priority), then, before drawing, sorting
+// them by (X, OAM index) and drawing in that order. This buffer instead avoids
+// sorts by precomputing ownership during the selection phase.
+type SpritePriorityBuffer struct {
+	// ownerIndex tracks which sprite (by OAM index) owns each pixel
+	// -1 means no sprite owns this pixel
+	ownerIndex [FramebufferWidth]int
 
-	mode                 GpuMode
-	line                 int
-	cycles               int
-	modeCounterAux       int
-	vBlankLine           int
-	pixelCounter         int
-	tileCycleCounter     int
-	isScanLineTransfered bool
-	windowLine           int
+	// ownerX tracks the X coordinate of the sprite that owns each pixel
+	// used for priority comparison when multiple sprites overlap
+	ownerX [FramebufferWidth]int
+}
+
+// Clear resets the buffer for a new scanline
+func (s *SpritePriorityBuffer) Clear() {
+	for i := range FramebufferWidth {
+		s.ownerIndex[i] = -1
+		s.ownerX[i] = 0xFF // max value ensures any sprite wins initially
+	}
+}
+
+// TryClaimPixel attempts to claim ownership of a pixel for a sprite.
+// Returns true if the sprite wins priority and claims the pixel.
+// Priority rules:
+//  1. If no sprite owns the pixel, this sprite wins
+//  2. If this sprite has a lower X coordinate, it wins
+//  3. If X coordinates match, lower OAM index wins
+func (s *SpritePriorityBuffer) TryClaimPixel(pixelX, spriteIndex, spriteX int) bool {
+	if pixelX < 0 || pixelX >= FramebufferWidth {
+		return false
+	}
+
+	currentOwner := s.ownerIndex[pixelX]
+
+	// 1: no owner yet, this sprite wins
+	if currentOwner == -1 {
+		s.ownerIndex[pixelX] = spriteIndex
+		s.ownerX[pixelX] = spriteX
+		return true
+	}
+
+	currentX := s.ownerX[pixelX]
+
+	// 2: lower X coordinate wins
+	if spriteX < currentX {
+		s.ownerIndex[pixelX] = spriteIndex
+		s.ownerX[pixelX] = spriteX
+		return true
+	}
+
+	// 3: same X, lower OAM index wins
+	if spriteX == currentX && spriteIndex < currentOwner {
+		s.ownerIndex[pixelX] = spriteIndex
+		s.ownerX[pixelX] = spriteX
+		return true
+	}
+
+	return false
+}
+
+// GetOwner returns the sprite index that owns a pixel, or -1 if none
+func (s *SpritePriorityBuffer) GetOwner(pixelX int) int {
+	if pixelX < 0 || pixelX >= FramebufferWidth {
+		return -1
+	}
+	return s.ownerIndex[pixelX]
+}
+
+type GPU struct {
+	memory         *memory.MMU
+	framebuffer    *FrameBuffer
+	bgPixelBuffer  []byte // stores background/window pixel colors for sprite priority
+	spritePriority SpritePriorityBuffer
+
+	// PPU state - these map to Game Boy hardware registers/behavior
+	mode                 GpuMode // current PPU mode (matches STAT bits 1-0)
+	line                 int     // current scanline (LY register, 0-153)
+	cycles               int     // cycle counter for current mode
+	modeCounterAux       int     // auxiliary counter for VBlank timing
+	vBlankLine           int     // which VBlank line we're on (0-9)
+	pixelCounter         int     // pixel counter within scanline
+	tileCycleCounter     int     // cycle counter for tile fetching
+	isScanLineTransfered bool    // whether current scanline has been rendered
+	windowLine           int     // internal window line counter (0-143)
 }
 
 func NewGpu(memory *memory.MMU) *GPU {
@@ -178,25 +300,29 @@ func (g *GPU) drawBackground() {
 	backgroundEnabled := g.readLCDCVariable(bgDisplay) == 1
 
 	if !backgroundEnabled {
+		// when background is disabled, display color 0 from BGP palette
+		palette := g.memory.Read(addr.BGP)
+		color0 := palette & 0x03 // extract bits 1:0 for color index 0
+		displayColor := uint32(ByteToColor(color0))
+
 		for i := range FramebufferWidth {
-			g.framebuffer.buffer[lineWidth+i] = 0
-			g.bgPixelBuffer[lineWidth+i] = 0
+			g.framebuffer.buffer[lineWidth+i] = displayColor
+			g.bgPixelBuffer[lineWidth+i] = 0 // background is disabled, so BG priority is 0
 		}
 		return
 	}
 
-	useTileSetZero := g.readLCDCVariable(bgWindowTileDataSelect) == 0
+	useSignedTileSet := g.readLCDCVariable(bgWindowTileDataSelect) == 0
 	useTileMapZero := g.readLCDCVariable(bgTileMapDisplaySelect) == 0
 
-	// select the correct starting address based on which tileMap/tileSet is set
-	tilesAddr := uint16(0x8000)
-	if useTileSetZero {
-		tilesAddr = 0x9000
+	tilesAddr := addr.TileData0 // unsigned mode
+	if useSignedTileSet {
+		tilesAddr = addr.TileData2 // signed mode
 	}
 
-	tileMapAddr := 0x9C00
+	tileMapAddr := addr.TileMap1
 	if useTileMapZero {
-		tileMapAddr = 0x9800
+		tileMapAddr = addr.TileMap0
 	}
 
 	scrollX := g.memory.Read(addr.SCX)
@@ -211,18 +337,18 @@ func (g *GPU) drawBackground() {
 		mapPixelX := (screenPixelX + int(scrollX)) & 0xFF
 		mapTileX := mapPixelX / 8
 		mapTileXOffset := mapPixelX % 8
-		mapTileAddr := uint16(tileMapAddr + lineScrolled32 + mapTileX)
+		mapTileAddr := tileMapAddr + uint16(lineScrolled32+mapTileX)
 
 		mapTileValue := g.memory.Read(mapTileAddr)
 
 		var tileAddr uint16
-		if useTileSetZero {
-			// signed addressing: base 0x9000, tile numbers -128 to 127
+		if useSignedTileSet {
+			// signed addressing: tile numbers -128 to 127
 			signedTile := int8(mapTileValue)
 			tileOffset := int(signedTile) * 16
 			tileAddr = uint16(int(tilesAddr) + tileOffset + int(tilePixelY2))
 		} else {
-			// unsigned addressing: base 0x8000, tile numbers 0 to 255
+			// unsigned addressing: tile numbers 0 to 255
 			mapTile := int(mapTileValue)
 			mapTile16 := mapTile * 16
 			tileAddr = tilesAddr + uint16(mapTile16) + uint16(tilePixelY2)
@@ -279,18 +405,17 @@ func (g *GPU) drawWindow() {
 		slog.Debug("Window rendering", "line", g.line, "windowLine", g.windowLine, "wx", wx, "wy", wy)
 	}
 
-	useTileSetZero := g.readLCDCVariable(bgWindowTileDataSelect) == 0
+	useSignedTileSet := g.readLCDCVariable(bgWindowTileDataSelect) == 0
 	useTileMapZero := g.readLCDCVariable(windowTileMapSelect) == 0
 
-	// select the correct starting address based on which tileMap/tileSet is set
-	tilesAddr := uint16(0x8000)
-	if useTileSetZero {
-		tilesAddr = 0x9000 // Signed mode uses base 0x9000
+	tilesAddr := addr.TileData0 // unsigned mode
+	if useSignedTileSet {
+		tilesAddr = addr.TileData2 // signed mode
 	}
 
-	tileMapAddr := 0x9C00
+	tileMapAddr := addr.TileMap1
 	if useTileMapZero {
-		tileMapAddr = 0x9800
+		tileMapAddr = addr.TileMap0
 	}
 
 	lineAdj := g.windowLine
@@ -311,12 +436,12 @@ func (g *GPU) drawWindow() {
 	}
 
 	for x := startTileX; x < endTileX; x++ {
-		tileIndexAddr := uint16(tileMapAddr + y32 + x)
+		tileIndexAddr := tileMapAddr + uint16(y32+x)
 		tileValue := g.memory.Read(tileIndexAddr)
 		xOffset := x * 8
 
 		var tileAddr uint16
-		if useTileSetZero {
+		if useSignedTileSet {
 			// signed addressing: base 0x9000, tile numbers -128 to 127
 			signedTile := int8(tileValue)
 			tileOffset := int(signedTile) * 16
@@ -378,48 +503,81 @@ func (g *GPU) drawSprites() {
 	lineWidth := g.line * FramebufferWidth
 	var spritesToDraw []int
 
-	// Handle "selection priority": there's a maximum of 10 sprites per scanline, but 2 priorities
-	// we have to respect. First, we scan the OAM in ascending order to pick up the first 10 visible
-	// objects/sprites, these will be the ones we'll draw.
+	// OAM selection phase (Pan Docs: https://gbdev.io/pandocs/OAM.html#selection-priority)
+	// During OAM scan, the PPU scans OAM sequentially
+	// from 0xFE00 to 0xFE9F, comparing LY (g.line) to each sprite's Y position.
+	// Important: Only Y coordinate affects selection. Sprites with X outside
+	// visible range (X < -7 or X >= 160) still count toward the 10-sprite limit.
 	for sprite := 0; sprite < 40; sprite++ {
 		sprite4 := sprite * 4
-		spriteY := int(g.memory.Read(0xFE00+uint16(sprite4))) - 16
-		spriteX := int(g.memory.Read(0xFE00+uint16(sprite4)+1)) - 8
+		oamAddr := addr.OAMStart + uint16(sprite4)
 
+		// OAM byte 0: Y position with +16 offset (Y=0 means sprite at Y=-16)
+		spriteY := int(g.memory.Read(oamAddr)) - 16
+
+		// check if sprite overlaps current scanline
+		// sprite is visible on this line if: spriteY <= LY < spriteY + height
 		if spriteY > g.line || (spriteY+spriteHeight) <= g.line {
 			continue
 		}
-
-		if spriteX < -7 || spriteX >= FramebufferWidth {
-			continue
-		}
-
 		spritesToDraw = append(spritesToDraw, sprite)
 
-		// Hit the limit, stop collecting and move on to drawing
+		// hardware limit: maximum 10 sprites per scanline
 		if len(spritesToDraw) >= 10 {
 			break
 		}
 	}
 
-	// Handle "drawing priority": we have a list of up to 10 objects/sprites here, but now their
-	// priority is different, we go in *descending* order and draw sequentially.
-	// in essence, a lower-indexed sprite gets drawn on top of others.
-	for i := len(spritesToDraw) - 1; i >= 0; i-- {
-		sprite := spritesToDraw[i]
+	// clear priority buffer for this scanline
+	g.spritePriority.Clear()
+
+	// Determine sprite ownership for each pixel in each sprite. Rules of priority
+	// are encapsulated in g.spritePriority.
+	for _, sprite := range spritesToDraw {
 		sprite4 := sprite * 4
-		spriteY := int(g.memory.Read(0xFE00+uint16(sprite4))) - 16
-		spriteX := int(g.memory.Read(0xFE00+uint16(sprite4)+1)) - 8
+		oamAddr := addr.OAMStart + uint16(sprite4)
+		// X position with +8 offset (X=0 means sprite at X=-8)
+		spriteX := int(g.memory.Read(oamAddr+1)) - 8
 
-		spriteTile := g.memory.Read(0xFE00 + uint16(sprite4) + 2)
+		// attempt to claim each pixel this sprite covers
+		for pixelOffset := range 8 {
+			bufferX := spriteX + pixelOffset
+			g.spritePriority.TryClaimPixel(bufferX, sprite, spriteX)
+		}
+	}
 
+	// phase 2: render sprites based on pixel ownership
+	// Only draw the pixels that each sprite owns after priority resolution.
+	for _, sprite := range spritesToDraw {
+		sprite4 := sprite * 4
+		oamAddr := addr.OAMStart + uint16(sprite4)
+		spriteY := int(g.memory.Read(oamAddr)) - 16  // byte 0: Y position
+		spriteX := int(g.memory.Read(oamAddr+1)) - 8 // byte 1: X position
+		spriteTile := g.memory.Read(oamAddr + 2)     // byte 2: tile index
+		spriteFlags := g.memory.Read(oamAddr + 3)    // byte 3: attributes
+
+		// quick check: does this sprite own any visible pixels?
+		hasPixels := false
+		for x := 0; x < 8; x++ {
+			bufferX := spriteX + x
+			if g.spritePriority.GetOwner(bufferX) == sprite {
+				hasPixels = true
+				break
+			}
+		}
+
+		// skip sprites that lost all their pixels to higher priority sprites
+		if !hasPixels {
+			continue
+		}
+
+		// fetch sprite tile data
 		spriteMask := 0xFF
 		if spriteHeight == 16 {
 			spriteMask = 0xFE
 		}
 
 		spriteTile16 := (int(spriteTile) & spriteMask) * 16
-		spriteFlags := g.memory.Read(0xFE00 + uint16(sprite4) + 3)
 		objPaletteAddr := addr.OBP0
 		if bit.IsSet(4, spriteFlags) {
 			objPaletteAddr = addr.OBP1
@@ -428,8 +586,6 @@ func (g *GPU) drawSprites() {
 		flipX := bit.IsSet(5, spriteFlags)
 		flipY := bit.IsSet(6, spriteFlags)
 		aboveBG := !bit.IsSet(7, spriteFlags)
-
-		tileAddr := 0x8000
 
 		pixelY := g.line - spriteY
 		if flipY {
@@ -446,14 +602,21 @@ func (g *GPU) drawSprites() {
 			pixelY2 = pixelY * 2
 		}
 
-		tileAddr += spriteTile16 + pixelY2 + offset
+		// sprites always use unsigned addressing from 0x8000
+		tileAddr := addr.TileData0 + uint16(spriteTile16+pixelY2+offset)
+		low := g.memory.Read(tileAddr)
+		high := g.memory.Read(tileAddr + 1)
 
-		low := g.memory.Read(uint16(tileAddr))
-		high := g.memory.Read(uint16(tileAddr) + 1)
-
+		// draw only the pixels this sprite owns
 		for pixelX := 0; pixelX < 8; pixelX++ {
-			// if the flip flag is set, we render a mirrored sprite
-			// i.e. we start from the other end (0 instead of 7)
+			bufferX := spriteX + pixelX
+
+			// skip if this sprite doesn't own this pixel
+			if g.spritePriority.GetOwner(bufferX) != sprite {
+				continue
+			}
+
+			// calculate pixel value from tile data
 			pixelIdx := 7 - pixelX
 			if flipX {
 				pixelIdx = pixelX
@@ -467,34 +630,22 @@ func (g *GPU) drawSprites() {
 				pixel |= 2
 			}
 
-			// transparent pixel
+			// transparent pixels don't get drawn
 			if pixel == 0 {
-				continue
-			}
-
-			bufferX := spriteX + pixelX
-			if bufferX < 0 || bufferX >= FramebufferWidth {
 				continue
 			}
 
 			position := lineWidth + bufferX
 
-			// Safety check to prevent buffer overflow
-			if position >= len(g.framebuffer.buffer) {
-				continue
-			}
-
-			// Sprite priority: if !aboveBG, sprite is behind background, so we should stop
-			// drawing it. If the background color is 0, we must draw it.
+			// handle background priority
 			if !aboveBG {
-				// check the raw BG pixels which we stored so far.
 				bgPixel := g.bgPixelBuffer[position]
 				if bgPixel != 0 {
-					// sprite pixel is 1-2-3, should not be drawn.
-					continue
+					continue // sprite is behind non-transparent background
 				}
 			}
 
+			// draw the pixel
 			palette := g.memory.Read(objPaletteAddr)
 			color := (palette >> (pixel * 2)) & 0x03
 			g.framebuffer.buffer[position] = uint32(ByteToColor(color))
@@ -582,6 +733,8 @@ func (g *GPU) setMode(mode GpuMode) {
 	g.memory.Write(addr.STAT, stat)
 }
 
+// setLY updates the current scanline (LY register).
+// This also triggers interrupts if necessary (LY/LYC comparison)
 func (g *GPU) setLY(line int) {
 	g.line = line
 	g.memory.Write(addr.LY, byte(g.line))

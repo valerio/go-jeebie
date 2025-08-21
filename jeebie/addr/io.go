@@ -28,6 +28,29 @@ const (
 	WX uint16 = 0xFF4B
 )
 
+// OAM (Object Attribute Memory) - sprite data
+const (
+	// OAMStart is the start of OAM memory (40 sprites * 4 bytes each)
+	OAMStart uint16 = 0xFE00
+	// OAMEnd is the end of OAM memory
+	OAMEnd uint16 = 0xFE9F
+)
+
+// tile data and tile maps
+const (
+	// TileData0 is the start of unsigned tile data (tiles 0-255)
+	TileData0 uint16 = 0x8000
+	// TileData1 is the start of signed tile data region (tiles -128 to -1)
+	TileData1 uint16 = 0x8800
+	// TileData2 is the continuation of signed tile data (tiles 0-127)
+	TileData2 uint16 = 0x9000
+	
+	// TileMap0 is background/window tile map 0
+	TileMap0 uint16 = 0x9800
+	// TileMap1 is background/window tile map 1
+	TileMap1 uint16 = 0x9C00
+)
+
 // interrupts
 const (
 	// IF is the address for the Interrupt Flags register.
