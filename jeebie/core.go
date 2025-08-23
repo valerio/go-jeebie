@@ -346,7 +346,7 @@ func (e *DMG) ExtractDebugData() *debug.CompleteDebugData {
 		debuggerState = debug.DebuggerRunning
 	}
 
-	audioData := debug.ExtractAudioData(e.mem)
+	audioData := debug.ExtractAudioData(e.mem, e.mem.GetAPU())
 
 	return &debug.CompleteDebugData{
 		OAM:             oamData,

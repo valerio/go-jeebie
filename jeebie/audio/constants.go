@@ -61,6 +61,13 @@ const (
 	// noiseChannelPeriod is the base period for noise channel updates
 	noiseChannelPeriod = 64
 
+	// highFrequencyThreshold is the period threshold for high-frequency noise
+	// Below this, we update the LFSR multiple times per sample
+	highFrequencyThreshold = 256
+
+	// maxLFSRUpdatesPerSample limits LFSR updates to prevent excessive computation
+	maxLFSRUpdatesPerSample = 50
+
 	// dutyPhases is the number of phases in a duty cycle
 	dutyPhases = 8
 

@@ -1,7 +1,6 @@
 package audio
 
 import (
-	"log/slog"
 	"sync"
 	"time"
 
@@ -27,6 +26,9 @@ type ChannelState struct {
 	// Length counter
 	lengthCounter uint16
 	lengthEnabled bool
+
+	// Noise channel specific (ch4)
+	noisePeriod uint16 // Calculated period from NR43
 
 	// Debug
 	muted bool
@@ -114,6 +116,11 @@ func (a *APU) initRegisters() {
 	a.registers[0x24] = 0x77 // NR50: Max volume both channels
 	a.registers[0x25] = 0xF3 // NR51: All channels to both outputs
 	a.registers[0x26] = 0xF1 // NR52: All sound on, all channels on (on GB)
+
+	// Initialize noise period with default value from NR43 = 0x00
+	// divisor = 0.5, shift = 0, frequency = 524288 Hz
+	// period = (44100 * 256) / 524288 = ~21.5
+	a.channels[3].noisePeriod = 21
 }
 
 func (a *APU) Step(cycles int) {
@@ -139,12 +146,6 @@ func (a *APU) Step(cycles int) {
 		if a.debugStats.lastFrameSeqTime.IsZero() {
 			a.debugStats.lastFrameSeqTime = now
 		} else if a.debugStats.frameSequencerTicks%512 == 0 { // Log every second
-			elapsed := now.Sub(a.debugStats.lastFrameSeqTime)
-			actualRate := float64(512) / elapsed.Seconds()
-			slog.Debug("Frame sequencer rate",
-				"expected_hz", 512,
-				"actual_hz", actualRate,
-				"deviation", actualRate-512)
 			a.debugStats.lastFrameSeqTime = now
 		}
 	}
@@ -161,14 +162,6 @@ func (a *APU) Step(cycles int) {
 		if a.debugStats.lastSampleTime.IsZero() {
 			a.debugStats.lastSampleTime = now
 		} else if a.debugStats.samplesGenerated%44100 == 0 { // Log every second
-			elapsed := now.Sub(a.debugStats.lastSampleTime)
-			actualRate := float64(44100) / elapsed.Seconds()
-			slog.Debug("Sample generation rate",
-				"expected_hz", 44100,
-				"actual_hz", actualRate,
-				"deviation", actualRate-44100,
-				"cycles_per_sample", sampleCycles,
-				"total_cycles", a.debugStats.cyclesProcessed)
 			a.debugStats.lastSampleTime = now
 		}
 	}
@@ -270,42 +263,6 @@ func (a *APU) mixChannels() int16 {
 		mixed += int32(ch4Val)
 	}
 
-	// Debug: Log channel mixing periodically
-	if a.debugStats.samplesGenerated%4410 == 0 { // Every 0.1 seconds
-		activeChannels := 0
-		for i := range a.channels {
-			if a.channels[i].enabled && !a.channels[i].muted {
-				activeChannels++
-			}
-		}
-
-		// Calculate actual Hz for each channel
-		ch1Hz := float64(0)
-		ch2Hz := float64(0)
-		ch3Hz := float64(0)
-		if a.channels[0].freq > 0 {
-			ch1Hz = 131072.0 / float64(2048-a.channels[0].freq)
-		}
-		if a.channels[1].freq > 0 {
-			ch2Hz = 131072.0 / float64(2048-a.channels[1].freq)
-		}
-		if a.channels[2].freq > 0 {
-			ch3Hz = 65536.0 / float64(2048-a.channels[2].freq)
-		}
-
-		slog.Debug("Channel mixing",
-			"ch1_val", ch1Val,
-			"ch2_val", ch2Val,
-			"ch3_val", ch3Val,
-			"ch4_val", ch4Val,
-			"mixed", mixed,
-			"active", activeChannels,
-			"ch1_hz", ch1Hz,
-			"ch2_hz", ch2Hz,
-			"ch3_hz", ch3Hz,
-			"ch4_on", a.channels[3].enabled && !a.channels[3].muted)
-	}
-
 	if mixed > maxSampleValue {
 		mixed = maxSampleValue
 	} else if mixed < minSampleValue {
@@ -384,13 +341,19 @@ func (a *APU) generateChannel4() int16 {
 		return 0
 	}
 
-	// Ch4 counter is stored in lower 16 bits
-	ch4Counter := uint16(a.channels[3].counter)
+	// For very high frequency noise, we need to update the LFSR multiple times per sample
+	// Calculate how many LFSR updates we need based on the period
+	// Period is in fixed-point format (8.8), where 256 = 1 update per sample
+	updatesNeeded := 1
+	if a.channels[3].noisePeriod > 0 && a.channels[3].noisePeriod < highFrequencyThreshold {
+		updatesNeeded = highFrequencyThreshold / int(a.channels[3].noisePeriod)
+		if updatesNeeded > maxLFSRUpdatesPerSample {
+			updatesNeeded = maxLFSRUpdatesPerSample
+		}
+	}
 
-	// TODO: Use actual frequency from NR43 register instead of fixed period
-	ch4Counter++
-	if ch4Counter >= noiseChannelPeriod {
-		ch4Counter = 0
+	// Update LFSR the required number of times
+	for i := 0; i < updatesNeeded; i++ {
 		// LFSR feedback calculation
 		feedbackBit := (a.ch4LFSR & 1) ^ ((a.ch4LFSR >> 1) & 1)
 		a.ch4LFSR = (a.ch4LFSR >> 1) | (feedbackBit << 14)
@@ -401,7 +364,22 @@ func (a *APU) generateChannel4() int16 {
 		}
 	}
 
-	a.channels[3].counter = uint32(ch4Counter)
+	// For lower frequencies, use the counter approach
+	if a.channels[3].noisePeriod >= highFrequencyThreshold {
+		a.channels[3].counter += uint32(a.channels[3].noisePeriod)
+		if a.channels[3].counter >= (highFrequencyThreshold << 8) {
+			a.channels[3].counter -= (highFrequencyThreshold << 8)
+
+			// LFSR feedback calculation
+			feedbackBit := (a.ch4LFSR & 1) ^ ((a.ch4LFSR >> 1) & 1)
+			a.ch4LFSR = (a.ch4LFSR >> 1) | (feedbackBit << 14)
+
+			// 7-bit mode (width = 1)
+			if bit.IsSet(3, a.registers[0x22]) { // Bit 3: Width mode (7-bit LFSR)
+				a.ch4LFSR = (a.ch4LFSR & 0xFF7F) | (feedbackBit << 6) // Also set bit 6
+			}
+		}
+	}
 
 	if (a.ch4LFSR & 1) == 0 {
 		return int16(a.channels[3].volume) * sampleAmplitude
@@ -596,15 +574,32 @@ func (a *APU) mapRegisterToState(address uint16, value uint8) {
 		} else {
 			a.channels[3].envelopeDirection = 0 // Decrease
 		}
-		slog.Debug("Ch4 volume envelope", "value", value, "volume", a.channels[3].volume, "dac_enabled", dacEnabled, "ch4_enabled", a.channels[3].enabled)
+		// Ch4 envelope configured
 	case addr.NR41: // Channel 4 length timer
 		// Length data is stored in register, loaded on trigger
-		slog.Debug("Ch4 length timer", "value", value)
+		// Ch4 length timer configured
 	case addr.NR43: // Channel 4 frequency/randomness
-		slog.Debug("Ch4 frequency", "value", value,
-			"shift", (value>>4)&0x0F,
-			"width", (value>>3)&0x01,
-			"divisor", value&0x07)
+		// Calculate noise period from register value
+		// Frequency = 262144 / (divider × 2^shift) Hz
+		// Period at 44100 Hz = 44100 / Frequency
+		divisorCode := value & 0x07
+		shift := (value >> 4) & 0x0F
+
+		// Map divisor code to actual divisor (0 = 0.5, else use code)
+		divisor := float64(divisorCode)
+		if divisorCode == 0 {
+			divisor = 0.5
+		}
+
+		// Calculate frequency in Hz
+		frequency := 262144.0 / (divisor * float64(uint32(1)<<shift))
+
+		// Calculate period in sample units (at 44100 Hz)
+		// We use fixed-point math: multiply by 256 for precision
+		period := uint16((44100.0 * 256.0) / frequency)
+		a.channels[3].noisePeriod = period
+
+		// Ch4 frequency configured
 	case addr.NR44: // Channel 4 control
 		a.channels[3].lengthEnabled = bit.IsSet(6, value)
 		if bit.IsSet(7, value) { // Bit 7: Trigger
@@ -617,6 +612,18 @@ func (a *APU) mapRegisterToState(address uint16, value uint8) {
 				a.channels[3].envelopeTimer = 0
 				// Reload volume from NR42
 				a.channels[3].volume = a.registers[0x21] >> 4
+
+				// Recalculate noise period from NR43
+				nr43 := a.registers[0x22]
+				divisorCode := nr43 & 0x07
+				shift := (nr43 >> 4) & 0x0F
+				divisor := float64(divisorCode)
+				if divisorCode == 0 {
+					divisor = 0.5
+				}
+				frequency := 262144.0 / (divisor * float64(uint32(1)<<shift))
+				period := uint16((44100.0 * 256.0) / frequency)
+				a.channels[3].noisePeriod = period
 				// Always reload length counter on trigger
 				lengthData := a.registers[0x20] & 0x3F
 				if lengthData == 0 {
@@ -624,9 +631,9 @@ func (a *APU) mapRegisterToState(address uint16, value uint8) {
 				} else {
 					a.channels[3].lengthCounter = 64 - uint16(lengthData)
 				}
-				slog.Debug("Ch4 triggered", "enabled", a.channels[3].enabled, "volume", a.channels[3].volume, "dac_on", dacOn)
+				// Ch4 triggered successfully
 			} else {
-				slog.Debug("Ch4 trigger ignored - DAC off", "NR42", a.registers[0x21])
+				// Ch4 trigger ignored - DAC off
 			}
 		}
 	}
@@ -726,4 +733,13 @@ func (a *APU) GetChannelStatus() (ch1, ch2, ch3, ch4 bool) {
 		!a.channels[1].muted && a.channels[1].enabled,
 		!a.channels[2].muted && a.channels[2].enabled,
 		!a.channels[3].muted && a.channels[3].enabled
+}
+
+// GetChannelVolumes returns the actual current volumes for all channels
+// This reflects the actual volume after envelope processing
+func (a *APU) GetChannelVolumes() (ch1, ch2, ch3, ch4 uint8) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	return a.channels[0].volume, a.channels[1].volume, a.channels[2].volume, a.channels[3].volume
 }

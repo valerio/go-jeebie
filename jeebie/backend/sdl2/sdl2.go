@@ -632,26 +632,57 @@ func (s *Backend) queueAudioSamples() {
 		return
 	}
 
-	// Get queued audio size and queue more if needed
+	// Get queued audio size
 	queuedBytes := sdl.GetQueuedAudioSize(s.audioDevice)
-	const targetBytes = 2048 * 4 // Target ~2048 stereo samples
 
-	if queuedBytes < targetBytes {
-		samplesToGet := (targetBytes - queuedBytes) / 4
-		samples := s.audioProvider.GetSamples(int(samplesToGet))
+	// Target buffer size - reduced to minimize latency
+	const targetBytes = 1024 * 4 // Target ~1024 stereo samples
 
-		if len(samples) > 0 {
-			// Convert mono to stereo
-			stereoSamples := make([]int16, len(samples)*2)
+	// Don't overfill the queue - this can cause static
+	if queuedBytes >= targetBytes {
+		return
+	}
+
+	samplesToGet := (targetBytes - queuedBytes) / 4
+	samples := s.audioProvider.GetSamples(int(samplesToGet))
+
+	if len(samples) > 0 {
+		// Check if we're getting pure silence (all zeros or very low values)
+		isSilent := true
+		const silenceThreshold = 16
+
+		for _, sample := range samples {
+			if sample > silenceThreshold || sample < -silenceThreshold {
+				isSilent = false
+				break
+			}
+		}
+
+		// Convert mono to stereo
+		stereoSamples := make([]int16, len(samples)*2)
+
+		if isSilent {
+			// For silence, ensure we're sending clean zeros
+			for i := range stereoSamples {
+				stereoSamples[i] = 0
+			}
+		} else {
+			// Normal audio processing
 			for i, sample := range samples {
 				stereoSamples[i*2] = sample
 				stereoSamples[i*2+1] = sample
 			}
-
-			// Queue the audio
-			sliceHeader := (*[1 << 30]byte)(unsafe.Pointer(&stereoSamples[0]))[: len(stereoSamples)*2 : len(stereoSamples)*2]
-			sdl.QueueAudio(s.audioDevice, sliceHeader)
 		}
+
+		// Queue the audio
+		sliceHeader := (*[1 << 30]byte)(unsafe.Pointer(&stereoSamples[0]))[: len(stereoSamples)*2 : len(stereoSamples)*2]
+		sdl.QueueAudio(s.audioDevice, sliceHeader)
+	} else {
+		// If no samples available, queue explicit silence to prevent underrun
+		// Audio underrun can cause clicks and pops
+		silenceSamples := make([]int16, 512)
+		sliceHeader := (*[1 << 30]byte)(unsafe.Pointer(&silenceSamples[0]))[: len(silenceSamples)*2 : len(silenceSamples)*2]
+		sdl.QueueAudio(s.audioDevice, sliceHeader)
 	}
 }
 
@@ -661,18 +692,32 @@ func (s *Backend) initAudio() error {
 		Freq:     44100,
 		Format:   sdl.AUDIO_S16LSB,
 		Channels: 2,
-		Samples:  512,
+		Samples:  256,
+		Callback: nil, // Using queue API
 	}
 
 	obtained := &sdl.AudioSpec{}
+
 	audioDevice, err := sdl.OpenAudioDevice("", false, spec, obtained, 0)
 	if err != nil {
-		return fmt.Errorf("failed to open audio device: %v", err)
+		// Fallback
+		audioDevice, err = sdl.OpenAudioDevice("", false, spec, obtained, sdl.AUDIO_ALLOW_FREQUENCY_CHANGE)
+		if err != nil {
+			return err
+		}
+		slog.Warn("Audio device opened with different frequency", "requested", spec.Freq, "obtained", obtained.Freq)
 	}
 
 	s.audioDevice = audioDevice
+
+	sdl.ClearQueuedAudio(s.audioDevice)
 	sdl.PauseAudioDevice(s.audioDevice, false)
 
-	slog.Info("Audio initialized", "freq", obtained.Freq, "samples", obtained.Samples)
+	slog.Info("Audio initialized",
+		"freq", obtained.Freq,
+		"samples", obtained.Samples,
+		"channels", obtained.Channels,
+		"format", obtained.Format)
+
 	return nil
 }
