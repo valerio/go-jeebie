@@ -9,6 +9,29 @@ import (
 	"github.com/valerio/go-jeebie/jeebie/bit"
 )
 
+// ChannelState holds per-channel state
+type ChannelState struct {
+	enabled bool
+	freq    uint16
+	volume  uint8
+	counter uint32 // Fixed-point counter (16.16) for ch1-3, uint16 for ch4
+
+	// Pulse channels only (ch1, ch2)
+	duty uint8
+
+	// Envelope state (ch1, ch2, ch4)
+	envelopePeriod    uint8
+	envelopeDirection uint8 // 0 = decrease, 1 = increase
+	envelopeTimer     uint8
+
+	// Length counter
+	lengthCounter uint16
+	lengthEnabled bool
+
+	// Debug
+	muted bool
+}
+
 // APU implements the Game Boy's Audio Processing Unit
 // Reference: https://gbdev.io/pandocs/Audio.html
 type APU struct {
@@ -30,34 +53,14 @@ type APU struct {
 	sampleBuffer       []int16    // Generated samples awaiting consumption
 	sampleBufferMu     sync.Mutex // Protects sample buffer
 
-	ch1Enabled bool
-	ch1Freq    uint16
-	ch1Volume  uint8
-	ch1Duty    uint8
-	ch1Counter uint16
+	// Channel states (indexed 0-3 for channels 1-4)
+	channels [4]ChannelState
 
-	ch2Enabled bool
-	ch2Freq    uint16
-	ch2Volume  uint8
-	ch2Duty    uint8
-	ch2Counter uint16
-
-	ch3Enabled bool
-	ch3Freq    uint16
-	ch3Volume  uint8
-	ch3Counter uint16
+	// Channel 3 specific
 	ch3WaveRAM [waveRAMSize]uint8
 
-	ch4Enabled bool
-	ch4Volume  uint8
-	ch4LFSR    uint16 // Linear feedback shift register for noise
-	ch4Counter uint16
-
-	// Debug channel muting
-	ch1Muted bool
-	ch2Muted bool
-	ch3Muted bool
-	ch4Muted bool
+	// Channel 4 specific
+	ch4LFSR uint16 // Linear feedback shift register for noise
 
 	// Debug tracking
 	debugStats struct {
@@ -201,12 +204,34 @@ func (a *APU) updateFrameSequencer() {
 }
 
 func (a *APU) updateLengthCounters() {
+	for i := range a.channels {
+		if a.channels[i].lengthEnabled && a.channels[i].lengthCounter > 0 {
+			a.channels[i].lengthCounter--
+			if a.channels[i].lengthCounter == 0 {
+				a.channels[i].enabled = false
+			}
+		}
+	}
 }
 
 func (a *APU) updateSweep() {
 }
 
 func (a *APU) updateEnvelopes() {
+	// Only channels 0, 1, 3 have envelopes (ch1, ch2, ch4)
+	for _, i := range []int{0, 1, 3} {
+		if a.channels[i].envelopePeriod > 0 {
+			a.channels[i].envelopeTimer++
+			if a.channels[i].envelopeTimer >= a.channels[i].envelopePeriod {
+				a.channels[i].envelopeTimer = 0
+				if a.channels[i].envelopeDirection == 1 && a.channels[i].volume < 15 {
+					a.channels[i].volume++
+				} else if a.channels[i].envelopeDirection == 0 && a.channels[i].volume > 0 {
+					a.channels[i].volume--
+				}
+			}
+		}
+	}
 }
 
 func (a *APU) generateSample() {
@@ -228,19 +253,19 @@ func (a *APU) mixChannels() int16 {
 	var mixed int32
 	var ch1Val, ch2Val, ch3Val, ch4Val int16
 
-	if a.ch1Enabled && !a.ch1Muted {
+	if a.channels[0].enabled && !a.channels[0].muted {
 		ch1Val = a.generateChannel1()
 		mixed += int32(ch1Val)
 	}
-	if a.ch2Enabled && !a.ch2Muted {
+	if a.channels[1].enabled && !a.channels[1].muted {
 		ch2Val = a.generateChannel2()
 		mixed += int32(ch2Val)
 	}
-	if a.ch3Enabled && !a.ch3Muted {
+	if a.channels[2].enabled && !a.channels[2].muted {
 		ch3Val = a.generateChannel3()
 		mixed += int32(ch3Val)
 	}
-	if a.ch4Enabled && !a.ch4Muted {
+	if a.channels[3].enabled && !a.channels[3].muted {
 		ch4Val = a.generateChannel4()
 		mixed += int32(ch4Val)
 	}
@@ -248,31 +273,24 @@ func (a *APU) mixChannels() int16 {
 	// Debug: Log channel mixing periodically
 	if a.debugStats.samplesGenerated%4410 == 0 { // Every 0.1 seconds
 		activeChannels := 0
-		if a.ch1Enabled && !a.ch1Muted {
-			activeChannels++
-		}
-		if a.ch2Enabled && !a.ch2Muted {
-			activeChannels++
-		}
-		if a.ch3Enabled && !a.ch3Muted {
-			activeChannels++
-		}
-		if a.ch4Enabled && !a.ch4Muted {
-			activeChannels++
+		for i := range a.channels {
+			if a.channels[i].enabled && !a.channels[i].muted {
+				activeChannels++
+			}
 		}
 
 		// Calculate actual Hz for each channel
 		ch1Hz := float64(0)
 		ch2Hz := float64(0)
 		ch3Hz := float64(0)
-		if a.ch1Freq > 0 {
-			ch1Hz = 131072.0 / float64(2048-a.ch1Freq)
+		if a.channels[0].freq > 0 {
+			ch1Hz = 131072.0 / float64(2048-a.channels[0].freq)
 		}
-		if a.ch2Freq > 0 {
-			ch2Hz = 131072.0 / float64(2048-a.ch2Freq)
+		if a.channels[1].freq > 0 {
+			ch2Hz = 131072.0 / float64(2048-a.channels[1].freq)
 		}
-		if a.ch3Freq > 0 {
-			ch3Hz = 65536.0 / float64(2048-a.ch3Freq)
+		if a.channels[2].freq > 0 {
+			ch3Hz = 65536.0 / float64(2048-a.channels[2].freq)
 		}
 
 		slog.Debug("Channel mixing",
@@ -285,7 +303,7 @@ func (a *APU) mixChannels() int16 {
 			"ch1_hz", ch1Hz,
 			"ch2_hz", ch2Hz,
 			"ch3_hz", ch3Hz,
-			"ch4_on", a.ch4Enabled && !a.ch4Muted)
+			"ch4_on", a.channels[3].enabled && !a.channels[3].muted)
 	}
 
 	if mixed > maxSampleValue {
@@ -298,66 +316,49 @@ func (a *APU) mixChannels() int16 {
 }
 
 // generatePulseChannel generates a sample for a pulse channel (used by channels 1 and 2)
-func (a *APU) generatePulseChannel(counter *uint16, volume uint8, freq uint16, duty uint8) int16 {
-	if volume == 0 || freq == 0 {
+func (a *APU) generatePulseChannel(ch int) int16 {
+	if a.channels[ch].volume == 0 || a.channels[ch].freq == 0 {
 		return 0
 	}
 
-	// Fix: Increment counter by the correct amount for proper pitch
-	// Pulse timer runs at 131072 Hz, we sample at 44100 Hz
-	// So increment by ~2.97 per sample instead of 1
-	const timerIncrement = 3 // Approximation of 131072/44100
-
-	period := uint16(frequencyToTimerOffset - freq)
-	*counter += timerIncrement
-	if *counter >= period {
-		*counter %= period
+	// Use fixed-point arithmetic for precise frequency
+	period := uint32(frequencyToTimerOffset-a.channels[ch].freq) << fpShift
+	a.channels[ch].counter += pulseIncrement
+	if a.channels[ch].counter >= period {
+		a.channels[ch].counter %= period
 	}
 
-	pattern := dutyPatterns[duty&3]
-	phase := (*counter * dutyPhases) / period
+	pattern := dutyPatterns[a.channels[ch].duty&3]
+	phase := ((a.channels[ch].counter >> fpShift) * dutyPhases) / (period >> fpShift)
 	dutyBit := (pattern >> (7 - phase)) & 1
 
 	if dutyBit == 1 {
-		return int16(volume) * sampleAmplitude
+		return int16(a.channels[ch].volume) * sampleAmplitude
 	}
-	return -int16(volume) * sampleAmplitude
+	return -int16(a.channels[ch].volume) * sampleAmplitude
 }
 
 func (a *APU) generateChannel1() int16 {
-	return a.generatePulseChannel(&a.ch1Counter, a.ch1Volume, a.ch1Freq, a.ch1Duty)
+	return a.generatePulseChannel(0)
 }
 
 func (a *APU) generateChannel2() int16 {
-	return a.generatePulseChannel(&a.ch2Counter, a.ch2Volume, a.ch2Freq, a.ch2Duty)
-}
-
-// updateCounterWithPeriod updates a counter and returns true when it wraps
-func updateCounterWithPeriod(counter *uint16, period uint16) bool {
-	*counter++
-	if *counter >= period {
-		*counter = 0
-		return true
-	}
-	return false
+	return a.generatePulseChannel(1)
 }
 
 func (a *APU) generateChannel3() int16 {
-	if !a.ch3Enabled || a.ch3Freq == 0 {
+	if !a.channels[2].enabled || a.channels[2].freq == 0 {
 		return 0
 	}
 
-	// Fix: Wave timer runs at 65536 Hz, we sample at 44100 Hz
-	// So increment by ~1.49 per sample
-	const waveTimerIncrement = 2 // Round up 65536/44100 ≈ 1.49
-
-	period := uint16(frequencyToTimerOffset - a.ch3Freq)
-	a.ch3Counter += waveTimerIncrement
-	if a.ch3Counter >= period {
-		a.ch3Counter %= period
+	// Use fixed-point arithmetic for precise frequency
+	period := uint32(frequencyToTimerOffset-a.channels[2].freq) << fpShift
+	a.channels[2].counter += waveIncrement
+	if a.channels[2].counter >= period {
+		a.channels[2].counter %= period
 	}
 
-	sampleIndex := (a.ch3Counter * waveTableSize) / period
+	sampleIndex := ((a.channels[2].counter >> fpShift) * waveTableSize) / (period >> fpShift)
 	nibbleIndex := sampleIndex / 2
 	highNibble := sampleIndex&1 == 0
 
@@ -368,20 +369,28 @@ func (a *APU) generateChannel3() int16 {
 		sample = sample & 0x0F
 	}
 
-	volumeShift := waveVolumeShift[a.ch3Volume&3]
-	sample = sample >> volumeShift
-
-	return int16(sample)*waveOutputScale - waveOutputBias
+	volumeShift := waveVolumeShift[a.channels[2].volume&3]
+	if volumeShift < 4 {
+		sample = sample >> volumeShift
+		// Scale to 16-bit range properly
+		return int16(sample-8) * 2048
+	}
+	return 0 // Muted
 }
 
 func (a *APU) generateChannel4() int16 {
 	// Check both enabled flag AND volume
-	if !a.ch4Enabled || a.ch4Volume == 0 {
+	if !a.channels[3].enabled || a.channels[3].volume == 0 {
 		return 0
 	}
 
+	// Ch4 counter is stored in lower 16 bits
+	ch4Counter := uint16(a.channels[3].counter)
+
 	// TODO: Use actual frequency from NR43 register instead of fixed period
-	if updateCounterWithPeriod(&a.ch4Counter, noiseChannelPeriod) {
+	ch4Counter++
+	if ch4Counter >= noiseChannelPeriod {
+		ch4Counter = 0
 		// LFSR feedback calculation
 		feedbackBit := (a.ch4LFSR & 1) ^ ((a.ch4LFSR >> 1) & 1)
 		a.ch4LFSR = (a.ch4LFSR >> 1) | (feedbackBit << 14)
@@ -392,10 +401,12 @@ func (a *APU) generateChannel4() int16 {
 		}
 	}
 
+	a.channels[3].counter = uint32(ch4Counter)
+
 	if (a.ch4LFSR & 1) == 0 {
-		return int16(a.ch4Volume) * sampleAmplitude
+		return int16(a.channels[3].volume) * sampleAmplitude
 	}
-	return -int16(a.ch4Volume) * sampleAmplitude
+	return -int16(a.channels[3].volume) * sampleAmplitude
 }
 
 // ReadRegister reads from an audio register
@@ -412,16 +423,16 @@ func (a *APU) ReadRegister(address uint16) uint8 {
 	case addr.NR52: // NR52
 		// NR52 returns power status and channel status bits
 		status := a.registers[index] & nr52PowerMask
-		if a.ch1Enabled {
+		if a.channels[0].enabled {
 			status |= nr52Ch1StatusMask
 		}
-		if a.ch2Enabled {
+		if a.channels[1].enabled {
 			status |= nr52Ch2StatusMask
 		}
-		if a.ch3Enabled {
+		if a.channels[2].enabled {
 			status |= nr52Ch3StatusMask
 		}
-		if a.ch4Enabled {
+		if a.channels[3].enabled {
 			status |= nr52Ch4StatusMask
 		}
 		return status | nr52UnusedMask // Bits 4-6 always read as 1
@@ -469,10 +480,9 @@ func (a *APU) WriteRegister(address uint16, value uint8) {
 					a.registers[i] = 0
 				}
 			}
-			a.ch1Enabled = false
-			a.ch2Enabled = false
-			a.ch3Enabled = false
-			a.ch4Enabled = false
+			for i := range a.channels {
+				a.channels[i].enabled = false
+			}
 		}
 	}
 
@@ -484,53 +494,111 @@ func (a *APU) WriteRegister(address uint16, value uint8) {
 func (a *APU) mapRegisterToState(address uint16, value uint8) {
 	switch address {
 	case addr.NR11: // Channel 1 duty cycle and length
-		a.ch1Duty = value >> 6 // Bits 7-6: Duty cycle
+		a.channels[0].duty = value >> 6 // Bits 7-6: Duty cycle
+		// Length data is stored in register, loaded on trigger
 	case addr.NR12: // Channel 1 volume envelope
-		a.ch1Volume = value >> 4           // Bits 7-4: Initial volume
-		a.ch1Enabled = (value & 0xF8) != 0 // DAC enabled if bits 3-7 are not all zero
+		a.channels[0].volume = value >> 4           // Bits 7-4: Initial volume
+		a.channels[0].enabled = (value & 0xF8) != 0 // DAC enabled if bits 3-7 are not all zero
+		a.channels[0].envelopePeriod = value & 0x07 // Bits 2-0: Envelope period
+		if bit.IsSet(3, value) {
+			a.channels[0].envelopeDirection = 1 // Increase
+		} else {
+			a.channels[0].envelopeDirection = 0 // Decrease
+		}
 	case addr.NR13: // Channel 1 frequency low
-		a.ch1Freq = updateFrequencyLow(a.ch1Freq, value)
+		a.channels[0].freq = updateFrequencyLow(a.channels[0].freq, value)
 	case addr.NR14: // Channel 1 frequency high and control
-		a.ch1Freq = updateFrequencyHigh(a.ch1Freq, value)
+		a.channels[0].freq = updateFrequencyHigh(a.channels[0].freq, value)
+		a.channels[0].lengthEnabled = bit.IsSet(6, value)
 		if bit.IsSet(7, value) { // Bit 7: Trigger
-			a.ch1Counter = 0
-			a.ch1Enabled = true
+			// Only trigger if DAC is enabled
+			if (a.registers[0x12] & 0xF8) != 0 {
+				a.channels[0].counter = 0
+				a.channels[0].enabled = true
+				a.channels[0].envelopeTimer = 0
+				// Reload volume from NR12
+				a.channels[0].volume = a.registers[0x12] >> 4
+				// Always reload length counter on trigger
+				lengthData := a.registers[0x11] & 0x3F
+				if lengthData == 0 {
+					a.channels[0].lengthCounter = 64
+				} else {
+					a.channels[0].lengthCounter = 64 - uint16(lengthData)
+				}
+			}
 		}
 	case addr.NR21: // Channel 2 duty cycle and length
-		a.ch2Duty = value >> 6 // Bits 7-6: Duty cycle
+		a.channels[1].duty = value >> 6 // Bits 7-6: Duty cycle
+		// Length data is stored in register, loaded on trigger
 	case addr.NR22: // Channel 2 volume envelope
-		a.ch2Volume = value >> 4           // Bits 7-4: Initial volume
-		a.ch2Enabled = (value & 0xF8) != 0 // DAC enabled if bits 3-7 are not all zero
+		a.channels[1].volume = value >> 4           // Bits 7-4: Initial volume
+		a.channels[1].enabled = (value & 0xF8) != 0 // DAC enabled if bits 3-7 are not all zero
+		a.channels[1].envelopePeriod = value & 0x07 // Bits 2-0: Envelope period
+		if bit.IsSet(3, value) {
+			a.channels[1].envelopeDirection = 1 // Increase
+		} else {
+			a.channels[1].envelopeDirection = 0 // Decrease
+		}
 	case addr.NR23: // Channel 2 frequency low
-		a.ch2Freq = updateFrequencyLow(a.ch2Freq, value)
+		a.channels[1].freq = updateFrequencyLow(a.channels[1].freq, value)
 	case addr.NR24: // Channel 2 frequency high and control
-		a.ch2Freq = updateFrequencyHigh(a.ch2Freq, value)
+		a.channels[1].freq = updateFrequencyHigh(a.channels[1].freq, value)
+		a.channels[1].lengthEnabled = bit.IsSet(6, value)
 		if bit.IsSet(7, value) { // Bit 7: Trigger
-			a.ch2Counter = 0
-			a.ch2Enabled = true
+			// Only trigger if DAC is enabled
+			if (a.registers[0x17] & 0xF8) != 0 {
+				a.channels[1].counter = 0
+				a.channels[1].enabled = true
+				a.channels[1].envelopeTimer = 0
+				// Reload volume from NR22
+				a.channels[1].volume = a.registers[0x17] >> 4
+				// Always reload length counter on trigger
+				lengthData := a.registers[0x16] & 0x3F
+				if lengthData == 0 {
+					a.channels[1].lengthCounter = 64
+				} else {
+					a.channels[1].lengthCounter = 64 - uint16(lengthData)
+				}
+			}
 		}
 	case addr.NR30: // Channel 3 DAC enable
-		a.ch3Enabled = bit.IsSet(7, value) // Bit 7: DAC enable
+		a.channels[2].enabled = bit.IsSet(7, value) // Bit 7: DAC enable
+	case addr.NR31: // Channel 3 length
+		// Length data is stored in register, loaded on trigger
 	case addr.NR32: // Channel 3 output level
-		a.ch3Volume = (value >> 5) & 0x03 // Bits 6-5: Output level
+		a.channels[2].volume = (value >> 5) & 0x03 // Bits 6-5: Output level
 	case addr.NR33: // Channel 3 frequency low
-		a.ch3Freq = updateFrequencyLow(a.ch3Freq, value)
+		a.channels[2].freq = updateFrequencyLow(a.channels[2].freq, value)
 	case addr.NR34: // Channel 3 frequency high and control
-		a.ch3Freq = updateFrequencyHigh(a.ch3Freq, value)
+		a.channels[2].freq = updateFrequencyHigh(a.channels[2].freq, value)
+		a.channels[2].lengthEnabled = bit.IsSet(6, value)
 		if bit.IsSet(7, value) { // Bit 7: Trigger
-			a.ch3Counter = 0
+			a.channels[2].counter = 0
+			// Always reload length counter on trigger
+			lengthData := a.registers[0x1B]
+			if lengthData == 0 {
+				a.channels[2].lengthCounter = 256
+			} else {
+				a.channels[2].lengthCounter = 256 - uint16(lengthData)
+			}
 		}
 	case addr.NR42: // Channel 4 volume envelope
-		a.ch4Volume = value >> 4 // Bits 7-4: Initial volume
+		a.channels[3].volume = value >> 4 // Bits 7-4: Initial volume
 		// DAC is enabled if any of bits 3-7 are set
 		dacEnabled := (value & 0xF8) != 0
 		if !dacEnabled {
 			// If DAC is disabled, the channel is immediately disabled
-			a.ch4Enabled = false
+			a.channels[3].enabled = false
 		}
-		slog.Debug("Ch4 volume envelope", "value", value, "volume", a.ch4Volume, "dac_enabled", dacEnabled, "ch4_enabled", a.ch4Enabled)
+		a.channels[3].envelopePeriod = value & 0x07 // Bits 2-0: Envelope period
+		if bit.IsSet(3, value) {
+			a.channels[3].envelopeDirection = 1 // Increase
+		} else {
+			a.channels[3].envelopeDirection = 0 // Decrease
+		}
+		slog.Debug("Ch4 volume envelope", "value", value, "volume", a.channels[3].volume, "dac_enabled", dacEnabled, "ch4_enabled", a.channels[3].enabled)
 	case addr.NR41: // Channel 4 length timer
-		// Length timer implementation would go here
+		// Length data is stored in register, loaded on trigger
 		slog.Debug("Ch4 length timer", "value", value)
 	case addr.NR43: // Channel 4 frequency/randomness
 		slog.Debug("Ch4 frequency", "value", value,
@@ -538,20 +606,28 @@ func (a *APU) mapRegisterToState(address uint16, value uint8) {
 			"width", (value>>3)&0x01,
 			"divisor", value&0x07)
 	case addr.NR44: // Channel 4 control
+		a.channels[3].lengthEnabled = bit.IsSet(6, value)
 		if bit.IsSet(7, value) { // Bit 7: Trigger
 			// Only enable channel if DAC is on (NR42 & 0xF8 != 0)
 			dacOn := (a.registers[0x21] & 0xF8) != 0
 			if dacOn {
 				a.ch4LFSR = lfsrInitialValue
-				a.ch4Counter = 0
-				a.ch4Enabled = true
-				slog.Debug("Ch4 triggered", "enabled", a.ch4Enabled, "volume", a.ch4Volume, "dac_on", dacOn)
+				a.channels[3].counter = 0
+				a.channels[3].enabled = true
+				a.channels[3].envelopeTimer = 0
+				// Reload volume from NR42
+				a.channels[3].volume = a.registers[0x21] >> 4
+				// Always reload length counter on trigger
+				lengthData := a.registers[0x20] & 0x3F
+				if lengthData == 0 {
+					a.channels[3].lengthCounter = 64
+				} else {
+					a.channels[3].lengthCounter = 64 - uint16(lengthData)
+				}
+				slog.Debug("Ch4 triggered", "enabled", a.channels[3].enabled, "volume", a.channels[3].volume, "dac_on", dacOn)
 			} else {
 				slog.Debug("Ch4 trigger ignored - DAC off", "NR42", a.registers[0x21])
 			}
-		}
-		if bit.IsSet(6, value) { // Bit 6: Length enable
-			slog.Debug("Ch4 length enable", "value", value)
 		}
 	}
 
@@ -595,27 +671,11 @@ func (a *APU) Reset() {
 	a.sampleCycleCounter = 0
 	a.sampleBuffer = a.sampleBuffer[:0]
 
-	a.ch1Enabled = false
-	a.ch1Freq = 0
-	a.ch1Volume = 0
-	a.ch1Duty = 0
-	a.ch1Counter = 0
+	for i := range a.channels {
+		a.channels[i] = ChannelState{}
+	}
 
-	a.ch2Enabled = false
-	a.ch2Freq = 0
-	a.ch2Volume = 0
-	a.ch2Duty = 0
-	a.ch2Counter = 0
-
-	a.ch3Enabled = false
-	a.ch3Freq = 0
-	a.ch3Volume = 0
-	a.ch3Counter = 0
-
-	a.ch4Enabled = false
-	a.ch4Volume = 0
 	a.ch4LFSR = lfsrInitialValue
-	a.ch4Counter = 0
 
 	a.initRegisters()
 }
@@ -625,15 +685,8 @@ func (a *APU) MuteChannel(channel int, muted bool) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
-	switch channel {
-	case 1:
-		a.ch1Muted = muted
-	case 2:
-		a.ch2Muted = muted
-	case 3:
-		a.ch3Muted = muted
-	case 4:
-		a.ch4Muted = muted
+	if channel >= 1 && channel <= 4 {
+		a.channels[channel-1].muted = muted
 	}
 }
 
@@ -642,15 +695,8 @@ func (a *APU) ToggleChannel(channel int) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
-	switch channel {
-	case 1:
-		a.ch1Muted = !a.ch1Muted
-	case 2:
-		a.ch2Muted = !a.ch2Muted
-	case 3:
-		a.ch3Muted = !a.ch3Muted
-	case 4:
-		a.ch4Muted = !a.ch4Muted
+	if channel >= 1 && channel <= 4 {
+		a.channels[channel-1].muted = !a.channels[channel-1].muted
 	}
 }
 
@@ -659,10 +705,9 @@ func (a *APU) SoloChannel(channel int) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
-	a.ch1Muted = (channel != 1)
-	a.ch2Muted = (channel != 2)
-	a.ch3Muted = (channel != 3)
-	a.ch4Muted = (channel != 4)
+	for i := range a.channels {
+		a.channels[i].muted = (i != channel-1)
+	}
 }
 
 // UnmuteAll unmutes all channels
@@ -670,16 +715,15 @@ func (a *APU) UnmuteAll() {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
-	a.ch1Muted = false
-	a.ch2Muted = false
-	a.ch3Muted = false
-	a.ch4Muted = false
+	for i := range a.channels {
+		a.channels[i].muted = false
+	}
 }
 
 // GetChannelStatus returns the current mute status and basic info for all channels
 func (a *APU) GetChannelStatus() (ch1, ch2, ch3, ch4 bool) {
-	return !a.ch1Muted && a.ch1Enabled,
-		!a.ch2Muted && a.ch2Enabled,
-		!a.ch3Muted && a.ch3Enabled,
-		!a.ch4Muted && a.ch4Enabled
+	return !a.channels[0].muted && a.channels[0].enabled,
+		!a.channels[1].muted && a.channels[1].enabled,
+		!a.channels[2].muted && a.channels[2].enabled,
+		!a.channels[3].muted && a.channels[3].enabled
 }

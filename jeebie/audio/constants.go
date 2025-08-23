@@ -15,6 +15,19 @@ const (
 	cpuFrequency = 4194304
 )
 
+// Fixed-point constants for precise frequency calculation
+const (
+	// Fixed-point shift for 16.16 fixed point arithmetic
+	fpShift = 16
+
+	// Fixed-point increments per sample for accurate pitch
+	// Pulse channels: 131072 Hz / 44100 Hz = 2.972789...
+	pulseIncrement = 194783 // uint32(131072.0 * 65536.0 / 44100.0)
+
+	// Wave channel: 65536 Hz / 44100 Hz = 1.486394...
+	waveIncrement = 97391 // uint32(65536.0 * 65536.0 / 44100.0)
+)
+
 // Channel constants
 const (
 	// maxVolume is the maximum volume level for envelope (4 bits)
