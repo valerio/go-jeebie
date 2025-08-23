@@ -38,6 +38,9 @@ func (m *MockBackend) Cleanup() error {
 	return nil
 }
 
+func (m *MockBackend) HandleAction(act action.Action) {
+}
+
 func TestEventFlow(t *testing.T) {
 	tests := []struct {
 		name          string

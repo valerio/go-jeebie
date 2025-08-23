@@ -99,6 +99,9 @@ func (h *Backend) Cleanup() error {
 	return nil
 }
 
+func (h *Backend) HandleAction(act action.Action) {
+}
+
 // CreateSnapshotConfig creates a snapshot configuration from CLI parameters
 func CreateSnapshotConfig(interval int, directory, romPath string) (SnapshotConfig, error) {
 	config := SnapshotConfig{

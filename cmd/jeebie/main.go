@@ -225,33 +225,33 @@ func createBackend(c *cli.Context, romPath string) (backend.Backend, error) {
 }
 
 func handleEvent(emu jeebie.Emulator, b backend.Backend, evt backend.InputEvent, running *bool) {
-	switch evt.Action {
-	case action.EmulatorQuit:
+	info := action.GetInfo(evt.Action)
+
+	if evt.Action == action.EmulatorQuit && evt.Type == event.Press {
+		*running = false
+		return
+	}
+
+	switch info.Category {
+	case action.CategoryGameInput:
+		// Game Boy controls need both Press and Hold events
+		emu.HandleAction(evt.Action, evt.Type == event.Press || evt.Type == event.Hold)
+
+	case action.CategoryEmulator:
+		// Emulator controls only respond to Press events
 		if evt.Type == event.Press {
-			*running = false
-		}
-	case action.EmulatorPauseToggle:
-		if evt.Type == event.Press {
-			// HandleAction will toggle pause state internally
-			emu.HandleAction(action.EmulatorPauseToggle, true)
-			emu.ResetFrameTiming()
-		}
-	// Backend-specific actions that need special handling
-	case action.EmulatorSnapshot, action.EmulatorTestPatternCycle,
-		action.EmulatorDebugToggle, action.EmulatorDebugUpdate,
-		action.AudioToggleChannel1, action.AudioToggleChannel2,
-		action.AudioToggleChannel3, action.AudioToggleChannel4,
-		action.AudioSoloChannel1, action.AudioSoloChannel2,
-		action.AudioSoloChannel3, action.AudioSoloChannel4,
-		action.AudioShowStatus:
-		if evt.Type == event.Press {
-			// Let SDL2 backend handle its specific actions
-			if sdlBackend, ok := b.(*sdl2.Backend); ok {
-				sdlBackend.HandleBackendAction(evt.Action)
+			emu.HandleAction(evt.Action, true)
+			if evt.Action == action.EmulatorPauseToggle {
+				emu.ResetFrameTiming()
 			}
 		}
+
+	case action.CategoryBackend, action.CategoryDebug, action.CategoryAudio:
+		if evt.Type == event.Press {
+			b.HandleAction(evt.Action)
+		}
+
 	default:
-		// Handle both Press and Hold events as "pressed" state
 		emu.HandleAction(evt.Action, evt.Type == event.Press || evt.Type == event.Hold)
 	}
 }

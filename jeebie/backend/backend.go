@@ -33,6 +33,10 @@ type Backend interface {
 	// Returns a slice of InputEvents that occurred during this update
 	Update(frame *video.FrameBuffer) ([]InputEvent, error)
 
+	// HandleAction processes backend-specific actions (audio, debug, snapshots, etc.)
+	// Backends can choose to handle or ignore actions based on their capabilities
+	HandleAction(act action.Action)
+
 	// Cleanup resources when shutting down
 	Cleanup() error
 }

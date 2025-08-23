@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/valerio/go-jeebie/jeebie/backend"
+	"github.com/valerio/go-jeebie/jeebie/input/action"
 	"github.com/valerio/go-jeebie/jeebie/video"
 )
 
@@ -34,15 +35,12 @@ func (s *Backend) Cleanup() error {
 
 // UpdateDebugData does nothing
 func (s *Backend) UpdateDebugData(oam interface{}, vram interface{}) {
-	// No-op
 }
 
 // ToggleDebugWindow does nothing
 func (s *Backend) ToggleDebugWindow() {
-	// No-op
 }
 
-// HandleBackendAction does nothing in the stub
-func (s *Backend) HandleBackendAction(act interface{}) {
-	// No-op
+// HandleAction does nothing in the stub
+func (s *Backend) HandleAction(act action.Action) {
 }

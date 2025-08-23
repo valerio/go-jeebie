@@ -14,6 +14,7 @@ import (
 	"github.com/valerio/go-jeebie/jeebie/debug"
 	"github.com/valerio/go-jeebie/jeebie/disasm"
 	"github.com/valerio/go-jeebie/jeebie/display"
+	"github.com/valerio/go-jeebie/jeebie/input"
 	"github.com/valerio/go-jeebie/jeebie/input/action"
 	"github.com/valerio/go-jeebie/jeebie/input/event"
 	"github.com/valerio/go-jeebie/jeebie/video"
@@ -43,6 +44,9 @@ type Backend struct {
 	config     backend.BackendConfig
 	eventQueue []backend.InputEvent // Collect events to return
 
+	keyStates  map[action.Action]time.Time // Last time each key was pressed
+	activeKeys map[action.Action]bool      // Keys active in previous frame
+
 	// For accessing emulator state
 	debugProvider backend.DebugDataProvider
 
@@ -67,6 +71,8 @@ func (t *Backend) Init(config backend.BackendConfig) error {
 	t.config = config
 	t.debugProvider = config.DebugProvider
 	t.eventQueue = make([]backend.InputEvent, 0)
+	t.keyStates = make(map[action.Action]time.Time)
+	t.activeKeys = make(map[action.Action]bool)
 
 	screen, err := tcell.NewScreen()
 	if err != nil {
@@ -105,15 +111,79 @@ func (t *Backend) Init(config backend.BackendConfig) error {
 
 	// Set up signal handling for graceful shutdown
 	go t.handleSignals()
-	go t.handleInput()
 
 	return nil
 }
 
+// Key expiry timeout - slightly longer than typical key repeat interval
+const keyTimeout = 100 * time.Millisecond
+
 // Update renders a frame and processes events
 func (t *Backend) Update(frame *video.FrameBuffer) ([]backend.InputEvent, error) {
-	// Collect and return any queued events
-	events := t.eventQueue
+	var events []backend.InputEvent
+	now := time.Now()
+
+	// Poll for input events synchronously
+	for t.screen.HasPendingEvent() {
+		ev := t.screen.PollEvent()
+		switch ev := ev.(type) {
+		case *tcell.EventKey:
+			t.processKeyEvent(ev, now)
+		case *tcell.EventResize:
+			t.screen.Sync()
+		}
+	}
+
+	// Track which keys are currently active this frame
+	currentlyActive := make(map[action.Action]bool)
+
+	// Check all tracked keys and generate appropriate events
+	for act, lastPressed := range t.keyStates {
+		info := action.GetInfo(act)
+
+		// Skip non-game inputs (they're handled via eventQueue)
+		if info.Category != action.CategoryGameInput {
+			continue
+		}
+
+		if now.Sub(lastPressed) < keyTimeout {
+			// Key is still active
+			currentlyActive[act] = true
+
+			if !t.activeKeys[act] {
+				// Was not active last frame - send Press
+				slog.Debug("Key press", "action", info.Description)
+				events = append(events, backend.InputEvent{Action: act, Type: event.Press})
+			} else {
+				// Was active last frame - send Hold
+				events = append(events, backend.InputEvent{Action: act, Type: event.Hold})
+			}
+		} else {
+			// Key has expired - remove it
+			delete(t.keyStates, act)
+		}
+	}
+
+	// Check for released keys (were active last frame but not this frame)
+	for act := range t.activeKeys {
+		if !currentlyActive[act] {
+			info := action.GetInfo(act)
+			slog.Debug("Key release", "action", info.Description)
+			events = append(events, backend.InputEvent{Action: act, Type: event.Release})
+		}
+	}
+
+	// Update active keys for next frame
+	t.activeKeys = currentlyActive
+
+	// Add non-game input events (pause, debug, etc)
+	if len(t.eventQueue) > 0 {
+		for _, evt := range t.eventQueue {
+			info := action.GetInfo(evt.Action)
+			slog.Debug("UI event", "action", info.Description, "type", evt.Type)
+		}
+		events = append(events, t.eventQueue...)
+	}
 	t.eventQueue = nil
 
 	if !t.running {
@@ -148,6 +218,42 @@ func (t *Backend) Cleanup() error {
 	return nil
 }
 
+// HandleAction processes backend-specific actions
+func (t *Backend) HandleAction(act action.Action) {
+	switch act {
+	case action.EmulatorSnapshot:
+		debug.TakeSnapshot(t.currentFrame, t.config.TestPattern, t.testPatternType)
+	case action.EmulatorTestPatternCycle:
+		if t.config.TestPattern {
+			t.testPatternType = (t.testPatternType + 1) % display.TestPatternCount
+			t.generateTestPattern(t.testPatternType)
+			patternNames := []string{"Checkerboard", "Gradient", "Stripes", "Diagonal"}
+			slog.Info("Switched to test pattern", "pattern", patternNames[t.testPatternType])
+		}
+	case action.EmulatorDebugToggle:
+		t.config.ShowDebug = !t.config.ShowDebug
+		if t.config.ShowDebug {
+			slog.Info("Debug display enabled")
+		} else {
+			slog.Info("Debug display disabled")
+		}
+	case action.EmulatorDebugUpdate:
+		// Force a screen refresh/update
+		t.screen.Sync()
+	case action.DebugLogLevelIncrease:
+		t.changeLogLevel(1)
+	case action.DebugLogLevelDecrease:
+		t.changeLogLevel(-1)
+	// Terminal doesn't support audio actions currently, but logs them
+	case action.AudioToggleChannel1, action.AudioToggleChannel2,
+		action.AudioToggleChannel3, action.AudioToggleChannel4,
+		action.AudioSoloChannel1, action.AudioSoloChannel2,
+		action.AudioSoloChannel3, action.AudioSoloChannel4,
+		action.AudioShowStatus:
+		slog.Debug("Audio action not supported in terminal backend", "action", act)
+	}
+}
+
 func (t *Backend) handleSignals() {
 	signals := make(chan os.Signal, 1)
 	signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP, syscall.SIGQUIT)
@@ -158,102 +264,144 @@ func (t *Backend) handleSignals() {
 	t.eventQueue = append(t.eventQueue, backend.InputEvent{Action: action.EmulatorQuit, Type: event.Press})
 }
 
-func (t *Backend) handleInput() {
-	for t.running {
-		ev := t.screen.PollEvent()
-		switch ev := ev.(type) {
-		case *tcell.EventKey:
-			t.handleKeyEvent(ev)
-		case *tcell.EventResize:
-			t.screen.Sync()
-		}
-	}
-}
-
-// keyMapping maps tcell keys to actions
-var keyMapping = map[tcell.Key]action.Action{
-	// Emulator controls
-	tcell.KeyF12:    action.EmulatorSnapshot,
-	tcell.KeyEscape: action.EmulatorQuit,
-	tcell.KeyCtrlC:  action.EmulatorQuit,
-	// Game Boy controls
-	tcell.KeyEnter: action.GBButtonStart,
-	tcell.KeyUp:    action.GBDPadUp,
-	tcell.KeyDown:  action.GBDPadDown,
-	tcell.KeyLeft:  action.GBDPadLeft,
-	tcell.KeyRight: action.GBDPadRight,
-}
-
-// runeMapping maps runes to actions
-var runeMapping = map[rune]action.Action{
-	// Game Boy controls
-	'a': action.GBButtonA,
-	's': action.GBButtonB,
-	'q': action.GBButtonSelect,
-	// Emulator controls
-	' ': action.EmulatorPauseToggle,
-	't': action.EmulatorTestPatternCycle,
-}
-
-func (t *Backend) handleKeyEvent(ev *tcell.EventKey) {
-	// Handle special keys
+func (t *Backend) processKeyEvent(ev *tcell.EventKey, now time.Time) {
 	if act, exists := keyMapping[ev.Key()]; exists {
-		// Handle backend-specific actions
-		if act == action.EmulatorSnapshot {
-			debug.TakeSnapshot(t.currentFrame, t.config.TestPattern, t.testPatternType)
-			return
-		}
 		if act == action.EmulatorQuit {
 			t.running = false
 		}
-		// Queue event to be returned from Update()
-		t.eventQueue = append(t.eventQueue, backend.InputEvent{Action: act, Type: event.Press})
+		info := action.GetInfo(act)
+		if info.Category == action.CategoryGameInput {
+			// For game inputs, clear other directional inputs if this is a d-pad action
+			if act == action.GBDPadUp || act == action.GBDPadDown ||
+				act == action.GBDPadLeft || act == action.GBDPadRight {
+				// Clear all d-pad directions to simulate exclusive directions
+				delete(t.keyStates, action.GBDPadUp)
+				delete(t.keyStates, action.GBDPadDown)
+				delete(t.keyStates, action.GBDPadLeft)
+				delete(t.keyStates, action.GBDPadRight)
+			}
+			t.keyStates[act] = now
+		} else {
+			t.eventQueue = append(t.eventQueue, backend.InputEvent{Action: act, Type: event.Press})
+		}
 		return
 	}
 
-	// Handle rune keys
 	if ev.Key() == tcell.KeyRune {
-		t.handleRuneKey(ev.Rune())
+		t.processRuneKey(ev.Rune(), now)
 	}
 }
 
-func (t *Backend) handleRuneKey(r rune) {
-	// Handle mapped runes
-	if act, exists := runeMapping[r]; exists {
-		// Handle backend-specific test pattern cycling
-		if act == action.EmulatorTestPatternCycle && t.config.TestPattern {
-			t.testPatternType = (t.testPatternType + 1) % display.TestPatternCount
-			t.generateTestPattern(t.testPatternType)
-			patternNames := []string{"Checkerboard", "Gradient", "Stripes", "Diagonal"}
-			slog.Info("Switched to test pattern", "pattern", patternNames[t.testPatternType])
-			return
+// tcellKeyNameMap converts tcell keys to key names used in default mappings
+var tcellKeyNameMap = map[tcell.Key]string{
+	tcell.KeyEnter:  "Enter",
+	tcell.KeyUp:     "Up",
+	tcell.KeyDown:   "Down",
+	tcell.KeyLeft:   "Left",
+	tcell.KeyRight:  "Right",
+	tcell.KeyEscape: "Escape",
+	tcell.KeyF1:     "F1",
+	tcell.KeyF2:     "F2",
+	tcell.KeyF3:     "F3",
+	tcell.KeyF4:     "F4",
+	tcell.KeyF5:     "F5",
+	tcell.KeyF9:     "F9",
+	tcell.KeyF10:    "F10",
+	tcell.KeyF11:    "F11",
+	tcell.KeyF12:    "F12",
+}
+
+// tcellRuneNameMap converts runes to key names used in default mappings
+var tcellRuneNameMap = map[rune]string{
+	'z': "z",
+	'x': "x",
+	'w': "w",
+	's': "s",
+	'a': "a",
+	'd': "d",
+	'p': "p",
+	'r': "r",
+	'o': "o",
+	'f': "f",
+	'i': "i",
+	'n': "n",
+	'q': "q",
+	' ': "Space",
+	't': "t",
+	'1': "1",
+	'2': "2",
+	'3': "3",
+	'4': "4",
+	'+': "+",
+	'=': "=",
+	'-': "-",
+	'_': "_",
+}
+
+// buildKeyMapping creates the key mapping from default mappings
+func buildKeyMapping() map[tcell.Key]action.Action {
+	mapping := make(map[tcell.Key]action.Action)
+
+	// Apply default mappings for special keys
+	for key, keyName := range tcellKeyNameMap {
+		if act, ok := input.GetDefaultMapping(keyName); ok {
+			mapping[key] = act
 		}
-		// Queue event to be returned from Update()
-		t.eventQueue = append(t.eventQueue, backend.InputEvent{Action: act, Type: event.Press})
-		return
 	}
 
-	// Terminal-specific debug controls
-	switch r {
-	case 'n': // Next instruction (step)
-		t.eventQueue = append(t.eventQueue, backend.InputEvent{Action: action.EmulatorStepInstruction, Type: event.Press})
-	case 'f': // Next frame (step frame)
-		t.eventQueue = append(t.eventQueue, backend.InputEvent{Action: action.EmulatorStepFrame, Type: event.Press})
-	case 'r': // Resume
-		t.eventQueue = append(t.eventQueue, backend.InputEvent{Action: action.EmulatorPauseToggle, Type: event.Press})
-	case 'p': // Pause
-		t.eventQueue = append(t.eventQueue, backend.InputEvent{Action: action.EmulatorPauseToggle, Type: event.Press})
-	case '-', '_': // Decrease log verbosity
-		t.changeLogLevel(-1)
-	case '+', '=': // Increase log verbosity
-		t.changeLogLevel(1)
+	mapping[tcell.KeyCtrlC] = action.EmulatorQuit
+
+	return mapping
+}
+
+// buildRuneMapping creates the rune mapping from default mappings
+func buildRuneMapping() map[rune]action.Action {
+	mapping := make(map[rune]action.Action)
+
+	for r, keyName := range tcellRuneNameMap {
+		if act, ok := input.GetDefaultMapping(keyName); ok {
+			mapping[r] = act
+		}
+	}
+
+	return mapping
+}
+
+// keyMapping maps tcell keys to actions
+var keyMapping = buildKeyMapping()
+
+// runeMapping maps runes to actions
+var runeMapping = buildRuneMapping()
+
+func (t *Backend) processRuneKey(r rune, now time.Time) {
+	// Handle mapped runes
+	if act, exists := runeMapping[r]; exists {
+		// Check if this is a game input that needs state tracking
+		info := action.GetInfo(act)
+		slog.Debug("Key event (rune)", "rune", string(r), "action", info.Description, "category", info.Category)
+
+		if info.Category == action.CategoryGameInput {
+			// For game inputs using WASD, clear other directional inputs
+			if act == action.GBDPadUp || act == action.GBDPadDown ||
+				act == action.GBDPadLeft || act == action.GBDPadRight {
+				// Clear all d-pad directions to simulate exclusive directions
+				delete(t.keyStates, action.GBDPadUp)
+				delete(t.keyStates, action.GBDPadDown)
+				delete(t.keyStates, action.GBDPadLeft)
+				delete(t.keyStates, action.GBDPadRight)
+			}
+			t.keyStates[act] = now
+		} else {
+			t.eventQueue = append(t.eventQueue, backend.InputEvent{Action: act, Type: event.Press})
+		}
+		return
 	}
 }
 
 func (t *Backend) changeLogLevel(direction int) {
 	oldLevel := t.logLevel
 	switch direction {
-	case -1: // Decrease verbosity (show fewer logs)
+	case -1:
 		switch t.logLevel {
 		case slog.LevelDebug:
 			t.logLevel = slog.LevelInfo
@@ -262,7 +410,7 @@ func (t *Backend) changeLogLevel(direction int) {
 		case slog.LevelWarn:
 			t.logLevel = slog.LevelError
 		}
-	case 1: // Increase verbosity (show more logs)
+	case 1:
 		switch t.logLevel {
 		case slog.LevelError:
 			t.logLevel = slog.LevelWarn
@@ -279,8 +427,6 @@ func (t *Backend) changeLogLevel(direction int) {
 
 func (t *Backend) render(frame *video.FrameBuffer) {
 	termWidth, termHeight := t.screen.Size()
-
-	// Check minimum terminal size
 	if termWidth < minTermWidth || termHeight < minTermHeight {
 		t.screen.Clear()
 		style := tcell.StyleDefault.Foreground(tcell.ColorRed)
@@ -321,18 +467,15 @@ func (t *Backend) drawBorders(termWidth, termHeight, dividerX int) {
 	borderStyle := tcell.StyleDefault.Foreground(tcell.ColorWhite)
 	titleStyle := tcell.StyleDefault.Foreground(tcell.ColorYellow)
 
-	// Draw vertical divider
 	for y := 0; y < termHeight; y++ {
 		if dividerX < termWidth {
 			t.screen.SetContent(dividerX, y, '│', nil, borderStyle)
 		}
 	}
 
-	// Draw horizontal dividers for right panel sections
 	registerEndY := registerHeight + 1
 	disasmEndY := registerEndY + disasmHeight + 1
 
-	// horizontal line after registers
 	if registerEndY < termHeight && t.config.ShowDebug {
 		for x := dividerX + 1; x < termWidth; x++ {
 			t.screen.SetContent(x, registerEndY, '─', nil, borderStyle)
@@ -340,7 +483,6 @@ func (t *Backend) drawBorders(termWidth, termHeight, dividerX int) {
 		t.screen.SetContent(dividerX, registerEndY, '├', nil, borderStyle)
 	}
 
-	// horizontal line after disassembly
 	if disasmEndY < termHeight && t.config.ShowDebug {
 		for x := dividerX + 1; x < termWidth; x++ {
 			t.screen.SetContent(x, disasmEndY, '─', nil, borderStyle)
@@ -403,7 +545,7 @@ func (t *Backend) drawBorders(termWidth, termHeight, dividerX int) {
 	if t.config.TestPattern {
 		helpText = " Test Pattern Mode: T=cycle patterns F12=snapshot ESC=exit "
 	} else {
-		helpText = " Debug: SPACE=pause/resume N=step F=frame F12=snapshot | Logs: +/- filter "
+		helpText = " Debug: F10=toggle debug view SPACE=pause/resume N=step F=frame F12=snapshot | Logs: +/- filter "
 	}
 	for i, ch := range helpText {
 		if i < termWidth {
@@ -414,12 +556,10 @@ func (t *Backend) drawBorders(termWidth, termHeight, dividerX int) {
 
 func (t *Backend) drawGameBoy(frame *video.FrameBuffer) {
 	frameData := frame.ToSlice()
-
-	// process two rows at a time using half-blocks
 	for y := 0; y < height; y += 2 {
 		for x := 0; x < width; x++ {
 			topPixel := frameData[y*width+x]
-			bottomPixel := uint32(0xFFFFFFFF) // default to white if out of bounds
+			bottomPixel := uint32(0xFFFFFFFF)
 			if y+1 < height {
 				bottomPixel = frameData[(y+1)*width+x]
 			}
@@ -437,9 +577,7 @@ func (t *Backend) drawGameBoy(frame *video.FrameBuffer) {
 	}
 }
 
-// getHalfBlockChar returns the appropriate half-block character and colors for terminal
 func getHalfBlockChar(topShade, bottomShade int) (rune, tcell.Color, tcell.Color) {
-	// Map Game Boy shades to terminal colors
 	shadeColors := []tcell.Color{
 		tcell.ColorBlack,
 		tcell.ColorGray,
@@ -478,7 +616,6 @@ func (t *Backend) drawRegisters(startX, startY, width, termHeight int) {
 		return
 	}
 
-	// determine debugger status string
 	statusStr := "RUNNING"
 	switch debugData.DebuggerState {
 	case debug.DebuggerPaused:
@@ -541,7 +678,6 @@ func (t *Backend) drawDisassembly(startX, startY, width, termHeight int) {
 
 	pc := debugData.CPU.PC
 
-	// create simple disassembly from memory snapshot
 	lines := t.createSimpleDisassembly(debugData.Memory, pc)
 
 	style := tcell.StyleDefault.Foreground(tcell.ColorGreen)
@@ -586,21 +722,17 @@ func (t *Backend) drawDisassembly(startX, startY, width, termHeight int) {
 	}
 }
 
-// simpleDisasmLine represents a simplified disassembly line
 type simpleDisasmLine struct {
 	address     uint16
 	instruction string
 }
 
-// createSimpleDisassembly creates basic disassembly from memory snapshot
 func (t *Backend) createSimpleDisassembly(snapshot *debug.MemorySnapshot, pc uint16) []simpleDisasmLine {
-	// find PC offset in snapshot
 	pcOffset := -1
 	if pc >= snapshot.StartAddr && pc < snapshot.StartAddr+uint16(len(snapshot.Bytes)) {
 		pcOffset = int(pc - snapshot.StartAddr)
 	}
 
-	// if PC not in snapshot, just show what we have
 	if pcOffset < 0 {
 		lines := []simpleDisasmLine{}
 		for i := 0; i < len(snapshot.Bytes) && len(lines) < disasmHeight; {
@@ -615,18 +747,14 @@ func (t *Backend) createSimpleDisassembly(snapshot *debug.MemorySnapshot, pc uin
 		return lines
 	}
 
-	// first pass: find all instructions around PC
 	allLines := []simpleDisasmLine{}
 
-	// go backwards from PC to find preceding instructions
-	// this is approximate since we can't perfectly decode backwards
-	backwardBytes := 30 // look back up to 30 bytes
+	backwardBytes := 30
 	startOffset := pcOffset - backwardBytes
 	if startOffset < 0 {
 		startOffset = 0
 	}
 
-	// decode forward from startOffset
 	for i := startOffset; i < len(snapshot.Bytes); {
 		addr := snapshot.StartAddr + uint16(i)
 		instruction, length := t.disassembleInstruction(snapshot.Bytes, i)
@@ -637,14 +765,11 @@ func (t *Backend) createSimpleDisassembly(snapshot *debug.MemorySnapshot, pc uin
 		})
 
 		i += length
-
-		// stop after we have enough instructions past PC
 		if addr > pc && len(allLines) > disasmHeight*2 {
 			break
 		}
 	}
 
-	// find PC in the lines
 	pcIndex := -1
 	for i, line := range allLines {
 		if line.address == pc {
@@ -653,13 +778,11 @@ func (t *Backend) createSimpleDisassembly(snapshot *debug.MemorySnapshot, pc uin
 		}
 	}
 
-	// if we found PC, center the window around it
 	if pcIndex >= 0 {
 		halfHeight := disasmHeight / 2
 		startIdx := pcIndex - halfHeight
 		endIdx := pcIndex + halfHeight + 1
 
-		// adjust bounds
 		if startIdx < 0 {
 			startIdx = 0
 			endIdx = disasmHeight
@@ -675,22 +798,18 @@ func (t *Backend) createSimpleDisassembly(snapshot *debug.MemorySnapshot, pc uin
 		return allLines[startIdx:endIdx]
 	}
 
-	// PC not found (shouldn't happen), return first instructions
 	if len(allLines) > disasmHeight {
 		return allLines[:disasmHeight]
 	}
 	return allLines
 }
 
-// disassembleInstruction decodes a single instruction from the bytes
 func (t *Backend) disassembleInstruction(bytes []uint8, offset int) (string, int) {
 	if offset >= len(bytes) {
 		return "???", 1
 	}
 
 	opcode := bytes[offset]
-
-	// CB-prefixed instruction
 	if opcode == 0xCB {
 		if offset+1 < len(bytes) {
 			cbOpcode := bytes[offset+1]
@@ -699,11 +818,8 @@ func (t *Backend) disassembleInstruction(bytes []uint8, offset int) (string, int
 		return "CB ???", 1
 	}
 
-	// regular instruction
 	template := disasm.InstructionTemplates[opcode]
 	length := disasm.InstructionLengths[opcode]
-
-	// format with immediate values based on length
 	switch length {
 	case 1:
 		return template, 1
@@ -795,10 +911,9 @@ func (t *Backend) drawLogs(startX, startY, width, termHeight int) {
 	}
 }
 
-// generateTestPattern creates different test patterns
 func (t *Backend) generateTestPattern(patternType int) {
 	switch patternType {
-	case 0: // Checkerboard
+	case 0:
 		for y := 0; y < video.FramebufferHeight; y++ {
 			for x := 0; x < video.FramebufferWidth; x++ {
 				var color video.GBColor
@@ -810,7 +925,7 @@ func (t *Backend) generateTestPattern(patternType int) {
 				t.testPatternFrame.SetPixel(uint(x), uint(y), color)
 			}
 		}
-	case 1: // Gradient
+	case 1:
 		for y := 0; y < video.FramebufferHeight; y++ {
 			for x := 0; x < video.FramebufferWidth; x++ {
 				gray := uint32(x * display.GrayscaleWhite / video.FramebufferWidth)
@@ -818,7 +933,7 @@ func (t *Backend) generateTestPattern(patternType int) {
 				t.testPatternFrame.SetPixel(uint(x), uint(y), color)
 			}
 		}
-	case 2: // Vertical stripes
+	case 2:
 		for y := 0; y < video.FramebufferHeight; y++ {
 			for x := 0; x < video.FramebufferWidth; x++ {
 				var color video.GBColor
@@ -830,7 +945,7 @@ func (t *Backend) generateTestPattern(patternType int) {
 				t.testPatternFrame.SetPixel(uint(x), uint(y), color)
 			}
 		}
-	case 3: // Diagonal lines
+	case 3:
 		for y := 0; y < video.FramebufferHeight; y++ {
 			for x := 0; x < video.FramebufferWidth; x++ {
 				var color video.GBColor
@@ -845,11 +960,10 @@ func (t *Backend) generateTestPattern(patternType int) {
 	}
 }
 
-// animateTestPattern provides simple animation for test patterns
 func (t *Backend) animateTestPattern() {
 	frame := t.testFrameCount / display.TestPatternAnimationFrames
 	switch t.testPatternType {
-	case 2: // Animate stripes
+	case 2:
 		for y := 0; y < video.FramebufferHeight; y++ {
 			for x := 0; x < video.FramebufferWidth; x++ {
 				var color video.GBColor
@@ -861,7 +975,7 @@ func (t *Backend) animateTestPattern() {
 				t.testPatternFrame.SetPixel(uint(x), uint(y), color)
 			}
 		}
-	case 3: // Animate diagonal
+	case 3:
 		for y := 0; y < video.FramebufferHeight; y++ {
 			for x := 0; x < video.FramebufferWidth; x++ {
 				var color video.GBColor

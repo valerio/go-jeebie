@@ -206,8 +206,10 @@ func (e *DMG) HandleAction(act action.Action, pressed bool) {
 		if pressed {
 			if e.debuggerState == DebuggerPaused {
 				e.debuggerState = DebuggerRunning
+				slog.Info("Debugger resumed")
 			} else {
 				e.debuggerState = DebuggerPaused
+				slog.Info("Debugger paused")
 			}
 		}
 		return
@@ -215,12 +217,18 @@ func (e *DMG) HandleAction(act action.Action, pressed bool) {
 		if pressed && e.debuggerState == DebuggerPaused {
 			e.debuggerState = DebuggerStepFrame
 			e.frameRequested = true
+			slog.Debug("Step frame requested")
+		} else if pressed {
+			slog.Debug("Step frame ignored - debugger not paused")
 		}
 		return
 	case action.EmulatorStepInstruction:
 		if pressed && e.debuggerState == DebuggerPaused {
 			e.debuggerState = DebuggerStep
 			e.stepRequested = true
+			slog.Debug("Step instruction requested")
+		} else if pressed {
+			slog.Debug("Step instruction ignored - debugger not paused")
 		}
 		return
 	}

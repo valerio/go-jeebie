@@ -11,6 +11,7 @@ import (
 	"github.com/valerio/go-jeebie/jeebie/backend"
 	"github.com/valerio/go-jeebie/jeebie/debug"
 	"github.com/valerio/go-jeebie/jeebie/display"
+	"github.com/valerio/go-jeebie/jeebie/input"
 	"github.com/valerio/go-jeebie/jeebie/input/action"
 	"github.com/valerio/go-jeebie/jeebie/input/event"
 	"github.com/valerio/go-jeebie/jeebie/video"
@@ -231,37 +232,60 @@ func (s *Backend) handleEvent(evt sdl.Event) []backend.InputEvent {
 	return nil
 }
 
-// keyMapping maps SDL2 keys to actions
-var keyMapping = map[sdl.Keycode]action.Action{
-	// Emulator controls
-	sdl.K_F10:    action.EmulatorDebugUpdate,
-	sdl.K_F11:    action.EmulatorDebugToggle,
-	sdl.K_F12:    action.EmulatorSnapshot,
-	sdl.K_ESCAPE: action.EmulatorQuit,
-	sdl.K_SPACE:  action.EmulatorPauseToggle,
-	sdl.K_t:      action.EmulatorTestPatternCycle,
-
-	// Audio debugging
-	sdl.K_F1: action.AudioToggleChannel1,
-	sdl.K_F2: action.AudioToggleChannel2,
-	sdl.K_F3: action.AudioToggleChannel3,
-	sdl.K_F4: action.AudioToggleChannel4,
-	sdl.K_F5: action.AudioSoloChannel1,
-	sdl.K_F6: action.AudioSoloChannel2,
-	sdl.K_F7: action.AudioSoloChannel3,
-	sdl.K_F8: action.AudioSoloChannel4,
-	sdl.K_d:  action.AudioShowStatus,
-
-	// Game Boy controls
-	sdl.K_RETURN: action.GBButtonStart,
-	sdl.K_a:      action.GBButtonA,
-	sdl.K_s:      action.GBButtonB,
-	sdl.K_q:      action.GBButtonSelect,
-	sdl.K_UP:     action.GBDPadUp,
-	sdl.K_DOWN:   action.GBDPadDown,
-	sdl.K_LEFT:   action.GBDPadLeft,
-	sdl.K_RIGHT:  action.GBDPadRight,
+// sdlKeyNameMap converts SDL keycodes to key names used in default mappings
+var sdlKeyNameMap = map[sdl.Keycode]string{
+	sdl.K_z:      "z",
+	sdl.K_x:      "x",
+	sdl.K_RETURN: "Enter",
+	sdl.K_SPACE:  "Space",
+	sdl.K_UP:     "Up",
+	sdl.K_DOWN:   "Down",
+	sdl.K_LEFT:   "Left",
+	sdl.K_RIGHT:  "Right",
+	sdl.K_w:      "w",
+	sdl.K_s:      "s",
+	sdl.K_a:      "a",
+	sdl.K_d:      "d",
+	sdl.K_p:      "p",
+	sdl.K_o:      "o",
+	sdl.K_i:      "i",
+	sdl.K_F1:     "F1",
+	sdl.K_F2:     "F2",
+	sdl.K_F3:     "F3",
+	sdl.K_F4:     "F4",
+	sdl.K_F5:     "F5",
+	sdl.K_F9:     "F9",
+	sdl.K_F10:    "F10",
+	sdl.K_F11:    "F11",
+	sdl.K_F12:    "F12",
+	sdl.K_ESCAPE: "Escape",
+	sdl.K_q:      "q",
+	sdl.K_1:      "1",
+	sdl.K_2:      "2",
+	sdl.K_3:      "3",
+	sdl.K_4:      "4",
+	sdl.K_t:      "t",
 }
+
+// buildKeyMapping creates the key mapping by using default mappings
+func buildKeyMapping() map[sdl.Keycode]action.Action {
+	mapping := make(map[sdl.Keycode]action.Action)
+
+	// Apply default mappings
+	for keycode, keyName := range sdlKeyNameMap {
+		if act, ok := input.GetDefaultMapping(keyName); ok {
+			mapping[keycode] = act
+		}
+	}
+
+	// SDL2-specific overrides (if any needed)
+	mapping[sdl.K_t] = action.EmulatorTestPatternCycle
+
+	return mapping
+}
+
+// keyMapping is built from default mappings
+var keyMapping = buildKeyMapping()
 
 // saveSnapshot takes a screenshot
 func (s *Backend) saveSnapshot() {
@@ -451,8 +475,8 @@ func (s *Backend) UpdateDebugData(oam *debug.OAMData, vram *debug.VRAMData) {
 	}
 }
 
-// HandleBackendAction processes backend-specific actions after debouncing
-func (s *Backend) HandleBackendAction(act action.Action) {
+// HandleAction processes backend-specific actions after debouncing
+func (s *Backend) HandleAction(act action.Action) {
 	switch act {
 	case action.EmulatorSnapshot:
 		s.saveSnapshot()
