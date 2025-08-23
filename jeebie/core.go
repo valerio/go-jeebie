@@ -346,6 +346,8 @@ func (e *DMG) ExtractDebugData() *debug.CompleteDebugData {
 		debuggerState = debug.DebuggerRunning
 	}
 
+	audioData := debug.ExtractAudioData(e.mem)
+
 	return &debug.CompleteDebugData{
 		OAM:             oamData,
 		VRAM:            vramData,
@@ -354,6 +356,7 @@ func (e *DMG) ExtractDebugData() *debug.CompleteDebugData {
 		DebuggerState:   debuggerState,
 		InterruptEnable: e.mem.Read(addr.IE),
 		InterruptFlags:  e.mem.Read(addr.IF),
+		Audio:           audioData,
 	}
 }
 

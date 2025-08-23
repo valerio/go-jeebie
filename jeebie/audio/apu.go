@@ -1,7 +1,9 @@
 package audio
 
 import (
+	"log/slog"
 	"sync"
+	"time"
 
 	"github.com/valerio/go-jeebie/jeebie/addr"
 	"github.com/valerio/go-jeebie/jeebie/bit"
@@ -56,6 +58,15 @@ type APU struct {
 	ch2Muted bool
 	ch3Muted bool
 	ch4Muted bool
+
+	// Debug tracking
+	debugStats struct {
+		samplesGenerated    uint64
+		frameSequencerTicks uint64
+		lastSampleTime      time.Time
+		lastFrameSeqTime    time.Time
+		cyclesProcessed     uint64
+	}
 }
 
 // New creates a new APU instance with initial register values
@@ -110,16 +121,53 @@ func (a *APU) Step(cycles int) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
+	// Track cycles for debugging
+	a.debugStats.cyclesProcessed += uint64(cycles)
+
+	// Frame sequencer (512 Hz)
 	a.frameCycles += cycles
 	if a.frameCycles >= frameSequencerCycles {
 		a.frameCycles -= frameSequencerCycles
 		a.updateFrameSequencer()
+
+		// Debug: Track frame sequencer timing
+		a.debugStats.frameSequencerTicks++
+		now := time.Now()
+		if a.debugStats.lastFrameSeqTime.IsZero() {
+			a.debugStats.lastFrameSeqTime = now
+		} else if a.debugStats.frameSequencerTicks%512 == 0 { // Log every second
+			elapsed := now.Sub(a.debugStats.lastFrameSeqTime)
+			actualRate := float64(512) / elapsed.Seconds()
+			slog.Debug("Frame sequencer rate",
+				"expected_hz", 512,
+				"actual_hz", actualRate,
+				"deviation", actualRate-512)
+			a.debugStats.lastFrameSeqTime = now
+		}
 	}
 
+	// Sample generation (~44100 Hz)
 	a.sampleCycleCounter += cycles
 	for a.sampleCycleCounter >= sampleCycles {
 		a.sampleCycleCounter -= sampleCycles
 		a.generateSample()
+
+		// Debug: Track sample rate
+		a.debugStats.samplesGenerated++
+		now := time.Now()
+		if a.debugStats.lastSampleTime.IsZero() {
+			a.debugStats.lastSampleTime = now
+		} else if a.debugStats.samplesGenerated%44100 == 0 { // Log every second
+			elapsed := now.Sub(a.debugStats.lastSampleTime)
+			actualRate := float64(44100) / elapsed.Seconds()
+			slog.Debug("Sample generation rate",
+				"expected_hz", 44100,
+				"actual_hz", actualRate,
+				"deviation", actualRate-44100,
+				"cycles_per_sample", sampleCycles,
+				"total_cycles", a.debugStats.cyclesProcessed)
+			a.debugStats.lastSampleTime = now
+		}
 	}
 }
 
@@ -178,18 +226,66 @@ func (a *APU) mixChannels() int16 {
 	}
 
 	var mixed int32
+	var ch1Val, ch2Val, ch3Val, ch4Val int16
 
 	if a.ch1Enabled && !a.ch1Muted {
-		mixed += int32(a.generateChannel1())
+		ch1Val = a.generateChannel1()
+		mixed += int32(ch1Val)
 	}
 	if a.ch2Enabled && !a.ch2Muted {
-		mixed += int32(a.generateChannel2())
+		ch2Val = a.generateChannel2()
+		mixed += int32(ch2Val)
 	}
 	if a.ch3Enabled && !a.ch3Muted {
-		mixed += int32(a.generateChannel3())
+		ch3Val = a.generateChannel3()
+		mixed += int32(ch3Val)
 	}
 	if a.ch4Enabled && !a.ch4Muted {
-		mixed += int32(a.generateChannel4())
+		ch4Val = a.generateChannel4()
+		mixed += int32(ch4Val)
+	}
+
+	// Debug: Log channel mixing periodically
+	if a.debugStats.samplesGenerated%4410 == 0 { // Every 0.1 seconds
+		activeChannels := 0
+		if a.ch1Enabled && !a.ch1Muted {
+			activeChannels++
+		}
+		if a.ch2Enabled && !a.ch2Muted {
+			activeChannels++
+		}
+		if a.ch3Enabled && !a.ch3Muted {
+			activeChannels++
+		}
+		if a.ch4Enabled && !a.ch4Muted {
+			activeChannels++
+		}
+
+		// Calculate actual Hz for each channel
+		ch1Hz := float64(0)
+		ch2Hz := float64(0)
+		ch3Hz := float64(0)
+		if a.ch1Freq > 0 {
+			ch1Hz = 131072.0 / float64(2048-a.ch1Freq)
+		}
+		if a.ch2Freq > 0 {
+			ch2Hz = 131072.0 / float64(2048-a.ch2Freq)
+		}
+		if a.ch3Freq > 0 {
+			ch3Hz = 65536.0 / float64(2048-a.ch3Freq)
+		}
+
+		slog.Debug("Channel mixing",
+			"ch1_val", ch1Val,
+			"ch2_val", ch2Val,
+			"ch3_val", ch3Val,
+			"ch4_val", ch4Val,
+			"mixed", mixed,
+			"active", activeChannels,
+			"ch1_hz", ch1Hz,
+			"ch2_hz", ch2Hz,
+			"ch3_hz", ch3Hz,
+			"ch4_on", a.ch4Enabled && !a.ch4Muted)
 	}
 
 	if mixed > maxSampleValue {
@@ -207,8 +303,16 @@ func (a *APU) generatePulseChannel(counter *uint16, volume uint8, freq uint16, d
 		return 0
 	}
 
+	// Fix: Increment counter by the correct amount for proper pitch
+	// Pulse timer runs at 131072 Hz, we sample at 44100 Hz
+	// So increment by ~2.97 per sample instead of 1
+	const timerIncrement = 3 // Approximation of 131072/44100
+
 	period := uint16(frequencyToTimerOffset - freq)
-	updateCounterWithPeriod(counter, period)
+	*counter += timerIncrement
+	if *counter >= period {
+		*counter %= period
+	}
 
 	pattern := dutyPatterns[duty&3]
 	phase := (*counter * dutyPhases) / period
@@ -243,8 +347,15 @@ func (a *APU) generateChannel3() int16 {
 		return 0
 	}
 
+	// Fix: Wave timer runs at 65536 Hz, we sample at 44100 Hz
+	// So increment by ~1.49 per sample
+	const waveTimerIncrement = 2 // Round up 65536/44100 ≈ 1.49
+
 	period := uint16(frequencyToTimerOffset - a.ch3Freq)
-	updateCounterWithPeriod(&a.ch3Counter, period)
+	a.ch3Counter += waveTimerIncrement
+	if a.ch3Counter >= period {
+		a.ch3Counter %= period
+	}
 
 	sampleIndex := (a.ch3Counter * waveTableSize) / period
 	nibbleIndex := sampleIndex / 2
@@ -264,10 +375,12 @@ func (a *APU) generateChannel3() int16 {
 }
 
 func (a *APU) generateChannel4() int16 {
-	if a.ch4Volume == 0 {
+	// Check both enabled flag AND volume
+	if !a.ch4Enabled || a.ch4Volume == 0 {
 		return 0
 	}
 
+	// TODO: Use actual frequency from NR43 register instead of fixed period
 	if updateCounterWithPeriod(&a.ch4Counter, noiseChannelPeriod) {
 		// LFSR feedback calculation
 		feedbackBit := (a.ch4LFSR & 1) ^ ((a.ch4LFSR >> 1) & 1)
@@ -408,13 +521,37 @@ func (a *APU) mapRegisterToState(address uint16, value uint8) {
 			a.ch3Counter = 0
 		}
 	case addr.NR42: // Channel 4 volume envelope
-		a.ch4Volume = value >> 4           // Bits 7-4: Initial volume
-		a.ch4Enabled = (value & 0xF8) != 0 // DAC enabled if bits 3-7 are not all zero
+		a.ch4Volume = value >> 4 // Bits 7-4: Initial volume
+		// DAC is enabled if any of bits 3-7 are set
+		dacEnabled := (value & 0xF8) != 0
+		if !dacEnabled {
+			// If DAC is disabled, the channel is immediately disabled
+			a.ch4Enabled = false
+		}
+		slog.Debug("Ch4 volume envelope", "value", value, "volume", a.ch4Volume, "dac_enabled", dacEnabled, "ch4_enabled", a.ch4Enabled)
+	case addr.NR41: // Channel 4 length timer
+		// Length timer implementation would go here
+		slog.Debug("Ch4 length timer", "value", value)
+	case addr.NR43: // Channel 4 frequency/randomness
+		slog.Debug("Ch4 frequency", "value", value,
+			"shift", (value>>4)&0x0F,
+			"width", (value>>3)&0x01,
+			"divisor", value&0x07)
 	case addr.NR44: // Channel 4 control
 		if bit.IsSet(7, value) { // Bit 7: Trigger
-			a.ch4LFSR = lfsrInitialValue
-			a.ch4Counter = 0
-			a.ch4Enabled = true
+			// Only enable channel if DAC is on (NR42 & 0xF8 != 0)
+			dacOn := (a.registers[0x21] & 0xF8) != 0
+			if dacOn {
+				a.ch4LFSR = lfsrInitialValue
+				a.ch4Counter = 0
+				a.ch4Enabled = true
+				slog.Debug("Ch4 triggered", "enabled", a.ch4Enabled, "volume", a.ch4Volume, "dac_on", dacOn)
+			} else {
+				slog.Debug("Ch4 trigger ignored - DAC off", "NR42", a.registers[0x21])
+			}
+		}
+		if bit.IsSet(6, value) { // Bit 6: Length enable
+			slog.Debug("Ch4 length enable", "value", value)
 		}
 	}
 

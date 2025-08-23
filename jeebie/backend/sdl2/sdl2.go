@@ -44,7 +44,9 @@ type Backend struct {
 	currentFrame *video.FrameBuffer
 
 	// Debug window
-	debugWindow *DebugWindow
+	debugWindow         *DebugWindow
+	debugUpdateCounter  int
+	debugUpdateInterval int
 
 	// Audio
 	audioDevice   sdl.AudioDeviceID
@@ -57,7 +59,8 @@ type Backend struct {
 // New creates a new SDL2 backend
 func New() *Backend {
 	return &Backend{
-		debugWindow: NewDebugWindow(),
+		debugWindow:         NewDebugWindow(),
+		debugUpdateInterval: 3, // Update debug window every 3 frames for smoother visualization
 	}
 }
 
@@ -172,6 +175,18 @@ func (s *Backend) Update(frame *video.FrameBuffer) ([]backend.InputEvent, error)
 	// Store current frame for snapshots and render
 	s.currentFrame = renderFrame
 	s.renderFrame(renderFrame)
+
+	// Update debug data periodically if debug window is visible
+	if s.debugWindow != nil && s.debugWindow.IsVisible() && s.debugProvider != nil {
+		s.debugUpdateCounter++
+		if s.debugUpdateCounter >= s.debugUpdateInterval {
+			s.debugUpdateCounter = 0
+			debugData := s.debugProvider.ExtractDebugData()
+			if debugData != nil && debugData.OAM != nil && debugData.VRAM != nil {
+				s.UpdateDebugData(debugData.OAM, debugData.VRAM, debugData.Audio)
+			}
+		}
+	}
 
 	// Render debug window if visible
 	if s.debugWindow != nil {
@@ -469,9 +484,10 @@ func (s *Backend) animateTestPattern() {
 }
 
 // UpdateDebugData updates the debug window with current emulator state
-func (s *Backend) UpdateDebugData(oam *debug.OAMData, vram *debug.VRAMData) {
+func (s *Backend) UpdateDebugData(oam *debug.OAMData, vram *debug.VRAMData, audio *debug.AudioData) {
 	if s.debugWindow != nil {
 		s.debugWindow.UpdateData(oam, vram)
+		s.debugWindow.UpdateAudioData(audio)
 	}
 }
 
@@ -491,7 +507,7 @@ func (s *Backend) HandleAction(act action.Action) {
 		if s.debugWindow != nil && s.debugWindow.IsVisible() && s.debugProvider != nil {
 			debugData := s.debugProvider.ExtractDebugData()
 			if debugData != nil && debugData.OAM != nil && debugData.VRAM != nil {
-				s.UpdateDebugData(debugData.OAM, debugData.VRAM)
+				s.UpdateDebugData(debugData.OAM, debugData.VRAM, debugData.Audio)
 			}
 		}
 	// Audio debugging actions
@@ -563,6 +579,7 @@ func (s *Backend) ToggleDebugWindow() {
 	// If we're showing the window, trigger a debug data update
 	if !wasVisible {
 		slog.Debug("Triggering debug data update")
+		s.debugUpdateCounter = 0 // Reset counter to trigger immediate update
 		s.handleDebugMessage("debug:update_window")
 	}
 }
@@ -578,7 +595,7 @@ func (s *Backend) handleDebugMessage(message string) {
 			debugData := s.debugProvider.ExtractDebugData()
 			if debugData != nil && debugData.OAM != nil && debugData.VRAM != nil {
 				slog.Debug("Extracted debug data", "oam_entries", len(debugData.OAM.Sprites))
-				s.UpdateDebugData(debugData.OAM, debugData.VRAM)
+				s.UpdateDebugData(debugData.OAM, debugData.VRAM, debugData.Audio)
 			}
 		}
 	case "debug:snapshot":

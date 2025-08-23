@@ -42,4 +42,5 @@ type CompleteDebugData struct {
 	DebuggerState   DebuggerState
 	InterruptEnable uint8 // IE register at 0xFFFF
 	InterruptFlags  uint8 // IF register at 0xFF0F
+	Audio           *AudioData
 }
