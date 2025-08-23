@@ -245,6 +245,7 @@ func handleEvent(emu jeebie.Emulator, b backend.Backend, evt backend.InputEvent,
 			}
 		}
 	default:
-		emu.HandleAction(evt.Action, evt.Type == event.Press)
+		// Handle both Press and Hold events as "pressed" state
+		emu.HandleAction(evt.Action, evt.Type == event.Press || evt.Type == event.Hold)
 	}
 }
