@@ -5,6 +5,7 @@ import (
 	"log/slog"
 
 	"github.com/valerio/go-jeebie/jeebie/addr"
+	"github.com/valerio/go-jeebie/jeebie/audio"
 	"github.com/valerio/go-jeebie/jeebie/bit"
 )
 
@@ -28,6 +29,7 @@ type MMU struct {
 	mbc       MBC
 	memory    []byte
 	joypad    *Joypad
+	apu       *audio.APU
 	regionMap [256]memRegion
 }
 
@@ -38,6 +40,7 @@ func New() *MMU {
 		memory: make([]byte, 0x10000),
 		cart:   NewCartridge(),
 		joypad: NewJoypad(),
+		apu:    audio.New(),
 	}
 	initRegionMap(mmu)
 	return mmu
@@ -166,6 +169,9 @@ func (m *MMU) Read(address uint16) byte {
 		if address == 0xFF00 {
 			return m.joypad.Read()
 		}
+		if address >= 0xFF10 && address <= 0xFF3F {
+			return m.apu.ReadRegister(address)
+		}
 		if address >= 0xFF80 {
 			// HRAM
 			return m.memory[address]
@@ -211,6 +217,10 @@ func (m *MMU) Write(address uint16, value byte) {
 			m.joypad.Write(value)
 			return
 		}
+		if address >= 0xFF10 && address <= 0xFF3F {
+			m.apu.WriteRegister(address, value)
+			return
+		}
 		if address == addr.DMA {
 			sourceAddr := uint16(value) << 8
 			// DMA transfer copies 160 bytes from source to OAM
@@ -248,4 +258,9 @@ func (m *MMU) GetJoypadState() (uint8, uint8) {
 // GetJoypad returns the joypad instance for direct access
 func (m *MMU) GetJoypad() *Joypad {
 	return m.joypad
+}
+
+// GetAPU returns the APU instance for direct access
+func (m *MMU) GetAPU() *audio.APU {
+	return m.apu
 }

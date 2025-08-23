@@ -1,6 +1,7 @@
 package backend
 
 import (
+	"github.com/valerio/go-jeebie/jeebie/audio"
 	"github.com/valerio/go-jeebie/jeebie/debug"
 	"github.com/valerio/go-jeebie/jeebie/input/action"
 	"github.com/valerio/go-jeebie/jeebie/input/event"
@@ -53,4 +54,5 @@ type BackendConfig struct {
 	ShowDebug     bool              // Backends may ignore unsupported features
 	TestPattern   bool              // Display test pattern instead of emulation
 	DebugProvider DebugDataProvider // Optional: For backends with debug features
+	APU           *audio.APU        // Optional: For backends with audio support
 }

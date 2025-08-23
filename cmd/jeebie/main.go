@@ -142,6 +142,13 @@ func runEmulator(c *cli.Context) error {
 		DebugProvider: emu,
 	}
 
+	// Pass APU if this is a real emulator (not test pattern)
+	if !testPattern {
+		if dmg, ok := emu.(*jeebie.DMG); ok {
+			config.APU = dmg.GetAPU()
+		}
+	}
+
 	if err := emulatorBackend.Init(config); err != nil {
 		return fmt.Errorf("failed to initialize backend: %v", err)
 	}

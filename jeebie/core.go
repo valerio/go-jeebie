@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	"github.com/valerio/go-jeebie/jeebie/addr"
+	"github.com/valerio/go-jeebie/jeebie/audio"
 	"github.com/valerio/go-jeebie/jeebie/cpu"
 	"github.com/valerio/go-jeebie/jeebie/debug"
 	"github.com/valerio/go-jeebie/jeebie/input/action"
@@ -150,6 +151,7 @@ func (e *DMG) RunUntilFrame() error {
 				cycles := e.cpu.Tick()
 				e.updateTimers(cycles)
 				e.gpu.Tick(cycles)
+				e.mem.GetAPU().Step(cycles)
 				e.instructionCount++
 				total += cycles
 
@@ -169,6 +171,7 @@ func (e *DMG) RunUntilFrame() error {
 		cycles := e.cpu.Tick()
 		e.updateTimers(cycles)
 		e.gpu.Tick(cycles)
+		e.mem.GetAPU().Step(cycles)
 		e.instructionCount++
 
 		total += cycles
@@ -183,6 +186,12 @@ func (e *DMG) RunUntilFrame() error {
 
 func (e *DMG) GetCurrentFrame() *video.FrameBuffer {
 	return e.gpu.GetFrameBuffer()
+}
+
+// GetAPU returns the APU for audio backends. This is intentionally not part of
+// the Emulator interface to avoid leaking implementation details.
+func (e *DMG) GetAPU() *audio.APU {
+	return e.mem.GetAPU()
 }
 
 func (e *DMG) HandleKeyPress(key memory.JoypadKey) {

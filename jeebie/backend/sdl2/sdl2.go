@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"unsafe"
 
+	"github.com/valerio/go-jeebie/jeebie/audio"
 	"github.com/valerio/go-jeebie/jeebie/backend"
 	"github.com/valerio/go-jeebie/jeebie/debug"
 	"github.com/valerio/go-jeebie/jeebie/display"
@@ -44,6 +45,10 @@ type Backend struct {
 	// Debug window
 	debugWindow *DebugWindow
 
+	// Audio
+	audioDevice sdl.AudioDeviceID
+	apu         *audio.APU
+
 	pixelBuffer []byte
 	eventBuffer []backend.InputEvent
 }
@@ -59,8 +64,9 @@ func New() *Backend {
 func (s *Backend) Init(config backend.BackendConfig) error {
 	s.config = config
 	s.debugProvider = config.DebugProvider
+	s.apu = config.APU
 
-	if err := sdl.Init(sdl.INIT_VIDEO | sdl.INIT_EVENTS); err != nil {
+	if err := sdl.Init(sdl.INIT_VIDEO | sdl.INIT_EVENTS | sdl.INIT_AUDIO); err != nil {
 		return fmt.Errorf("failed to initialize SDL2: %v", err)
 	}
 
@@ -112,14 +118,19 @@ func (s *Backend) Init(config backend.BackendConfig) error {
 
 	s.running = true
 
+	// Initialize audio if APU is available and not in test pattern mode
+	if s.apu != nil && !config.TestPattern {
+		if err := s.initAudio(); err != nil {
+			slog.Warn("Failed to initialize audio", "error", err)
+		}
+	}
+
 	// Initialize debug window if ShowDebug is enabled
 	if config.ShowDebug {
 		if err := s.debugWindow.Init(); err != nil {
 			slog.Warn("Failed to initialize debug window", "error", err)
 		}
 	}
-
-	// Register SDL2-specific callbacks
 
 	if config.TestPattern {
 		s.testPatternFrame = video.NewFrameBuffer()
@@ -166,6 +177,11 @@ func (s *Backend) Update(frame *video.FrameBuffer) ([]backend.InputEvent, error)
 		s.debugWindow.Render()
 	}
 
+	// Queue audio samples if available
+	if s.audioDevice != 0 && s.apu != nil {
+		s.queueAudioSamples()
+	}
+
 	return s.eventBuffer, nil
 }
 
@@ -173,6 +189,9 @@ func (s *Backend) Update(frame *video.FrameBuffer) ([]backend.InputEvent, error)
 func (s *Backend) Cleanup() error {
 	slog.Info("Cleaning up SDL2 backend")
 
+	if s.audioDevice != 0 {
+		sdl.CloseAudioDevice(s.audioDevice)
+	}
 	if s.debugWindow != nil {
 		s.debugWindow.Cleanup()
 	}
@@ -494,4 +513,56 @@ func (s *Backend) handleDebugMessage(message string) {
 	default:
 		// Ignore unhandled messages
 	}
+}
+
+// queueAudioSamples gets samples from APU and queues them for playback
+func (s *Backend) queueAudioSamples() {
+	if s.apu == nil || s.audioDevice == 0 {
+		return
+	}
+
+	// Get queued audio size and queue more if needed
+	queuedBytes := sdl.GetQueuedAudioSize(s.audioDevice)
+	const targetBytes = 2048 * 4 // Target ~2048 stereo samples
+
+	if queuedBytes < targetBytes {
+		// Get samples from APU
+		samplesToGet := (targetBytes - queuedBytes) / 4
+		samples := s.apu.GetSamples(int(samplesToGet))
+
+		if len(samples) > 0 {
+			// Convert mono to stereo
+			stereoSamples := make([]int16, len(samples)*2)
+			for i, sample := range samples {
+				stereoSamples[i*2] = sample
+				stereoSamples[i*2+1] = sample
+			}
+
+			// Queue the audio
+			sliceHeader := (*[1 << 30]byte)(unsafe.Pointer(&stereoSamples[0]))[: len(stereoSamples)*2 : len(stereoSamples)*2]
+			sdl.QueueAudio(s.audioDevice, sliceHeader)
+		}
+	}
+}
+
+// initAudio initializes SDL2 audio subsystem
+func (s *Backend) initAudio() error {
+	spec := &sdl.AudioSpec{
+		Freq:     44100,
+		Format:   sdl.AUDIO_S16LSB,
+		Channels: 2,
+		Samples:  512,
+	}
+
+	obtained := &sdl.AudioSpec{}
+	audioDevice, err := sdl.OpenAudioDevice("", false, spec, obtained, 0)
+	if err != nil {
+		return fmt.Errorf("failed to open audio device: %v", err)
+	}
+
+	s.audioDevice = audioDevice
+	sdl.PauseAudioDevice(s.audioDevice, false)
+
+	slog.Info("Audio initialized", "freq", obtained.Freq, "samples", obtained.Samples)
+	return nil
 }
