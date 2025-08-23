@@ -188,9 +188,7 @@ func (e *DMG) GetCurrentFrame() *video.FrameBuffer {
 	return e.gpu.GetFrameBuffer()
 }
 
-// GetAPU returns the APU for audio backends. This is intentionally not part of
-// the Emulator interface to avoid leaking implementation details.
-func (e *DMG) GetAPU() *audio.APU {
+func (e *DMG) GetAudioProvider() audio.Provider {
 	return e.mem.GetAPU()
 }
 

@@ -140,13 +140,7 @@ func runEmulator(c *cli.Context) error {
 		ShowDebug:     c.Bool("debug"),
 		TestPattern:   testPattern,
 		DebugProvider: emu,
-	}
-
-	// Pass APU if this is a real emulator (not test pattern)
-	if !testPattern {
-		if dmg, ok := emu.(*jeebie.DMG); ok {
-			config.APU = dmg.GetAPU()
-		}
+		AudioProvider: emu.GetAudioProvider(),
 	}
 
 	if err := emulatorBackend.Init(config); err != nil {
@@ -244,7 +238,12 @@ func handleEvent(emu jeebie.Emulator, b backend.Backend, evt backend.InputEvent,
 		}
 	// Backend-specific actions that need special handling
 	case action.EmulatorSnapshot, action.EmulatorTestPatternCycle,
-		action.EmulatorDebugToggle, action.EmulatorDebugUpdate:
+		action.EmulatorDebugToggle, action.EmulatorDebugUpdate,
+		action.AudioToggleChannel1, action.AudioToggleChannel2,
+		action.AudioToggleChannel3, action.AudioToggleChannel4,
+		action.AudioSoloChannel1, action.AudioSoloChannel2,
+		action.AudioSoloChannel3, action.AudioSoloChannel4,
+		action.AudioShowStatus:
 		if evt.Type == event.Press {
 			// Let SDL2 backend handle its specific actions
 			if sdlBackend, ok := b.(*sdl2.Backend); ok {

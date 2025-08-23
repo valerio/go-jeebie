@@ -1,6 +1,7 @@
 package jeebie
 
 import (
+	"github.com/valerio/go-jeebie/jeebie/audio"
 	"github.com/valerio/go-jeebie/jeebie/debug"
 	"github.com/valerio/go-jeebie/jeebie/input/action"
 	"github.com/valerio/go-jeebie/jeebie/timing"
@@ -15,6 +16,7 @@ type Emulator interface {
 	ExtractDebugData() *debug.CompleteDebugData
 	SetFrameLimiter(limiter timing.Limiter)
 	ResetFrameTiming()
+	GetAudioProvider() audio.Provider
 }
 
 var _ Emulator = (*DMG)(nil)

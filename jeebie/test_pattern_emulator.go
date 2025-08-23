@@ -1,6 +1,7 @@
 package jeebie
 
 import (
+	"github.com/valerio/go-jeebie/jeebie/audio"
 	"github.com/valerio/go-jeebie/jeebie/debug"
 	"github.com/valerio/go-jeebie/jeebie/display"
 	"github.com/valerio/go-jeebie/jeebie/input/action"
@@ -160,6 +161,10 @@ func (e *TestPatternEmulator) SetFrameLimiter(limiter timing.Limiter) {
 
 func (e *TestPatternEmulator) ResetFrameTiming() {
 	e.limiter.Reset()
+}
+
+func (e *TestPatternEmulator) GetAudioProvider() audio.Provider {
+	return nil // Test pattern has no audio
 }
 
 var _ Emulator = (*TestPatternEmulator)(nil)

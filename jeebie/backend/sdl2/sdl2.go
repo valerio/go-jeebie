@@ -46,8 +46,8 @@ type Backend struct {
 	debugWindow *DebugWindow
 
 	// Audio
-	audioDevice sdl.AudioDeviceID
-	apu         *audio.APU
+	audioDevice   sdl.AudioDeviceID
+	audioProvider audio.Provider
 
 	pixelBuffer []byte
 	eventBuffer []backend.InputEvent
@@ -64,7 +64,7 @@ func New() *Backend {
 func (s *Backend) Init(config backend.BackendConfig) error {
 	s.config = config
 	s.debugProvider = config.DebugProvider
-	s.apu = config.APU
+	s.audioProvider = config.AudioProvider
 
 	if err := sdl.Init(sdl.INIT_VIDEO | sdl.INIT_EVENTS | sdl.INIT_AUDIO); err != nil {
 		return fmt.Errorf("failed to initialize SDL2: %v", err)
@@ -118,8 +118,8 @@ func (s *Backend) Init(config backend.BackendConfig) error {
 
 	s.running = true
 
-	// Initialize audio if APU is available and not in test pattern mode
-	if s.apu != nil && !config.TestPattern {
+	// Initialize audio if AudioProvider is available and not in test pattern mode
+	if s.audioProvider != nil && !config.TestPattern {
 		if err := s.initAudio(); err != nil {
 			slog.Warn("Failed to initialize audio", "error", err)
 		}
@@ -178,7 +178,7 @@ func (s *Backend) Update(frame *video.FrameBuffer) ([]backend.InputEvent, error)
 	}
 
 	// Queue audio samples if available
-	if s.audioDevice != 0 && s.apu != nil {
+	if s.audioDevice != 0 && s.audioProvider != nil {
 		s.queueAudioSamples()
 	}
 
@@ -240,6 +240,17 @@ var keyMapping = map[sdl.Keycode]action.Action{
 	sdl.K_ESCAPE: action.EmulatorQuit,
 	sdl.K_SPACE:  action.EmulatorPauseToggle,
 	sdl.K_t:      action.EmulatorTestPatternCycle,
+
+	// Audio debugging
+	sdl.K_F1: action.AudioToggleChannel1,
+	sdl.K_F2: action.AudioToggleChannel2,
+	sdl.K_F3: action.AudioToggleChannel3,
+	sdl.K_F4: action.AudioToggleChannel4,
+	sdl.K_F5: action.AudioSoloChannel1,
+	sdl.K_F6: action.AudioSoloChannel2,
+	sdl.K_F7: action.AudioSoloChannel3,
+	sdl.K_F8: action.AudioSoloChannel4,
+	sdl.K_d:  action.AudioShowStatus,
 
 	// Game Boy controls
 	sdl.K_RETURN: action.GBButtonStart,
@@ -459,6 +470,51 @@ func (s *Backend) HandleBackendAction(act action.Action) {
 				s.UpdateDebugData(debugData.OAM, debugData.VRAM)
 			}
 		}
+	// Audio debugging actions
+	case action.AudioToggleChannel1:
+		if s.audioProvider != nil {
+			s.audioProvider.ToggleChannel(1)
+			s.logAudioStatus("Toggled channel 1")
+		}
+	case action.AudioToggleChannel2:
+		if s.audioProvider != nil {
+			s.audioProvider.ToggleChannel(2)
+			s.logAudioStatus("Toggled channel 2")
+		}
+	case action.AudioToggleChannel3:
+		if s.audioProvider != nil {
+			s.audioProvider.ToggleChannel(3)
+			s.logAudioStatus("Toggled channel 3")
+		}
+	case action.AudioToggleChannel4:
+		if s.audioProvider != nil {
+			s.audioProvider.ToggleChannel(4)
+			s.logAudioStatus("Toggled channel 4")
+		}
+	case action.AudioSoloChannel1:
+		if s.audioProvider != nil {
+			s.audioProvider.SoloChannel(1)
+			s.logAudioStatus("Solo channel 1")
+		}
+	case action.AudioSoloChannel2:
+		if s.audioProvider != nil {
+			s.audioProvider.SoloChannel(2)
+			s.logAudioStatus("Solo channel 2")
+		}
+	case action.AudioSoloChannel3:
+		if s.audioProvider != nil {
+			s.audioProvider.SoloChannel(3)
+			s.logAudioStatus("Solo channel 3")
+		}
+	case action.AudioSoloChannel4:
+		if s.audioProvider != nil {
+			s.audioProvider.SoloChannel(4)
+			s.logAudioStatus("Solo channel 4")
+		}
+	case action.AudioShowStatus:
+		if s.audioProvider != nil {
+			s.logAudioStatus("Audio status")
+		}
 	}
 }
 
@@ -515,9 +571,23 @@ func (s *Backend) handleDebugMessage(message string) {
 	}
 }
 
-// queueAudioSamples gets samples from APU and queues them for playback
+// logAudioStatus logs the current audio channel status
+func (s *Backend) logAudioStatus(message string) {
+	if s.audioProvider == nil {
+		return
+	}
+	ch1, ch2, ch3, ch4 := s.audioProvider.GetChannelStatus()
+	slog.Info(message,
+		"ch1", ch1,
+		"ch2", ch2,
+		"ch3", ch3,
+		"ch4", ch4,
+	)
+}
+
+// queueAudioSamples gets samples from audio provider and queues them for playback
 func (s *Backend) queueAudioSamples() {
-	if s.apu == nil || s.audioDevice == 0 {
+	if s.audioProvider == nil || s.audioDevice == 0 {
 		return
 	}
 
@@ -526,9 +596,8 @@ func (s *Backend) queueAudioSamples() {
 	const targetBytes = 2048 * 4 // Target ~2048 stereo samples
 
 	if queuedBytes < targetBytes {
-		// Get samples from APU
 		samplesToGet := (targetBytes - queuedBytes) / 4
-		samples := s.apu.GetSamples(int(samplesToGet))
+		samples := s.audioProvider.GetSamples(int(samplesToGet))
 
 		if len(samples) > 0 {
 			// Convert mono to stereo

@@ -23,4 +23,15 @@ const (
 	EmulatorStepInstruction
 	EmulatorTestPatternCycle
 	EmulatorQuit
+
+	// Audio debugging
+	AudioToggleChannel1
+	AudioToggleChannel2
+	AudioToggleChannel3
+	AudioToggleChannel4
+	AudioSoloChannel1
+	AudioSoloChannel2
+	AudioSoloChannel3
+	AudioSoloChannel4
+	AudioShowStatus
 )

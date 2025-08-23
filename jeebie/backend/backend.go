@@ -54,5 +54,5 @@ type BackendConfig struct {
 	ShowDebug     bool              // Backends may ignore unsupported features
 	TestPattern   bool              // Display test pattern instead of emulation
 	DebugProvider DebugDataProvider // Optional: For backends with debug features
-	APU           *audio.APU        // Optional: For backends with audio support
+	AudioProvider audio.Provider    // Optional: For backends with audio support
 }

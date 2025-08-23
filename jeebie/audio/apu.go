@@ -50,6 +50,12 @@ type APU struct {
 	ch4Volume  uint8
 	ch4LFSR    uint16 // Linear feedback shift register for noise
 	ch4Counter uint16
+
+	// Debug channel muting
+	ch1Muted bool
+	ch2Muted bool
+	ch3Muted bool
+	ch4Muted bool
 }
 
 // New creates a new APU instance with initial register values
@@ -173,16 +179,16 @@ func (a *APU) mixChannels() int16 {
 
 	var mixed int32
 
-	if a.ch1Enabled {
+	if a.ch1Enabled && !a.ch1Muted {
 		mixed += int32(a.generateChannel1())
 	}
-	if a.ch2Enabled {
+	if a.ch2Enabled && !a.ch2Muted {
 		mixed += int32(a.generateChannel2())
 	}
-	if a.ch3Enabled {
+	if a.ch3Enabled && !a.ch3Muted {
 		mixed += int32(a.generateChannel3())
 	}
-	if a.ch4Enabled {
+	if a.ch4Enabled && !a.ch4Muted {
 		mixed += int32(a.generateChannel4())
 	}
 
@@ -475,4 +481,68 @@ func (a *APU) Reset() {
 	a.ch4Counter = 0
 
 	a.initRegisters()
+}
+
+// MuteChannel mutes or unmutes a specific audio channel for debugging
+func (a *APU) MuteChannel(channel int, muted bool) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	switch channel {
+	case 1:
+		a.ch1Muted = muted
+	case 2:
+		a.ch2Muted = muted
+	case 3:
+		a.ch3Muted = muted
+	case 4:
+		a.ch4Muted = muted
+	}
+}
+
+// ToggleChannel toggles muting for a specific channel
+func (a *APU) ToggleChannel(channel int) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	switch channel {
+	case 1:
+		a.ch1Muted = !a.ch1Muted
+	case 2:
+		a.ch2Muted = !a.ch2Muted
+	case 3:
+		a.ch3Muted = !a.ch3Muted
+	case 4:
+		a.ch4Muted = !a.ch4Muted
+	}
+}
+
+// SoloChannel mutes all channels except the specified one
+func (a *APU) SoloChannel(channel int) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	a.ch1Muted = (channel != 1)
+	a.ch2Muted = (channel != 2)
+	a.ch3Muted = (channel != 3)
+	a.ch4Muted = (channel != 4)
+}
+
+// UnmuteAll unmutes all channels
+func (a *APU) UnmuteAll() {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	a.ch1Muted = false
+	a.ch2Muted = false
+	a.ch3Muted = false
+	a.ch4Muted = false
+}
+
+// GetChannelStatus returns the current mute status and basic info for all channels
+func (a *APU) GetChannelStatus() (ch1, ch2, ch3, ch4 bool) {
+	return !a.ch1Muted && a.ch1Enabled,
+		!a.ch2Muted && a.ch2Enabled,
+		!a.ch3Muted && a.ch3Enabled,
+		!a.ch4Muted && a.ch4Enabled
 }
