@@ -190,7 +190,7 @@ func frequencyToNote(freq float64) string {
 		return "--"
 	}
 
-	return notes[noteIndex] + string('0'+octave)
+	return notes[noteIndex] + string(rune('0'+octave))
 }
 
 func logBase2(x float64) float64 {
