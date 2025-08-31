@@ -1,8 +1,6 @@
 package debug
 
 import (
-	"fmt"
-
 	"github.com/valerio/go-jeebie/jeebie/disasm"
 )
 
@@ -17,32 +15,31 @@ func CreateDisassembly(snapshot *MemorySnapshot, pc uint16, maxLines int) []Disa
 		return nil
 	}
 
+	// Check if PC is within the snapshot range
+	pcInSnapshot := pc >= snapshot.StartAddr && pc < snapshot.StartAddr+uint16(len(snapshot.Bytes))
 	pcOffset := -1
-	if pc >= snapshot.StartAddr && pc < snapshot.StartAddr+uint16(len(snapshot.Bytes)) {
+	if pcInSnapshot {
 		pcOffset = int(pc - snapshot.StartAddr)
 	}
 
-	// If PC is not in snapshot, just show what we have and mark nothing as current
-	if pcOffset < 0 {
+	if !pcInSnapshot {
 		lines := []DisasmLine{}
-		for i := 0; i < len(snapshot.Bytes) && len(lines) < maxLines; {
+		for i := 0; i < len(snapshot.Bytes) && len(lines) < maxLines-1; {
 			addr := snapshot.StartAddr + uint16(i)
 			instruction, length := disasm.DisassembleBytes(snapshot.Bytes, i)
 			lines = append(lines, DisasmLine{
 				Address:     addr,
 				Instruction: instruction,
-				IsCurrent:   addr == pc, // Still mark if it happens to match
+				IsCurrent:   false,
 			})
 			i += length
 		}
 		// Add a special line indicating PC is outside snapshot
-		if len(lines) < maxLines {
-			lines = append(lines, DisasmLine{
-				Address:     pc,
-				Instruction: fmt.Sprintf("[PC: 0x%04X - outside snapshot]", pc),
-				IsCurrent:   true,
-			})
-		}
+		lines = append(lines, DisasmLine{
+			Address:     pc,
+			Instruction: "[PC outside snapshot range]",
+			IsCurrent:   true,
+		})
 		return lines
 	}
 
@@ -98,8 +95,45 @@ func CreateDisassembly(snapshot *MemorySnapshot, pc uint16, maxLines int) []Disa
 		return allLines[startIdx:endIdx]
 	}
 
-	if len(allLines) > maxLines {
-		return allLines[:maxLines]
+	// PC should be in snapshot but we didn't find it in our disassembly
+	// This can happen if we started disassembling from the middle of an instruction
+	// Try to show instructions around where PC should be
+	if len(allLines) > 0 {
+		// Find the closest instruction to PC
+		closestIdx := 0
+		closestDist := uint16(0xFFFF)
+		for i, line := range allLines {
+			var dist uint16
+			if line.Address > pc {
+				dist = line.Address - pc
+			} else {
+				dist = pc - line.Address
+			}
+			if dist < closestDist {
+				closestDist = dist
+				closestIdx = i
+			}
+		}
+
+		// Center around the closest instruction
+		halfHeight := maxLines / 2
+		startIdx := closestIdx - halfHeight
+		endIdx := closestIdx + halfHeight + 1
+
+		if startIdx < 0 {
+			startIdx = 0
+			endIdx = maxLines
+		}
+		if endIdx > len(allLines) {
+			endIdx = len(allLines)
+			startIdx = endIdx - maxLines
+			if startIdx < 0 {
+				startIdx = 0
+			}
+		}
+
+		return allLines[startIdx:endIdx]
 	}
+
 	return allLines
 }

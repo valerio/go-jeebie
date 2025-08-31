@@ -319,11 +319,17 @@ func (e *DMG) ExtractDebugData() *debug.Data {
 		startAddr = 0
 	}
 
+	// Adjust snapshot size to avoid address space wraparound
+	actualSize := snapshotSize
+	if uint32(startAddr)+uint32(snapshotSize) > 0xFFFF {
+		actualSize = int(0x10000 - uint32(startAddr))
+	}
+
 	memSnapshot := &debug.MemorySnapshot{
 		StartAddr: startAddr,
-		Bytes:     make([]uint8, snapshotSize),
+		Bytes:     make([]uint8, actualSize),
 	}
-	for i := 0; i < snapshotSize; i++ {
+	for i := 0; i < actualSize; i++ {
 		addr := startAddr + uint16(i)
 		if addr < 0x8000 || (addr >= 0xA000 && addr < 0xE000) || addr >= 0xFE00 {
 			// Safe to read from these areas

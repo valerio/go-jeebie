@@ -150,65 +150,65 @@ func (dw *DebugWindow) renderSpritePanel() {
 		return
 	}
 
-	// Show first 20 sprites regardless of visibility
+	// Show all 40 sprites in a 2-column layout
 	sprites := dw.spriteVis.Sprites
-	maxDisplay := 20
-	if len(sprites) < maxDisplay {
-		maxDisplay = len(sprites)
-	}
+	const spritesPerColumn = 20
+	const columnWidth = 200
+	const rowHeight = 16
 
-	for i := 0; i < maxDisplay && i < len(sprites); i++ {
+	for i := 0; i < len(sprites) && i < 40; i++ {
 		sprite := sprites[i]
-		y := int32(45 + i*15)
-		x := int32(20)
 
-		dw.renderSmallSpriteTile(sprite.TileData, x, y)
+		// Calculate position (2 columns)
+		column := i / spritesPerColumn
+		row := i % spritesPerColumn
+		x := int32(20 + column*columnWidth)
+		y := int32(45 + row*rowHeight)
 
-		var paletteStr string
-		if sprite.Info.Sprite.PaletteOBP1 {
-			paletteStr = "OBP1"
-		} else {
-			paletteStr = "OBP0"
-		}
+		// Render the small sprite tile
+		dw.renderSmallSpriteTile(sprite.TileData, x, y+2)
 
-		// Color code based on visibility
+		// Determine text color based on visibility
 		textR, textG, textB := uint8(200), uint8(200), uint8(200)
 		if !sprite.Info.IsVisible {
 			textR, textG, textB = 100, 100, 100
 		}
 
-		info := fmt.Sprintf("#%02d T:%02X X:%3d Y:%3d %s",
+		// Compact info: index, tile, position
+		info := fmt.Sprintf("%02d:%02X (%3d,%3d)",
 			sprite.Info.Index,
 			sprite.Info.Sprite.TileIndex,
 			sprite.X,
 			sprite.Y,
-			paletteStr,
 		)
 
-		DrawText(dw.renderer, info, x+20, y, 1, textR, textG, textB)
+		DrawText(dw.renderer, info, x+12, y+3, 1, textR, textG, textB)
 
-		var flags []string
+		// Show flags as single letters
+		flagX := x + 140
 		if sprite.Info.Sprite.FlipX {
-			flags = append(flags, "FX")
+			DrawText(dw.renderer, "X", flagX, y+3, 1, 255, 150, 150)
+			flagX += 8
 		}
 		if sprite.Info.Sprite.FlipY {
-			flags = append(flags, "FY")
+			DrawText(dw.renderer, "Y", flagX, y+3, 1, 150, 255, 150)
+			flagX += 8
 		}
 		if sprite.Info.Sprite.BehindBG {
-			flags = append(flags, "BG")
+			DrawText(dw.renderer, "B", flagX, y+3, 1, 150, 150, 255)
+			flagX += 8
 		}
-
-		if len(flags) > 0 {
-			flagStr := ""
-			for i, f := range flags {
-				if i > 0 {
-					flagStr += " "
-				}
-				flagStr += f
-			}
-			DrawText(dw.renderer, flagStr, x+280, y, 1, 150, 200, 255)
+		if sprite.Info.Sprite.PaletteOBP1 {
+			DrawText(dw.renderer, "1", flagX, y+3, 1, 255, 255, 150)
+		} else {
+			DrawText(dw.renderer, "0", flagX, y+3, 1, 200, 200, 200)
 		}
 	}
+
+	// Legend at bottom
+	legendY := int32(45 + spritesPerColumn*rowHeight + 5)
+	DrawText(dw.renderer, "Format: ID:Tile (X,Y) | Flags: X=FlipX Y=FlipY B=BG 0/1=Palette",
+		20, legendY, 1, 150, 150, 150)
 }
 
 func (dw *DebugWindow) renderBackgroundPanel() {
@@ -271,14 +271,12 @@ func (dw *DebugWindow) renderBackgroundPanel() {
 }
 
 func (dw *DebugWindow) renderTilemap() {
-	// Note: We don't clear the buffer as tiles will overwrite all pixels
-
 	for row := 0; row < 32; row++ {
 		for col := 0; col < 32; col++ {
 			tileIndex := dw.bgVis.Tilemap[row][col]
 			var tile video.Tile
 
-			// Use the same tile fetching logic as the GPU
+			// TODO: Use the same tile fetching logic as the GPU
 			useSigned := dw.bgVis.TileDataBase == 0x8800
 			tile = debug.GetTileForBackgroundIndex(dw.bgVis.TileData, tileIndex, useSigned)
 
