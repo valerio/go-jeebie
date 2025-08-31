@@ -190,6 +190,49 @@ func DisassembleAround(currentPC uint16, beforeCount, afterCount int, mmu *memor
 	return lines
 }
 
+// DisassembleBytes disassembles a single instruction from a byte slice
+// Returns the formatted instruction string and its length in bytes
+// This is useful for disassembling from memory snapshots
+func DisassembleBytes(bytes []uint8, offset int) (string, int) {
+	if offset >= len(bytes) {
+		return "???", 1
+	}
+
+	opcode := bytes[offset]
+	if opcode == 0xCB {
+		if offset+1 < len(bytes) {
+			cbOpcode := bytes[offset+1]
+			return CBInstructionTemplates[cbOpcode], CBInstructionLengths[cbOpcode]
+		}
+		return "CB ???", 1
+	}
+
+	template := InstructionTemplates[opcode]
+	length := InstructionLengths[opcode]
+	switch length {
+	case 1:
+		return template, length
+	case 2:
+		if offset+1 < len(bytes) {
+			n := bytes[offset+1]
+			return fmt.Sprintf(template, n), length
+		}
+		return fmt.Sprintf(template, 0), 1
+	case 3:
+		if offset+2 < len(bytes) {
+			low := bytes[offset+1]
+			high := bytes[offset+2]
+			nn := uint16(high)<<8 | uint16(low)
+			return fmt.Sprintf(template, nn), length
+		} else if offset+1 < len(bytes) {
+			return fmt.Sprintf(template, 0), 2
+		}
+		return fmt.Sprintf(template, 0), 1
+	default:
+		return template, length
+	}
+}
+
 // FormatDisassemblyLine formats a disassembly line for display
 func FormatDisassemblyLine(line DisassemblyLine, isCurrentPC bool) string {
 	prefix := " "

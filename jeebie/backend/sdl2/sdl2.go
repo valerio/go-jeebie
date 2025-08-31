@@ -280,6 +280,8 @@ var sdlKeyNameMap = map[sdl.Keycode]string{
 	sdl.K_3:      "3",
 	sdl.K_4:      "4",
 	sdl.K_t:      "t",
+	sdl.K_f:      "f",
+	sdl.K_n:      "n",
 }
 
 // buildKeyMapping creates the key mapping by using default mappings

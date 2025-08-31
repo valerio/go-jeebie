@@ -14,6 +14,7 @@ import (
 const (
 	DebugWindowWidth  = 1280
 	DebugWindowHeight = 800
+	maxDisasmLines    = 20
 )
 
 type DebugWindow struct {
@@ -21,15 +22,15 @@ type DebugWindow struct {
 	renderer *sdl.Renderer
 	visible  bool
 
-	spriteTexture  *sdl.Texture
-	bgTexture      *sdl.Texture
-	minimapTexture *sdl.Texture
+	spriteTexture *sdl.Texture
+	bgTexture     *sdl.Texture
 
 	// Cached visualizers to avoid allocations
 	cachedSpriteVis debug.SpriteVisualizer
 	cachedBgVis     debug.BackgroundVisualizer
 
 	// Pointers to current data
+	debugData  *debug.Data // Full debug data for disassembly
 	spriteVis  *debug.SpriteVisualizer
 	bgVis      *debug.BackgroundVisualizer
 	paletteVis *debug.PaletteVisualizer
@@ -40,7 +41,6 @@ type DebugWindow struct {
 
 	// Pre-allocated buffers to avoid allocations in hot loops
 	tilemapPixelBuffer []byte // 256*256*4 bytes for tilemap rendering
-	minimapPixelBuffer []byte // 160*144*4 bytes for minimap rendering
 
 	needsUpdate bool
 }
@@ -91,18 +91,8 @@ func (dw *DebugWindow) Init() error {
 		return err
 	}
 
-	dw.minimapTexture, err = renderer.CreateTexture(
-		sdl.PIXELFORMAT_RGBA8888,
-		sdl.TEXTUREACCESS_STREAMING,
-		160, 144,
-	)
-	if err != nil {
-		return err
-	}
-
 	// Pre-allocate pixel buffers to avoid allocations in hot loops
 	dw.tilemapPixelBuffer = make([]byte, 256*256*4)
-	dw.minimapPixelBuffer = make([]byte, 160*144*4)
 
 	dw.window.Hide()
 	return nil
@@ -113,6 +103,7 @@ func (dw *DebugWindow) UpdateData(debugData *debug.Data) {
 		return
 	}
 
+	dw.debugData = debugData
 	dw.spriteVis = debugData.SpriteVis
 	dw.bgVis = debugData.BackgroundVis
 	dw.paletteVis = debugData.PaletteVis
@@ -134,7 +125,7 @@ func (dw *DebugWindow) Render() error {
 	dw.renderSpritePanel()
 	dw.renderBackgroundPanel()
 	dw.renderPalettePanel()
-	dw.renderMinimapPanel()
+	dw.renderDisassemblyPanel()
 
 	if dw.audioData != nil {
 		dw.renderAudioPanel()
@@ -196,22 +187,28 @@ func (dw *DebugWindow) renderSpritePanel() {
 
 		DrawText(dw.renderer, info, x+20, y, 1, textR, textG, textB)
 
+		var flags []string
 		if sprite.Info.Sprite.FlipX {
-			dw.renderer.SetDrawColor(255, 100, 100, 255)
-			dw.renderer.DrawLine(x+300, y+4, x+305, y+4)
+			flags = append(flags, "FX")
 		}
 		if sprite.Info.Sprite.FlipY {
-			dw.renderer.SetDrawColor(100, 255, 100, 255)
-			dw.renderer.DrawLine(x+310, y+4, x+315, y+4)
+			flags = append(flags, "FY")
 		}
 		if sprite.Info.Sprite.BehindBG {
-			dw.renderer.SetDrawColor(100, 100, 255, 255)
-			dw.renderer.DrawLine(x+320, y+4, x+325, y+4)
+			flags = append(flags, "BG")
+		}
+
+		if len(flags) > 0 {
+			flagStr := ""
+			for i, f := range flags {
+				if i > 0 {
+					flagStr += " "
+				}
+				flagStr += f
+			}
+			DrawText(dw.renderer, flagStr, x+280, y, 1, 150, 200, 255)
 		}
 	}
-
-	legendY := int32(45 + maxDisplay*15 + 10)
-	DrawText(dw.renderer, "Flags: Red=FlipX Green=FlipY Blue=BehindBG", 20, legendY, 1, 150, 150, 150)
 }
 
 func (dw *DebugWindow) renderBackgroundPanel() {
@@ -341,8 +338,8 @@ func (dw *DebugWindow) renderPalettePanel() {
 	}
 }
 
-func (dw *DebugWindow) renderMinimapPanel() {
-	dw.renderPanelLabel(10, 390, "Screen Minimap")
+func (dw *DebugWindow) renderDisassemblyPanel() {
+	dw.renderPanelLabel(10, 390, "Disassembly")
 
 	panelRect := &sdl.Rect{10, 415, 420, 370}
 	dw.renderer.SetDrawColor(40, 40, 40, 255)
@@ -350,53 +347,62 @@ func (dw *DebugWindow) renderMinimapPanel() {
 	dw.renderer.SetDrawColor(100, 100, 100, 255)
 	dw.renderer.DrawRect(panelRect)
 
-	if dw.bgVis == nil || dw.spriteVis == nil {
+	if dw.debugData == nil || dw.debugData.CPU == nil || dw.debugData.Memory == nil {
+		DrawText(dw.renderer, "No debug data available", 20, 430, 1, 100, 100, 100)
 		return
 	}
 
-	// Initialize with dark gray background (ABGR format) - optimized version
-	// Use uint32 writes for better performance
-	grayPixel := uint32(0xFF282828) // ABGR: Alpha=255, Blue=40, Green=40, Red=40
-	pixelCount := len(dw.minimapPixelBuffer) / 4
-	for i := 0; i < pixelCount; i++ {
-		*(*uint32)(unsafe.Pointer(&dw.minimapPixelBuffer[i*4])) = grayPixel
-	}
+	pc := dw.debugData.CPU.PC
 
-	if dw.bgVis.BGEnabled {
-		viewport := dw.bgVis.GetViewportTiles()
-		for y := 0; y < 18; y++ {
-			for x := 0; x < 20; x++ {
-				tileIndex := viewport[y][x]
-				var tile video.Tile
+	disasmLines := debug.CreateDisassembly(dw.debugData.Memory, pc, maxDisasmLines)
 
-				// Use the same tile fetching logic as the GPU
-				useSigned := dw.bgVis.TileDataBase == 0x8800
-				tile = debug.GetTileForBackgroundIndex(dw.bgVis.TileData, tileIndex, useSigned)
+	// Render each line
+	y := int32(425)
+	lineHeight := int32(16)
 
-				dw.renderTileToBuffer(tile, dw.minimapPixelBuffer, y*8, x*8, 160)
-			}
+	for _, line := range disasmLines {
+		if y+lineHeight > 750 { // Leave space for status line
+			break
 		}
-	}
 
-	for _, sprite := range dw.spriteVis.GetVisibleSprites() {
-		if sprite.OnScreen {
-			dw.renderSpriteOverlay(sprite, dw.minimapPixelBuffer)
+		var r, g, b uint8
+		if line.IsCurrent {
+			// Current instruction - bright yellow
+			r, g, b = 255, 255, 100
+			DrawText(dw.renderer, ">", 15, y, 1, 255, 255, 100)
+		} else {
+			// Normal instruction - light gray
+			r, g, b = 180, 180, 180
 		}
+		text := fmt.Sprintf("%04X: %s", line.Address, line.Instruction)
+		DrawText(dw.renderer, text, 30, y, 1, r, g, b)
+		y += lineHeight
 	}
 
-	dw.minimapTexture.Update(nil, unsafe.Pointer(&dw.minimapPixelBuffer[0]), 160*4)
+	// Draw status line at bottom with background
+	statusY := int32(760)
+	statusBg := &sdl.Rect{10, statusY - 2, 420, 20}
+	dw.renderer.SetDrawColor(20, 20, 20, 255)
+	dw.renderer.FillRect(statusBg)
 
-	srcRect := &sdl.Rect{0, 0, 160, 144}
-	dstRect := &sdl.Rect{20, 425, 320, 288}
-	dw.renderer.Copy(dw.minimapTexture, srcRect, dstRect)
+	var statusText string
+	var statusR, statusG, statusB uint8
+	switch dw.debugData.DebuggerState {
+	case debug.DebuggerPaused:
+		statusText = "PAUSED - SPACE: resume | N: step | F: frame"
+		statusR, statusG, statusB = 255, 150, 150
+	case debug.DebuggerStepInstruction:
+		statusText = "STEPPING - N: next step | SPACE: resume"
+		statusR, statusG, statusB = 255, 255, 100
+	case debug.DebuggerStepFrame:
+		statusText = "FRAME STEP - F: next frame | SPACE: resume"
+		statusR, statusG, statusB = 150, 255, 150
+	default: // DebuggerRunning
+		statusText = "RUNNING - SPACE: pause | N: step | F: frame"
+		statusR, statusG, statusB = 150, 255, 150
+	}
 
-	spritesOnLine := dw.spriteVis.GetSpritesOnLine(dw.spriteVis.CurrentLine)
-	lineY := int32(425) + int32(dw.spriteVis.CurrentLine*2)
-	dw.renderer.SetDrawColor(255, 0, 0, 128)
-	dw.renderer.DrawLine(20, lineY, 340, lineY)
-
-	info := fmt.Sprintf("Line %d: %d sprites", dw.spriteVis.CurrentLine, len(spritesOnLine))
-	DrawText(dw.renderer, info, 350, 425, 1, 200, 200, 200)
+	DrawText(dw.renderer, statusText, 20, statusY, 1, statusR, statusG, statusB)
 }
 
 func (dw *DebugWindow) renderSmallSpriteTile(tile video.Tile, x, y int32) {
@@ -422,39 +428,6 @@ func (dw *DebugWindow) renderTileToBuffer(tile video.Tile, buffer []byte, row, c
 				buffer[offset+1] = b // Blue
 				buffer[offset+2] = g // Green
 				buffer[offset+3] = r // Red
-			}
-		}
-	}
-}
-
-func (dw *DebugWindow) renderSpriteOverlay(sprite debug.Sprite, buffer []byte) {
-	pixels := sprite.TileData.Pixels()
-
-	for y := 0; y < 8 && y < dw.spriteVis.SpriteHeight; y++ {
-		for x := 0; x < 8; x++ {
-			screenY := sprite.Y + y
-			screenX := sprite.X + x
-
-			if screenX >= 0 && screenX < 160 && screenY >= 0 && screenY < 144 {
-				py := y
-				px := x
-
-				if sprite.Info.Sprite.FlipY {
-					py = 7 - y
-				}
-				if sprite.Info.Sprite.FlipX {
-					px = 7 - x
-				}
-
-				offset := (screenY*160 + screenX) * 4
-				if offset+3 < len(buffer) && pixels[py][px] != 0 {
-					// Sprite overlay in magenta with transparency
-					// SDL2 RGBA8888 format is ABGR in memory
-					buffer[offset] = 200   // Alpha
-					buffer[offset+1] = 255 // Blue (magenta)
-					buffer[offset+2] = 0   // Green
-					buffer[offset+3] = 255 // Red (magenta)
-				}
 			}
 		}
 	}
@@ -680,9 +653,6 @@ func (dw *DebugWindow) Cleanup() error {
 	}
 	if dw.bgTexture != nil {
 		dw.bgTexture.Destroy()
-	}
-	if dw.minimapTexture != nil {
-		dw.minimapTexture.Destroy()
 	}
 	if dw.renderer != nil {
 		dw.renderer.Destroy()

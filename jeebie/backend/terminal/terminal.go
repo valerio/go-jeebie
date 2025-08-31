@@ -737,7 +737,7 @@ func (t *Backend) createSimpleDisassembly(snapshot *debug.MemorySnapshot, pc uin
 		lines := []simpleDisasmLine{}
 		for i := 0; i < len(snapshot.Bytes) && len(lines) < disasmHeight; {
 			addr := snapshot.StartAddr + uint16(i)
-			instruction, length := t.disassembleInstruction(snapshot.Bytes, i)
+			instruction, length := disasm.DisassembleBytes(snapshot.Bytes, i)
 			lines = append(lines, simpleDisasmLine{
 				address:     addr,
 				instruction: instruction,
@@ -757,7 +757,7 @@ func (t *Backend) createSimpleDisassembly(snapshot *debug.MemorySnapshot, pc uin
 
 	for i := startOffset; i < len(snapshot.Bytes); {
 		addr := snapshot.StartAddr + uint16(i)
-		instruction, length := t.disassembleInstruction(snapshot.Bytes, i)
+		instruction, length := disasm.DisassembleBytes(snapshot.Bytes, i)
 
 		allLines = append(allLines, simpleDisasmLine{
 			address:     addr,
@@ -802,46 +802,6 @@ func (t *Backend) createSimpleDisassembly(snapshot *debug.MemorySnapshot, pc uin
 		return allLines[:disasmHeight]
 	}
 	return allLines
-}
-
-func (t *Backend) disassembleInstruction(bytes []uint8, offset int) (string, int) {
-	if offset >= len(bytes) {
-		return "???", 1
-	}
-
-	opcode := bytes[offset]
-	if opcode == 0xCB {
-		if offset+1 < len(bytes) {
-			cbOpcode := bytes[offset+1]
-			return disasm.CBInstructionTemplates[cbOpcode], 2
-		}
-		return "CB ???", 1
-	}
-
-	template := disasm.InstructionTemplates[opcode]
-	length := disasm.InstructionLengths[opcode]
-	switch length {
-	case 1:
-		return template, 1
-	case 2:
-		if offset+1 < len(bytes) {
-			n := bytes[offset+1]
-			return fmt.Sprintf(template, n), 2
-		}
-		return fmt.Sprintf(template, 0), 1
-	case 3:
-		if offset+2 < len(bytes) {
-			low := bytes[offset+1]
-			high := bytes[offset+2]
-			nn := uint16(high)<<8 | uint16(low)
-			return fmt.Sprintf(template, nn), 3
-		} else if offset+1 < len(bytes) {
-			return fmt.Sprintf(template, 0), 2
-		}
-		return fmt.Sprintf(template, 0), 1
-	default:
-		return template, 1
-	}
 }
 
 func (t *Backend) drawLogs(startX, startY, width, termHeight int) {
