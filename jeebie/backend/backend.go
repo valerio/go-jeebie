@@ -46,7 +46,7 @@ type Backend interface {
 type DebugDataProvider interface {
 	// ExtractDebugData returns complete debug data for visualization
 	// Returns nil if no debug data is available
-	ExtractDebugData() *debug.CompleteDebugData
+	ExtractDebugData() *debug.Data
 }
 
 // BackendConfig holds configuration for backends

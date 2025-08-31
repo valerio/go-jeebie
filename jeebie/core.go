@@ -277,7 +277,7 @@ func (e *DMG) GetFrameCount() uint64 {
 	return e.frameCount
 }
 
-func (e *DMG) ExtractDebugData() *debug.CompleteDebugData {
+func (e *DMG) ExtractDebugData() *debug.Data {
 	if e.mem == nil || e.cpu == nil {
 		return nil
 	}
@@ -347,8 +347,11 @@ func (e *DMG) ExtractDebugData() *debug.CompleteDebugData {
 	}
 
 	audioData := debug.ExtractAudioData(e.mem, e.mem.GetAPU())
+	spriteVis := debug.ExtractSpriteData(e.mem, uint8(currentLine))
+	backgroundVis := debug.ExtractBackgroundData(e.mem)
+	paletteVis := debug.ExtractPaletteData(e.mem)
 
-	return &debug.CompleteDebugData{
+	return &debug.Data{
 		OAM:             oamData,
 		VRAM:            vramData,
 		CPU:             cpuState,
@@ -357,6 +360,9 @@ func (e *DMG) ExtractDebugData() *debug.CompleteDebugData {
 		InterruptEnable: e.mem.Read(addr.IE),
 		InterruptFlags:  e.mem.Read(addr.IF),
 		Audio:           audioData,
+		SpriteVis:       spriteVis,
+		BackgroundVis:   backgroundVis,
+		PaletteVis:      paletteVis,
 	}
 }
 

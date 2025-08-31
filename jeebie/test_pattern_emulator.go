@@ -46,8 +46,8 @@ func (e *TestPatternEmulator) HandleAction(act action.Action, pressed bool) {
 	}
 }
 
-func (e *TestPatternEmulator) ExtractDebugData() *debug.CompleteDebugData {
-	return &debug.CompleteDebugData{
+func (e *TestPatternEmulator) ExtractDebugData() *debug.Data {
+	return &debug.Data{
 		OAM:           nil,
 		VRAM:          nil,
 		CPU:           nil,

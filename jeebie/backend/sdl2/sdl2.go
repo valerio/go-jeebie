@@ -60,7 +60,7 @@ type Backend struct {
 func New() *Backend {
 	return &Backend{
 		debugWindow:         NewDebugWindow(),
-		debugUpdateInterval: 3, // Update debug window every 3 frames for smoother visualization
+		debugUpdateInterval: 3,
 	}
 }
 
@@ -129,10 +129,13 @@ func (s *Backend) Init(config backend.BackendConfig) error {
 		}
 	}
 
-	// Initialize debug window if ShowDebug is enabled
+	// Initialize debug windows if ShowDebug is enabled
 	if config.ShowDebug {
 		if err := s.debugWindow.Init(); err != nil {
 			slog.Warn("Failed to initialize debug window", "error", err)
+		}
+		if err := s.debugWindow.Init(); err != nil {
+			slog.Warn("Failed to initialize enhanced debug window", "error", err)
 		}
 	}
 
@@ -177,14 +180,12 @@ func (s *Backend) Update(frame *video.FrameBuffer) ([]backend.InputEvent, error)
 	s.renderFrame(renderFrame)
 
 	// Update debug data periodically if debug window is visible
-	if s.debugWindow != nil && s.debugWindow.IsVisible() && s.debugProvider != nil {
+	if s.debugProvider != nil && s.debugWindow != nil && s.debugWindow.IsVisible() {
 		s.debugUpdateCounter++
 		if s.debugUpdateCounter >= s.debugUpdateInterval {
 			s.debugUpdateCounter = 0
 			debugData := s.debugProvider.ExtractDebugData()
-			if debugData != nil && debugData.OAM != nil && debugData.VRAM != nil {
-				s.UpdateDebugData(debugData.OAM, debugData.VRAM, debugData.Audio)
-			}
+			s.debugWindow.UpdateData(debugData)
 		}
 	}
 
@@ -211,6 +212,9 @@ func (s *Backend) Cleanup() error {
 	if s.debugWindow != nil {
 		s.debugWindow.Cleanup()
 	}
+	if s.debugWindow != nil {
+		s.debugWindow.Cleanup()
+	}
 	if s.texture != nil {
 		s.texture.Destroy()
 	}
@@ -226,10 +230,6 @@ func (s *Backend) Cleanup() error {
 }
 
 func (s *Backend) handleEvent(evt sdl.Event) []backend.InputEvent {
-	// Pass event to debug window first
-	if s.debugWindow != nil {
-		s.debugWindow.ProcessEvent(evt)
-	}
 
 	switch e := evt.(type) {
 	case *sdl.QuitEvent:
@@ -483,14 +483,6 @@ func (s *Backend) animateTestPattern() {
 	}
 }
 
-// UpdateDebugData updates the debug window with current emulator state
-func (s *Backend) UpdateDebugData(oam *debug.OAMData, vram *debug.VRAMData, audio *debug.AudioData) {
-	if s.debugWindow != nil {
-		s.debugWindow.UpdateData(oam, vram)
-		s.debugWindow.UpdateAudioData(audio)
-	}
-}
-
 // HandleAction processes backend-specific actions after debouncing
 func (s *Backend) HandleAction(act action.Action) {
 	switch act {
@@ -506,9 +498,7 @@ func (s *Backend) HandleAction(act action.Action) {
 		// Update debug window data if it's visible
 		if s.debugWindow != nil && s.debugWindow.IsVisible() && s.debugProvider != nil {
 			debugData := s.debugProvider.ExtractDebugData()
-			if debugData != nil && debugData.OAM != nil && debugData.VRAM != nil {
-				s.UpdateDebugData(debugData.OAM, debugData.VRAM, debugData.Audio)
-			}
+			s.debugWindow.UpdateData(debugData)
 		}
 	// Audio debugging actions
 	case action.AudioToggleChannel1:
@@ -558,28 +548,53 @@ func (s *Backend) HandleAction(act action.Action) {
 	}
 }
 
-// ToggleDebugWindow shows/hides the debug window
+// ToggleDebugWindow shows/hides the enhanced debug window (F10)
 func (s *Backend) ToggleDebugWindow() {
 	if s.debugWindow == nil {
-		slog.Warn("Debug window is nil")
+		slog.Warn("Enhanced debug window is nil")
 		return
 	}
 
 	if !s.debugWindow.IsInitialized() {
-		slog.Debug("Initializing debug window")
+		slog.Debug("Initializing enhanced debug window")
 		if err := s.debugWindow.Init(); err != nil {
-			slog.Warn("Failed to initialize debug window", "error", err)
+			slog.Warn("Failed to initialize enhanced debug window", "error", err)
 			return
 		}
 	}
+
 	wasVisible := s.debugWindow.IsVisible()
 	s.debugWindow.SetVisible(!wasVisible)
-	slog.Debug("Debug window visibility changed", "was_visible", wasVisible, "now_visible", !wasVisible)
+	slog.Debug("Enhanced debug window visibility changed", "was_visible", wasVisible, "now_visible", !wasVisible)
 
 	// If we're showing the window, trigger a debug data update
 	if !wasVisible {
 		slog.Debug("Triggering debug data update")
 		s.debugUpdateCounter = 0 // Reset counter to trigger immediate update
+		s.handleDebugMessage("debug:update_window")
+	}
+}
+
+// ToggleClassicDebugWindow shows/hides the classic debug window (can be mapped to F11)
+func (s *Backend) ToggleClassicDebugWindow() {
+	if s.debugWindow == nil {
+		slog.Warn("Classic debug window is nil")
+		return
+	}
+
+	if !s.debugWindow.IsInitialized() {
+		slog.Debug("Initializing classic debug window")
+		if err := s.debugWindow.Init(); err != nil {
+			slog.Warn("Failed to initialize classic debug window", "error", err)
+			return
+		}
+	}
+	wasVisible := s.debugWindow.IsVisible()
+	s.debugWindow.SetVisible(!wasVisible)
+	slog.Debug("Classic debug window visibility changed", "was_visible", wasVisible, "now_visible", !wasVisible)
+
+	if !wasVisible {
+		s.debugUpdateCounter = 0
 		s.handleDebugMessage("debug:update_window")
 	}
 }
@@ -593,9 +608,9 @@ func (s *Backend) handleDebugMessage(message string) {
 		// Extract debug data through the minimal interface
 		if s.debugProvider != nil {
 			debugData := s.debugProvider.ExtractDebugData()
-			if debugData != nil && debugData.OAM != nil && debugData.VRAM != nil {
-				slog.Debug("Extracted debug data", "oam_entries", len(debugData.OAM.Sprites))
-				s.UpdateDebugData(debugData.OAM, debugData.VRAM, debugData.Audio)
+			if debugData != nil {
+				slog.Debug("Extracted debug data")
+				s.debugWindow.UpdateData(debugData)
 			}
 		}
 	case "debug:snapshot":

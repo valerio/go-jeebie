@@ -3,7 +3,7 @@
 package sdl2
 
 import (
-	"log/slog"
+	"fmt"
 	"unsafe"
 
 	"github.com/valerio/go-jeebie/jeebie/debug"
@@ -12,28 +12,37 @@ import (
 )
 
 const (
-	DebugWindowWidth  = 800
-	DebugWindowHeight = 600
-	DebugWindowTitle  = "Game Boy Debug Tools"
+	DebugWindowWidth  = 1280
+	DebugWindowHeight = 800
 )
 
 type DebugWindow struct {
 	window   *sdl.Window
 	renderer *sdl.Renderer
-	texture  *sdl.Texture
 	visible  bool
 
-	// Debug data
-	oamData   *debug.OAMData
-	vramData  *debug.VRAMData
-	audioData *debug.AudioData
+	spriteTexture  *sdl.Texture
+	bgTexture      *sdl.Texture
+	minimapTexture *sdl.Texture
 
-	// Rendering state
-	needsUpdate   bool
-	colorLogCount int // For debugging color conversion
+	// Cached visualizers to avoid allocations
+	cachedSpriteVis debug.SpriteVisualizer
+	cachedBgVis     debug.BackgroundVisualizer
+
+	// Pointers to current data
+	spriteVis  *debug.SpriteVisualizer
+	bgVis      *debug.BackgroundVisualizer
+	paletteVis *debug.PaletteVisualizer
+	audioData  *debug.AudioData
 
 	// Waveform visualization
-	waveformSamples [5][128]float32 // Ch1-4 + Mix, 128 samples each
+	waveformSamples [5][128]float32 // Ch1-4 + Mix
+
+	// Pre-allocated buffers to avoid allocations in hot loops
+	tilemapPixelBuffer []byte // 256*256*4 bytes for tilemap rendering
+	minimapPixelBuffer []byte // 160*144*4 bytes for minimap rendering
+
+	needsUpdate bool
 }
 
 func NewDebugWindow() *DebugWindow {
@@ -45,7 +54,7 @@ func NewDebugWindow() *DebugWindow {
 
 func (dw *DebugWindow) Init() error {
 	window, err := sdl.CreateWindow(
-		DebugWindowTitle,
+		"Game Boy Debug",
 		sdl.WINDOWPOS_CENTERED,
 		sdl.WINDOWPOS_CENTERED,
 		DebugWindowWidth,
@@ -64,23 +73,424 @@ func (dw *DebugWindow) Init() error {
 	}
 	dw.renderer = renderer
 
-	// Create texture for tile rendering
-	texture, err := renderer.CreateTexture(
+	dw.spriteTexture, err = renderer.CreateTexture(
 		sdl.PIXELFORMAT_RGBA8888,
 		sdl.TEXTUREACCESS_STREAMING,
-		debug.TilesPerRow*debug.TilePixelWidth,
-		debug.TileRows*debug.TilePixelHeight,
+		40*16, 16,
 	)
 	if err != nil {
-		renderer.Destroy()
-		window.Destroy()
 		return err
 	}
-	dw.texture = texture
 
-	// Initially hide the window
+	dw.bgTexture, err = renderer.CreateTexture(
+		sdl.PIXELFORMAT_RGBA8888,
+		sdl.TEXTUREACCESS_STREAMING,
+		256, 256,
+	)
+	if err != nil {
+		return err
+	}
+
+	dw.minimapTexture, err = renderer.CreateTexture(
+		sdl.PIXELFORMAT_RGBA8888,
+		sdl.TEXTUREACCESS_STREAMING,
+		160, 144,
+	)
+	if err != nil {
+		return err
+	}
+
+	// Pre-allocate pixel buffers to avoid allocations in hot loops
+	dw.tilemapPixelBuffer = make([]byte, 256*256*4)
+	dw.minimapPixelBuffer = make([]byte, 160*144*4)
+
 	dw.window.Hide()
 	return nil
+}
+
+func (dw *DebugWindow) UpdateData(debugData *debug.Data) {
+	if debugData == nil {
+		return
+	}
+
+	dw.spriteVis = debugData.SpriteVis
+	dw.bgVis = debugData.BackgroundVis
+	dw.paletteVis = debugData.PaletteVis
+	dw.audioData = debugData.Audio
+	if dw.audioData != nil {
+		dw.updateWaveformSamples()
+	}
+	dw.needsUpdate = true
+}
+
+func (dw *DebugWindow) Render() error {
+	if !dw.visible || !dw.needsUpdate {
+		return nil
+	}
+
+	dw.renderer.SetDrawColor(30, 30, 30, 255)
+	dw.renderer.Clear()
+
+	dw.renderSpritePanel()
+	dw.renderBackgroundPanel()
+	dw.renderPalettePanel()
+	dw.renderMinimapPanel()
+
+	if dw.audioData != nil {
+		dw.renderAudioPanel()
+		dw.renderWaveforms()
+	}
+
+	dw.renderer.Present()
+	dw.needsUpdate = false
+	return nil
+}
+
+func (dw *DebugWindow) renderSpritePanel() {
+	dw.renderPanelLabel(10, 10, "Sprites (OAM)")
+
+	panelRect := &sdl.Rect{10, 35, 420, 340}
+	dw.renderer.SetDrawColor(40, 40, 40, 255)
+	dw.renderer.FillRect(panelRect)
+	dw.renderer.SetDrawColor(100, 100, 100, 255)
+	dw.renderer.DrawRect(panelRect)
+
+	if dw.spriteVis == nil {
+		return
+	}
+
+	// Show first 20 sprites regardless of visibility
+	sprites := dw.spriteVis.Sprites
+	maxDisplay := 20
+	if len(sprites) < maxDisplay {
+		maxDisplay = len(sprites)
+	}
+
+	for i := 0; i < maxDisplay && i < len(sprites); i++ {
+		sprite := sprites[i]
+		y := int32(45 + i*15)
+		x := int32(20)
+
+		dw.renderSmallSpriteTile(sprite.TileData, x, y)
+
+		var paletteStr string
+		if sprite.Info.Sprite.PaletteOBP1 {
+			paletteStr = "OBP1"
+		} else {
+			paletteStr = "OBP0"
+		}
+
+		// Color code based on visibility
+		textR, textG, textB := uint8(200), uint8(200), uint8(200)
+		if !sprite.Info.IsVisible {
+			textR, textG, textB = 100, 100, 100
+		}
+
+		info := fmt.Sprintf("#%02d T:%02X X:%3d Y:%3d %s",
+			sprite.Info.Index,
+			sprite.Info.Sprite.TileIndex,
+			sprite.X,
+			sprite.Y,
+			paletteStr,
+		)
+
+		DrawText(dw.renderer, info, x+20, y, 1, textR, textG, textB)
+
+		if sprite.Info.Sprite.FlipX {
+			dw.renderer.SetDrawColor(255, 100, 100, 255)
+			dw.renderer.DrawLine(x+300, y+4, x+305, y+4)
+		}
+		if sprite.Info.Sprite.FlipY {
+			dw.renderer.SetDrawColor(100, 255, 100, 255)
+			dw.renderer.DrawLine(x+310, y+4, x+315, y+4)
+		}
+		if sprite.Info.Sprite.BehindBG {
+			dw.renderer.SetDrawColor(100, 100, 255, 255)
+			dw.renderer.DrawLine(x+320, y+4, x+325, y+4)
+		}
+	}
+
+	legendY := int32(45 + maxDisplay*15 + 10)
+	DrawText(dw.renderer, "Flags: Red=FlipX Green=FlipY Blue=BehindBG", 20, legendY, 1, 150, 150, 150)
+}
+
+func (dw *DebugWindow) renderBackgroundPanel() {
+	dw.renderPanelLabel(450, 10, "Background Tilemap")
+
+	panelRect := &sdl.Rect{450, 35, 320, 320}
+	dw.renderer.SetDrawColor(40, 40, 40, 255)
+	dw.renderer.FillRect(panelRect)
+	dw.renderer.SetDrawColor(100, 100, 100, 255)
+	dw.renderer.DrawRect(panelRect)
+
+	if dw.bgVis == nil || !dw.bgVis.BGEnabled {
+		DrawText(dw.renderer, "Background Disabled", 500, 180, 2, 100, 100, 100)
+		return
+	}
+
+	dw.renderTilemap()
+
+	scrollX := int32(dw.bgVis.ScrollX)
+	scrollY := int32(dw.bgVis.ScrollY)
+	viewportX := int32(460) + scrollX
+	viewportY := int32(45) + scrollY
+	viewportRect := &sdl.Rect{viewportX, viewportY, 160, 144}
+	dw.renderer.SetDrawColor(255, 255, 0, 128)
+	dw.renderer.DrawRect(viewportRect)
+
+	if active, wx, wy := dw.bgVis.GetWindowViewport(); active {
+		windowRect := &sdl.Rect{int32(460 + wx), int32(45 + wy), 160, 144}
+		dw.renderer.SetDrawColor(0, 255, 255, 128)
+		dw.renderer.DrawRect(windowRect)
+	}
+
+	infoY := int32(360)
+	winStatus := "OFF"
+	if dw.bgVis.WindowEnabled {
+		winStatus = fmt.Sprintf("ON (X:%d Y:%d)", dw.bgVis.WindowX, dw.bgVis.WindowY)
+	}
+	info := fmt.Sprintf("SCX:%d SCY:%d | Win: %s",
+		dw.bgVis.ScrollX, dw.bgVis.ScrollY, winStatus,
+	)
+	DrawText(dw.renderer, info, 460, infoY, 1, 200, 200, 200)
+
+	// Show tilemap addresses
+	bgMapAddr := "9800"
+	if dw.bgVis.TilemapBase == 0x9C00 {
+		bgMapAddr = "9C00"
+	}
+	winMapAddr := "9800"
+	if dw.bgVis.WindowTilemapBase == 0x9C00 {
+		winMapAddr = "9C00"
+	}
+	tileDataAddr := "8000"
+	if dw.bgVis.TileDataBase == 0x8800 {
+		tileDataAddr = "8800"
+	}
+	mapInfo := fmt.Sprintf("BG Map:%s Win Map:%s Tiles:%s",
+		bgMapAddr, winMapAddr, tileDataAddr,
+	)
+	DrawText(dw.renderer, mapInfo, 460, infoY+15, 1, 150, 150, 150)
+}
+
+func (dw *DebugWindow) renderTilemap() {
+	// Note: We don't clear the buffer as tiles will overwrite all pixels
+
+	for row := 0; row < 32; row++ {
+		for col := 0; col < 32; col++ {
+			tileIndex := dw.bgVis.Tilemap[row][col]
+			var tile video.Tile
+
+			// Use the same tile fetching logic as the GPU
+			useSigned := dw.bgVis.TileDataBase == 0x8800
+			tile = debug.GetTileForBackgroundIndex(dw.bgVis.TileData, tileIndex, useSigned)
+
+			dw.renderTileToBuffer(tile, dw.tilemapPixelBuffer, row*8, col*8, 256)
+		}
+	}
+
+	dw.bgTexture.Update(nil, unsafe.Pointer(&dw.tilemapPixelBuffer[0]), 256*4)
+
+	srcRect := &sdl.Rect{0, 0, 256, 256}
+	dstRect := &sdl.Rect{460, 45, 300, 300}
+	dw.renderer.Copy(dw.bgTexture, srcRect, dstRect)
+}
+
+func (dw *DebugWindow) renderPalettePanel() {
+	dw.renderPanelLabel(790, 10, "Palettes")
+
+	panelRect := &sdl.Rect{790, 35, 280, 130}
+	dw.renderer.SetDrawColor(40, 40, 40, 255)
+	dw.renderer.FillRect(panelRect)
+	dw.renderer.SetDrawColor(100, 100, 100, 255)
+	dw.renderer.DrawRect(panelRect)
+
+	if dw.paletteVis == nil {
+		return
+	}
+
+	palettes := []struct {
+		name string
+		info debug.PaletteInfo
+	}{
+		{"BGP ", dw.paletteVis.BGP},
+		{"OBP0", dw.paletteVis.OBP0},
+		{"OBP1", dw.paletteVis.OBP1},
+	}
+
+	for i, pal := range palettes {
+		y := int32(45 + i*35)
+		x := int32(800)
+
+		DrawText(dw.renderer, pal.name, x, y, 1, 200, 200, 200)
+
+		for j := 0; j < 4; j++ {
+			colorX := x + 40 + int32(j*30)
+			r, g, b, _ := dw.gbColorToRGBA(pal.info.Colors[j])
+
+			dw.renderer.SetDrawColor(r, g, b, 255)
+			colorRect := &sdl.Rect{colorX, y, 25, 25}
+			dw.renderer.FillRect(colorRect)
+
+			dw.renderer.SetDrawColor(200, 200, 200, 255)
+			dw.renderer.DrawRect(colorRect)
+		}
+
+		rawStr := fmt.Sprintf("0x%02X", pal.info.Raw)
+		DrawText(dw.renderer, rawStr, x+170, y+8, 1, 150, 150, 150)
+	}
+}
+
+func (dw *DebugWindow) renderMinimapPanel() {
+	dw.renderPanelLabel(10, 390, "Screen Minimap")
+
+	panelRect := &sdl.Rect{10, 415, 420, 370}
+	dw.renderer.SetDrawColor(40, 40, 40, 255)
+	dw.renderer.FillRect(panelRect)
+	dw.renderer.SetDrawColor(100, 100, 100, 255)
+	dw.renderer.DrawRect(panelRect)
+
+	if dw.bgVis == nil || dw.spriteVis == nil {
+		return
+	}
+
+	// Initialize with dark gray background (ABGR format) - optimized version
+	// Use uint32 writes for better performance
+	grayPixel := uint32(0xFF282828) // ABGR: Alpha=255, Blue=40, Green=40, Red=40
+	pixelCount := len(dw.minimapPixelBuffer) / 4
+	for i := 0; i < pixelCount; i++ {
+		*(*uint32)(unsafe.Pointer(&dw.minimapPixelBuffer[i*4])) = grayPixel
+	}
+
+	if dw.bgVis.BGEnabled {
+		viewport := dw.bgVis.GetViewportTiles()
+		for y := 0; y < 18; y++ {
+			for x := 0; x < 20; x++ {
+				tileIndex := viewport[y][x]
+				var tile video.Tile
+
+				// Use the same tile fetching logic as the GPU
+				useSigned := dw.bgVis.TileDataBase == 0x8800
+				tile = debug.GetTileForBackgroundIndex(dw.bgVis.TileData, tileIndex, useSigned)
+
+				dw.renderTileToBuffer(tile, dw.minimapPixelBuffer, y*8, x*8, 160)
+			}
+		}
+	}
+
+	for _, sprite := range dw.spriteVis.GetVisibleSprites() {
+		if sprite.OnScreen {
+			dw.renderSpriteOverlay(sprite, dw.minimapPixelBuffer)
+		}
+	}
+
+	dw.minimapTexture.Update(nil, unsafe.Pointer(&dw.minimapPixelBuffer[0]), 160*4)
+
+	srcRect := &sdl.Rect{0, 0, 160, 144}
+	dstRect := &sdl.Rect{20, 425, 320, 288}
+	dw.renderer.Copy(dw.minimapTexture, srcRect, dstRect)
+
+	spritesOnLine := dw.spriteVis.GetSpritesOnLine(dw.spriteVis.CurrentLine)
+	lineY := int32(425) + int32(dw.spriteVis.CurrentLine*2)
+	dw.renderer.SetDrawColor(255, 0, 0, 128)
+	dw.renderer.DrawLine(20, lineY, 340, lineY)
+
+	info := fmt.Sprintf("Line %d: %d sprites", dw.spriteVis.CurrentLine, len(spritesOnLine))
+	DrawText(dw.renderer, info, 350, 425, 1, 200, 200, 200)
+}
+
+func (dw *DebugWindow) renderSmallSpriteTile(tile video.Tile, x, y int32) {
+	pixels := tile.Pixels()
+	for py := 0; py < 8; py++ {
+		for px := 0; px < 8; px++ {
+			r, g, b, _ := dw.gbColorToRGBA(pixels[py][px])
+			dw.renderer.SetDrawColor(r, g, b, 255)
+			dw.renderer.DrawPoint(x+int32(px), y+int32(py))
+		}
+	}
+}
+
+func (dw *DebugWindow) renderTileToBuffer(tile video.Tile, buffer []byte, row, col, stride int) {
+	pixels := tile.Pixels()
+	for y := 0; y < 8; y++ {
+		for x := 0; x < 8; x++ {
+			offset := ((row+y)*stride + (col + x)) * 4
+			if offset+3 < len(buffer) {
+				r, g, b, a := dw.gbColorToRGBA(pixels[y][x])
+				// SDL2 RGBA8888 format is actually ABGR in memory
+				buffer[offset] = a   // Alpha
+				buffer[offset+1] = b // Blue
+				buffer[offset+2] = g // Green
+				buffer[offset+3] = r // Red
+			}
+		}
+	}
+}
+
+func (dw *DebugWindow) renderSpriteOverlay(sprite debug.Sprite, buffer []byte) {
+	pixels := sprite.TileData.Pixels()
+
+	for y := 0; y < 8 && y < dw.spriteVis.SpriteHeight; y++ {
+		for x := 0; x < 8; x++ {
+			screenY := sprite.Y + y
+			screenX := sprite.X + x
+
+			if screenX >= 0 && screenX < 160 && screenY >= 0 && screenY < 144 {
+				py := y
+				px := x
+
+				if sprite.Info.Sprite.FlipY {
+					py = 7 - y
+				}
+				if sprite.Info.Sprite.FlipX {
+					px = 7 - x
+				}
+
+				offset := (screenY*160 + screenX) * 4
+				if offset+3 < len(buffer) && pixels[py][px] != 0 {
+					// Sprite overlay in magenta with transparency
+					// SDL2 RGBA8888 format is ABGR in memory
+					buffer[offset] = 200   // Alpha
+					buffer[offset+1] = 255 // Blue (magenta)
+					buffer[offset+2] = 0   // Green
+					buffer[offset+3] = 255 // Red (magenta)
+				}
+			}
+		}
+	}
+}
+
+func (dw *DebugWindow) renderPanelLabel(x, y int32, text string) {
+	const fontScale = 1
+	const charWidth = 6
+	const charHeight = 7
+	const padding = 4
+
+	labelWidth := int32(len(text)*charWidth*fontScale + padding*2)
+	labelHeight := int32(charHeight*fontScale + padding*2)
+
+	labelRect := &sdl.Rect{x, y, labelWidth, labelHeight}
+	dw.renderer.SetDrawColor(60, 60, 60, 255)
+	dw.renderer.FillRect(labelRect)
+	dw.renderer.SetDrawColor(180, 180, 180, 255)
+	dw.renderer.DrawRect(labelRect)
+
+	DrawText(dw.renderer, text, x+padding, y+padding, fontScale, 200, 200, 200)
+}
+
+func (dw *DebugWindow) gbColorToRGBA(color video.GBColor) (r, g, b, a uint8) {
+	switch int(color) {
+	case 0:
+		return 255, 255, 255, 255
+	case 1:
+		return 170, 170, 170, 255
+	case 2:
+		return 85, 85, 85, 255
+	case 3:
+		return 0, 0, 0, 255
+	default:
+		return 255, 0, 0, 255
+	}
 }
 
 func (dw *DebugWindow) SetVisible(visible bool) {
@@ -99,21 +509,6 @@ func (dw *DebugWindow) IsVisible() bool {
 
 func (dw *DebugWindow) IsInitialized() bool {
 	return dw.window != nil
-}
-
-func (dw *DebugWindow) UpdateData(oam *debug.OAMData, vram *debug.VRAMData) {
-	slog.Info("Debug window updating data", "oam_nil", oam == nil, "vram_nil", vram == nil)
-	dw.oamData = oam
-	dw.vramData = vram
-	dw.needsUpdate = true
-}
-
-func (dw *DebugWindow) UpdateAudioData(audio *debug.AudioData) {
-	dw.audioData = audio
-	if audio != nil {
-		dw.updateWaveformSamples()
-	}
-	dw.needsUpdate = true
 }
 
 func (dw *DebugWindow) updateWaveformSamples() {
@@ -166,265 +561,65 @@ func (dw *DebugWindow) updateWaveformSamples() {
 	}
 }
 
-func (dw *DebugWindow) Render() error {
-	if !dw.visible {
-		return nil
-	}
-	if !dw.needsUpdate {
-		return nil
-	}
+func (dw *DebugWindow) renderAudioPanel() {
+	dw.renderPanelLabel(450, 390, "Audio Channels")
 
-	slog.Info("Debug window rendering", "has_vram", dw.vramData != nil, "has_oam", dw.oamData != nil)
-
-	dw.renderer.SetDrawColor(32, 32, 32, 255)
-	dw.renderer.Clear()
-
-	if dw.vramData != nil {
-		dw.renderTileGrid()
-	}
-
-	if dw.oamData != nil {
-		dw.renderOAMInfo()
-	}
-
-	if dw.audioData != nil {
-		dw.renderAudioStatus()
-		dw.renderWaveforms()
-	}
-
-	dw.renderer.Present()
-	dw.needsUpdate = false
-	return nil
-}
-
-func (dw *DebugWindow) renderTileGrid() {
-	// Render label
-	dw.renderLabel(400, 30, "VRAM Tiles")
-
-	tileGrid := dw.vramData.GetTileGrid()
-	slog.Info("Rendering tile grid", "grid_rows", len(tileGrid), "first_row_cols", len(tileGrid[0]))
-
-	// Create pixel data for all tiles
-	pixelData := make([]byte, debug.TilesPerRow*debug.TilePixelWidth*debug.TileRows*debug.TilePixelHeight*4)
-
-	for row := 0; row < debug.TileRows; row++ {
-		for col := 0; col < debug.TilesPerRow; col++ {
-			if col >= len(tileGrid[row]) {
-				continue
-			}
-
-			tile := tileGrid[row][col]
-			dw.renderTileToPixels(tile, pixelData, row, col)
-		}
-	}
-
-	// Update texture
-	err := dw.texture.Update(nil, unsafe.Pointer(&pixelData[0]), debug.TilesPerRow*debug.TilePixelWidth*4)
-	if err != nil {
-		slog.Warn("Failed to update debug texture", "error", err)
-	}
-
-	// Show only first 8 rows with larger scaling for better visibility
-	showRows := 8
-	showCols := debug.TilesPerRow
-	srcRect := &sdl.Rect{0, 0, int32(showCols * debug.TilePixelWidth), int32(showRows * debug.TilePixelHeight)}
-
-	// Scale each 8x8 tile to 16x16 pixels (2x scaling)
-	scaledWidth := showCols * debug.TilePixelWidth * 2   // 16 * 8 * 2 = 256
-	scaledHeight := showRows * debug.TilePixelHeight * 2 // 8 * 8 * 2 = 128
-
-	dstRect := &sdl.Rect{400, 50, int32(scaledWidth), int32(scaledHeight)}
-
-	dw.renderer.Copy(dw.texture, srcRect, dstRect)
-}
-
-func (dw *DebugWindow) renderTileToPixels(tile video.Tile, pixelData []byte, row, col int) {
-	baseOffset := (row*debug.TilePixelHeight*debug.TilesPerRow*debug.TilePixelWidth + col*debug.TilePixelWidth) * 4
-	pixels := tile.Pixels()
-
-	for y := 0; y < debug.TilePixelHeight; y++ {
-		for x := 0; x < debug.TilePixelWidth; x++ {
-			pixelOffset := baseOffset + (y*debug.TilesPerRow*debug.TilePixelWidth+x)*4
-
-			if pixelOffset+3 >= len(pixelData) {
-				continue
-			}
-
-			r, g, b, a := dw.gbColorToRGBA(pixels[y][x])
-			pixelData[pixelOffset] = a   // Alpha (first byte)
-			pixelData[pixelOffset+1] = b // Blue
-			pixelData[pixelOffset+2] = g // Green
-			pixelData[pixelOffset+3] = r // Red (last byte)
-		}
-	}
-}
-
-func (dw *DebugWindow) renderLabel(x, y int32, text string) {
-	// Calculate proper label size based on font scale
-	const fontScale = 2
-	const charWidth = 6  // 5 pixels + 1 space per character
-	const charHeight = 7 // Font is 7 pixels tall
-	const padding = 4    // Padding on each side
-
-	labelWidth := int32(len(text)*charWidth*fontScale + padding*2)
-	labelHeight := int32(charHeight*fontScale + padding*2)
-
-	// Render label box
-	labelRect := &sdl.Rect{x, y, labelWidth, labelHeight}
-	dw.renderer.SetDrawColor(70, 70, 70, 255)
-	dw.renderer.FillRect(labelRect)
-	dw.renderer.SetDrawColor(200, 200, 200, 255)
-	dw.renderer.DrawRect(labelRect)
-
-	// Draw the text centered in the box
-	DrawText(dw.renderer, text, x+padding, y+padding, fontScale, 200, 200, 200)
-}
-
-func (dw *DebugWindow) renderOAMInfo() {
-	// Render label
-	dw.renderLabel(10, 30, "OAM/Sprites")
-
-	// Background for the OAM panel
-	oamRect := &sdl.Rect{10, 50, 350, 500}
-	dw.renderer.SetDrawColor(48, 48, 48, 255)
-	dw.renderer.FillRect(oamRect)
-
-	// Draw border
-	dw.renderer.SetDrawColor(128, 128, 128, 255)
-	dw.renderer.DrawRect(oamRect)
-
-	if dw.oamData == nil {
-		return
-	}
-
-	// Count visible sprites for display
-	visibleCount := 0
-	for _, spriteInfo := range dw.oamData.Sprites {
-		if spriteInfo.IsVisible {
-			visibleCount++
-		}
-	}
-
-	// For now, just draw some lines to show we have OAM data
-	// Each visible sprite gets a small rectangle to indicate presence
-	dw.renderer.SetDrawColor(200, 200, 200, 255)
-
-	maxDisplay := 20 // Show first 20 sprites
-	if len(dw.oamData.Sprites) < maxDisplay {
-		maxDisplay = len(dw.oamData.Sprites)
-	}
-
-	for i := 0; i < maxDisplay; i++ {
-		spriteInfo := dw.oamData.Sprites[i]
-		y := int32(60 + i*20)
-
-		// Draw sprite info as colored rectangles
-		if spriteInfo.IsVisible {
-			dw.renderer.SetDrawColor(100, 200, 100, 255) // Green for visible
-		} else {
-			dw.renderer.SetDrawColor(100, 100, 100, 255) // Gray for hidden
-		}
-
-		spriteRect := &sdl.Rect{20, y, 10, 15}
-		dw.renderer.FillRect(spriteRect)
-
-		// Show tile index as a second rectangle
-		tileColor := uint8(spriteInfo.Sprite.TileIndex%200 + 55) // Vary color by tile index
-		dw.renderer.SetDrawColor(tileColor, tileColor, tileColor, 255)
-		tileRect := &sdl.Rect{40, y, 10, 15}
-		dw.renderer.FillRect(tileRect)
-	}
-}
-
-func (dw *DebugWindow) gbColorToRGBA(color video.GBColor) (r, g, b, a uint8) {
-	// GB colors are raw integers 0-3, not the named constants
-	switch int(color) {
-	case 0: // Lightest (white in Game Boy context)
-		return 255, 255, 255, 255
-	case 1: // Light gray
-		return 170, 170, 170, 255
-	case 2: // Dark gray
-		return 85, 85, 85, 255
-	case 3: // Darkest (black in Game Boy context)
-		return 0, 0, 0, 255
-	default:
-		return 255, 0, 0, 255 // Red for debugging unknown colors
-	}
-}
-
-func (dw *DebugWindow) ProcessEvent(event sdl.Event) {
-	// Handle debug window specific events if needed
-}
-
-func (dw *DebugWindow) renderAudioStatus() {
-	// Render label
-	dw.renderLabel(10, 280, "Audio Channels")
-
-	audioRect := &sdl.Rect{10, 300, 350, 180}
-	dw.renderer.SetDrawColor(48, 48, 48, 255)
+	audioRect := &sdl.Rect{450, 415, 380, 160}
+	dw.renderer.SetDrawColor(40, 40, 40, 255)
 	dw.renderer.FillRect(audioRect)
-
-	dw.renderer.SetDrawColor(128, 128, 128, 255)
+	dw.renderer.SetDrawColor(100, 100, 100, 255)
 	dw.renderer.DrawRect(audioRect)
 
 	if !dw.audioData.APUEnabled {
 		dw.renderer.SetDrawColor(200, 100, 100, 255)
-		disabledRect := &sdl.Rect{20, 320, 100, 20}
-		dw.renderer.FillRect(disabledRect)
+		DrawText(dw.renderer, "APU DISABLED", 530, 470, 2, 200, 100, 100)
 		return
 	}
 
-	y := int32(320)
-	lineHeight := int32(25)
+	y := int32(425)
+	lineHeight := int32(30)
 
 	channels := []struct {
 		name   string
 		status debug.ChannelStatus
 		color  [3]uint8
 	}{
-		{"Ch1", dw.audioData.Channels.Ch1, [3]uint8{100, 200, 100}},
-		{"Ch2", dw.audioData.Channels.Ch2, [3]uint8{100, 150, 200}},
-		{"Ch3", dw.audioData.Channels.Ch3, [3]uint8{200, 150, 100}},
-		{"Ch4", dw.audioData.Channels.Ch4, [3]uint8{200, 100, 200}},
+		{"Ch1 Square", dw.audioData.Channels.Ch1, [3]uint8{100, 200, 100}},
+		{"Ch2 Square", dw.audioData.Channels.Ch2, [3]uint8{100, 150, 200}},
+		{"Ch3 Wave  ", dw.audioData.Channels.Ch3, [3]uint8{200, 150, 100}},
+		{"Ch4 Noise ", dw.audioData.Channels.Ch4, [3]uint8{200, 100, 200}},
 	}
 
 	for _, ch := range channels {
+		DrawText(dw.renderer, ch.name, 460, y, 1, 180, 180, 180)
+
 		if ch.status.Enabled {
 			dw.renderer.SetDrawColor(ch.color[0], ch.color[1], ch.color[2], 255)
 		} else {
 			dw.renderer.SetDrawColor(80, 80, 80, 255)
 		}
 
-		statusRect := &sdl.Rect{20, y, 10, 15}
+		statusRect := &sdl.Rect{550, y, 10, 15}
 		dw.renderer.FillRect(statusRect)
 
-		volumeWidth := int32(ch.status.Volume) * 8
+		volumeWidth := int32(ch.status.Volume) * 10
 		if volumeWidth > 0 {
-			volumeRect := &sdl.Rect{40, y, volumeWidth, 15}
+			volumeRect := &sdl.Rect{570, y, volumeWidth, 15}
 			dw.renderer.FillRect(volumeRect)
 		}
 
+		DrawText(dw.renderer, ch.status.Note, 750, y, 1, 200, 200, 200)
+
 		y += lineHeight
 	}
-
-	masterLeft := int32(dw.audioData.MasterVolume.Left) * 10
-	masterRight := int32(dw.audioData.MasterVolume.Right) * 10
-
-	dw.renderer.SetDrawColor(200, 200, 200, 255)
-	leftRect := &sdl.Rect{20, y + 10, masterLeft, 10}
-	rightRect := &sdl.Rect{20, y + 25, masterRight, 10}
-	dw.renderer.FillRect(leftRect)
-	dw.renderer.FillRect(rightRect)
 }
 
 func (dw *DebugWindow) renderWaveforms() {
-	// Render label
-	dw.renderLabel(400, 280, "Waveforms")
+	dw.renderPanelLabel(450, 570, "Waveforms")
 
-	waveRect := &sdl.Rect{400, 300, 380, 280}
+	waveRect := &sdl.Rect{450, 595, 620, 190}
 	dw.renderer.SetDrawColor(40, 40, 40, 255)
 	dw.renderer.FillRect(waveRect)
-
 	dw.renderer.SetDrawColor(100, 100, 100, 255)
 	dw.renderer.DrawRect(waveRect)
 
@@ -436,21 +631,16 @@ func (dw *DebugWindow) renderWaveforms() {
 		{255, 255, 255},
 	}
 
-	waveHeight := int32(50)
-	waveY := int32(320)
-	waveStartX := int32(410)
-	waveEndX := int32(770)
+	waveHeight := int32(30)
+	waveY := int32(605)
+	waveStartX := int32(460)
+	waveEndX := int32(1060)
 	waveWidth := waveEndX - waveStartX
 
-	// channelNames := []string{"CH1", "CH2", "CH3", "CH4", "MIX"} // Reserved for future text rendering
+	channelNames := []string{"CH1", "CH2", "CH3", "CH4", "MIX"}
 
 	for ch := 0; ch < 5; ch++ {
-		// Draw channel indicator
-		indicatorRect := &sdl.Rect{waveStartX - 35, waveY + 15, 30, 20}
-		dw.renderer.SetDrawColor(colors[ch][0]/2, colors[ch][1]/2, colors[ch][2]/2, 255)
-		dw.renderer.FillRect(indicatorRect)
-		dw.renderer.SetDrawColor(colors[ch][0], colors[ch][1], colors[ch][2], 255)
-		dw.renderer.DrawRect(indicatorRect)
+		DrawText(dw.renderer, channelNames[ch], waveStartX-35, waveY+8, 1, colors[ch][0], colors[ch][1], colors[ch][2])
 
 		centerY := waveY + waveHeight/2
 
@@ -485,8 +675,14 @@ func (dw *DebugWindow) renderWaveforms() {
 }
 
 func (dw *DebugWindow) Cleanup() error {
-	if dw.texture != nil {
-		dw.texture.Destroy()
+	if dw.spriteTexture != nil {
+		dw.spriteTexture.Destroy()
+	}
+	if dw.bgTexture != nil {
+		dw.bgTexture.Destroy()
+	}
+	if dw.minimapTexture != nil {
+		dw.minimapTexture.Destroy()
 	}
 	if dw.renderer != nil {
 		dw.renderer.Destroy()

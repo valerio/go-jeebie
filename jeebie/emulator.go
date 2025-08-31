@@ -13,7 +13,7 @@ type Emulator interface {
 	RunUntilFrame() error
 	GetCurrentFrame() *video.FrameBuffer
 	HandleAction(act action.Action, pressed bool)
-	ExtractDebugData() *debug.CompleteDebugData
+	ExtractDebugData() *debug.Data
 	SetFrameLimiter(limiter timing.Limiter)
 	ResetFrameTiming()
 	GetAudioProvider() audio.Provider

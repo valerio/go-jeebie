@@ -33,8 +33,8 @@ const (
 	DebuggerStepFrame
 )
 
-// CompleteDebugData contains all debug information needed by debug displays
-type CompleteDebugData struct {
+// Data contains all debug information needed by debug displays
+type Data struct {
 	OAM             *OAMData
 	VRAM            *VRAMData
 	CPU             *CPUState
@@ -43,4 +43,7 @@ type CompleteDebugData struct {
 	InterruptEnable uint8 // IE register at 0xFFFF
 	InterruptFlags  uint8 // IF register at 0xFF0F
 	Audio           *AudioData
+	SpriteVis       *SpriteVisualizer
+	BackgroundVis   *BackgroundVisualizer
+	PaletteVis      *PaletteVisualizer
 }
