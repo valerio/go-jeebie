@@ -31,17 +31,21 @@ type DebugWindow struct {
 	cachedBgVis     debug.BackgroundVisualizer
 
 	// Pointers to current data
-	debugData  *debug.Data // Full debug data for disassembly
-	spriteVis  *debug.SpriteVisualizer
-	bgVis      *debug.BackgroundVisualizer
-	paletteVis *debug.PaletteVisualizer
-	audioData  *debug.AudioData
+	debugData    *debug.Data // Full debug data for disassembly
+	spriteVis    *debug.SpriteVisualizer
+	bgVis        *debug.BackgroundVisualizer
+	paletteVis   *debug.PaletteVisualizer
+	audioData    *debug.AudioData
+	layerBuffers *video.RenderLayers
 
 	// Waveform visualization
 	waveformSamples [5][128]float32 // Ch1-4 + Mix
 
 	// Pre-allocated buffers to avoid allocations in hot loops
-	tilemapPixelBuffer []byte // 256*256*4 bytes for tilemap rendering
+	tilemapPixelBuffer []byte              // 256*256*4 bytes for tilemap rendering
+	spriteTileBuffer   []uint32            // 8*8 buffer for sprite tile rendering
+	defaultPalette     []uint32            // Default grayscale palette
+	disasmBuffer       *debug.DisasmBuffer // Pre-allocated disassembly buffer
 
 	needsUpdate bool
 }
@@ -94,6 +98,14 @@ func (dw *DebugWindow) Init() error {
 
 	// Pre-allocate pixel buffers to avoid allocations in hot loops
 	dw.tilemapPixelBuffer = make([]byte, 256*256*4)
+	dw.spriteTileBuffer = make([]uint32, 8*8)
+	dw.defaultPalette = []uint32{
+		uint32(video.WhiteColor),
+		uint32(video.LightGreyColor),
+		uint32(video.DarkGreyColor),
+		uint32(video.BlackColor),
+	}
+	dw.disasmBuffer = debug.NewDisasmBuffer(maxDisasmLines)
 
 	dw.window.Hide()
 	return nil
@@ -109,6 +121,7 @@ func (dw *DebugWindow) UpdateData(debugData *debug.Data) {
 	dw.bgVis = debugData.BackgroundVis
 	dw.paletteVis = debugData.PaletteVis
 	dw.audioData = debugData.Audio
+	dw.layerBuffers = debugData.LayerBuffers
 	if dw.audioData != nil {
 		dw.updateWaveformSamples()
 	}
@@ -272,16 +285,15 @@ func (dw *DebugWindow) renderBackgroundPanel() {
 }
 
 func (dw *DebugWindow) renderTilemap() {
-	for row := 0; row < 32; row++ {
-		for col := 0; col < 32; col++ {
-			tileIndex := dw.bgVis.Tilemap[row][col]
-			var tile video.Tile
-
-			// TODO: Use the same tile fetching logic as the GPU
-			useSigned := dw.bgVis.TileDataBase == 0x8800
-			tile = debug.GetTileForBackgroundIndex(dw.bgVis.TileData, tileIndex, useSigned)
-
-			dw.renderTileToBuffer(tile, dw.tilemapPixelBuffer, row*8, col*8, 256)
+	// Convert uint32 buffer to byte buffer for SDL texture
+	for i, pixel := range dw.layerBuffers.Background.Buffer {
+		offset := i * 4
+		if offset+3 < len(dw.tilemapPixelBuffer) {
+			// SDL2 RGBA8888 format expects ABGR in memory
+			dw.tilemapPixelBuffer[offset] = byte(pixel)         // Alpha (from AA)
+			dw.tilemapPixelBuffer[offset+1] = byte(pixel >> 8)  // Blue (from BB)
+			dw.tilemapPixelBuffer[offset+2] = byte(pixel >> 16) // Green (from GG)
+			dw.tilemapPixelBuffer[offset+3] = byte(pixel >> 24) // Red (from RR)
 		}
 	}
 
@@ -322,7 +334,26 @@ func (dw *DebugWindow) renderPalettePanel() {
 
 		for j := 0; j < 4; j++ {
 			colorX := x + 40 + int32(j*30)
-			r, g, b, _ := dw.gbColorToRGBA(pal.info.Colors[j])
+
+			// Convert GBColor to RGBA using video package constants
+			var rgba uint32
+			switch pal.info.Colors[j] {
+			case 0:
+				rgba = uint32(video.WhiteColor)
+			case 1:
+				rgba = uint32(video.LightGreyColor)
+			case 2:
+				rgba = uint32(video.DarkGreyColor)
+			case 3:
+				rgba = uint32(video.BlackColor)
+			default:
+				rgba = 0xFFFF00FF // Error color (magenta)
+			}
+
+			// Extract RGBA components (format is 0xAABBGGRR)
+			r := uint8(rgba >> 24)
+			g := uint8(rgba >> 16)
+			b := uint8(rgba >> 8)
 
 			dw.renderer.SetDrawColor(r, g, b, 255)
 			colorRect := &sdl.Rect{colorX, y, 25, 25}
@@ -353,7 +384,7 @@ func (dw *DebugWindow) renderDisassemblyPanel() {
 
 	pc := dw.debugData.CPU.PC
 
-	disasmLines := debug.CreateDisassembly(dw.debugData.Memory, pc, maxDisasmLines)
+	disasmLines := debug.CreateDisassemblyWithBuffer(dw.debugData.Memory, pc, maxDisasmLines, dw.disasmBuffer)
 
 	// Render each line
 	y := int32(385)
@@ -405,36 +436,31 @@ func (dw *DebugWindow) renderDisassemblyPanel() {
 }
 
 func (dw *DebugWindow) renderSmallSpriteTile(tile video.Tile, x, y int32) {
-	pixels := tile.Pixels()
-	for py := 0; py < 8; py++ {
-		for px := 0; px < 8; px++ {
-			r, g, b, _ := dw.gbColorToRGBA(pixels[py][px])
+	// Clear the buffer (only non-zero values)
+	for i := range dw.spriteTileBuffer {
+		if dw.spriteTileBuffer[i] != 0 {
+			dw.spriteTileBuffer[i] = 0
+		}
+	}
+
+	video.RenderTileToBuffer(&tile, dw.spriteTileBuffer, 0, 0, 8, dw.defaultPalette)
+
+	// Draw the scaled tile
+	for ty := 0; ty < 8; ty++ {
+		for tx := 0; tx < 8; tx++ {
+			pixel := dw.spriteTileBuffer[ty*8+tx]
+			r := uint8(pixel >> 24)
+			g := uint8(pixel >> 16)
+			b := uint8(pixel >> 8)
 			dw.renderer.SetDrawColor(r, g, b, 255)
 			// Draw scaled pixels
 			for sy := 0; sy < spriteScale; sy++ {
 				for sx := 0; sx < spriteScale; sx++ {
 					dw.renderer.DrawPoint(
-						x+int32(px*spriteScale+sx),
-						y+int32(py*spriteScale+sy),
+						x+int32(tx*spriteScale+sx),
+						y+int32(ty*spriteScale+sy),
 					)
 				}
-			}
-		}
-	}
-}
-
-func (dw *DebugWindow) renderTileToBuffer(tile video.Tile, buffer []byte, row, col, stride int) {
-	pixels := tile.Pixels()
-	for y := 0; y < 8; y++ {
-		for x := 0; x < 8; x++ {
-			offset := ((row+y)*stride + (col + x)) * 4
-			if offset+3 < len(buffer) {
-				r, g, b, a := dw.gbColorToRGBA(pixels[y][x])
-				// SDL2 RGBA8888 format is actually ABGR in memory
-				buffer[offset] = a   // Alpha
-				buffer[offset+1] = b // Blue
-				buffer[offset+2] = g // Green
-				buffer[offset+3] = r // Red
 			}
 		}
 	}
@@ -456,21 +482,6 @@ func (dw *DebugWindow) renderPanelLabel(x, y int32, text string) {
 	dw.renderer.DrawRect(labelRect)
 
 	DrawText(dw.renderer, text, x+padding, y+padding, fontScale, 200, 200, 200)
-}
-
-func (dw *DebugWindow) gbColorToRGBA(color video.GBColor) (r, g, b, a uint8) {
-	switch int(color) {
-	case 0:
-		return 255, 255, 255, 255
-	case 1:
-		return 170, 170, 170, 255
-	case 2:
-		return 85, 85, 85, 255
-	case 3:
-		return 0, 0, 0, 255
-	default:
-		return 255, 0, 0, 255
-	}
 }
 
 func (dw *DebugWindow) SetVisible(visible bool) {

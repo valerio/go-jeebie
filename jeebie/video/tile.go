@@ -2,6 +2,15 @@ package video
 
 import "github.com/valerio/go-jeebie/jeebie/bit"
 
+const (
+	TileWidth        = 8   // Tile width in pixels
+	TileHeight       = 8   // Tile height in pixels
+	TileBytes        = 16  // Bytes per tile (8 rows × 2 bytes/row)
+	TilemapWidth     = 32  // Tilemap width in tiles
+	TilemapHeight    = 32  // Tilemap height in tiles
+	TilemapPixelSize = 256 // Tilemap size in pixels (32 tiles × 8 pixels)
+)
+
 // TileRow represents one row of a tile pattern (8 pixels).
 //
 // Game Boy tiles are 8x8 pixels, with 2 bits per pixel allowing 4 colors.
@@ -123,4 +132,163 @@ func FetchTileWithIndex(memory MemoryReader, baseAddr uint16, index int) Tile {
 // TODO: unify these into 2 shared interfaces?
 type MemoryReader interface {
 	Read(addr uint16) byte
+}
+
+// RenderTileToBuffer renders a single tile to a buffer at the specified position.
+// The buffer is assumed to be RGBA format (0xAABBGGRR).
+// x, y are the top-left position in the buffer, stride is the buffer width.
+func RenderTileToBuffer(tile *Tile, buffer []uint32, x, y, stride int, palette []uint32) {
+	for ty := 0; ty < 8; ty++ {
+		if y+ty < 0 || y+ty >= stride {
+			continue
+		}
+		for tx := 0; tx < 8; tx++ {
+			if x+tx < 0 || x+tx >= stride {
+				continue
+			}
+			colorIndex := tile.Rows[ty].GetPixel(tx)
+			offset := (y+ty)*stride + (x + tx)
+			if offset >= 0 && offset < len(buffer) {
+				buffer[offset] = palette[colorIndex]
+			}
+		}
+	}
+}
+
+// ApplyPalette converts a GB palette byte to RGBA colors.
+// The palette byte maps 2-bit color indices to 2-bit shade values:
+// Bits 0-1: Color 0, Bits 2-3: Color 1, Bits 4-5: Color 2, Bits 6-7: Color 3
+func ApplyPalette(paletteByte byte) []uint32 {
+	palette := make([]uint32, 4)
+	for i := range 4 {
+		shade := (paletteByte >> (i * 2)) & 0x3
+		palette[i] = gbShadeToRGBA(shade)
+	}
+	return palette
+}
+
+// gbShadeToRGBA converts a 2-bit GB shade to RGBA color.
+func gbShadeToRGBA(shade byte) uint32 {
+	// Swap byte order from RGBA to ABGR for internal representation
+	switch shade {
+	case 0:
+		return uint32(WhiteColor)
+	case 1:
+		return uint32(LightGreyColor)
+	case 2:
+		return uint32(DarkGreyColor)
+	case 3:
+		return uint32(BlackColor)
+	default:
+		return uint32(WhiteColor)
+	}
+}
+
+// RenderTilemapToBuffer renders a complete 32x32 tilemap to a buffer.
+// The tilemap is 256x256 pixels (32x32 tiles of 8x8 pixels each).
+func RenderTilemapToBuffer(memory MemoryReader, tilemapAddr uint16, tileDataAddr uint16,
+	buffer []uint32, palette []uint32, signed bool) {
+
+	for ty := 0; ty < TilemapHeight; ty++ {
+		for tx := 0; tx < TilemapWidth; tx++ {
+			// Get tile index from tilemap
+			tileIndex := memory.Read(tilemapAddr + uint16(ty*TilemapWidth+tx))
+
+			// Calculate tile data address
+			var tileAddr uint16
+			if signed && tileIndex < 128 {
+				// Unsigned addressing (0-127)
+				tileAddr = tileDataAddr + uint16(tileIndex)*TileBytes
+			} else if signed {
+				// Signed addressing (128-255 maps to -128 to -1)
+				offset := int8(tileIndex)
+				tileAddr = uint16(int32(tileDataAddr) + int32(offset)*TileBytes)
+			} else {
+				// Unsigned addressing
+				tileAddr = tileDataAddr + uint16(tileIndex)*TileBytes
+			}
+
+			// Fetch and render tile
+			tile := FetchTile(memory, tileAddr)
+			RenderTileToBuffer(&tile, buffer, tx*TileWidth, ty*TileHeight, TilemapPixelSize, palette)
+		}
+	}
+}
+
+// RenderSpritesToBuffer renders all sprites to a buffer.
+// Handles sprite priority, flipping, and palettes.
+func RenderSpritesToBuffer(sprites []Sprite, memory MemoryReader, buffer []uint32,
+	palette0 []uint32, palette1 []uint32, width, height int) {
+
+	// Clear buffer with transparent
+	for i := range buffer {
+		buffer[i] = 0x00000000
+	}
+
+	// Render sprites in reverse order (lower priority first)
+	for i := len(sprites) - 1; i >= 0; i-- {
+		sprite := sprites[i]
+
+		// Choose palette
+		palette := palette0
+		if sprite.PaletteOBP1 {
+			palette = palette1
+		}
+
+		// Fetch tile(s) - handle 8x16 sprites
+		spriteHeight := sprite.Height
+		if spriteHeight == 0 {
+			spriteHeight = 8
+		}
+
+		for tileOffset := 0; tileOffset < spriteHeight; tileOffset += 8 {
+			tileIndex := sprite.TileIndex
+			if spriteHeight == 16 && tileOffset == 8 {
+				tileIndex++ // Second tile for 8x16 sprites
+			}
+
+			tileAddr := uint16(0x8000) + uint16(tileIndex)*TileBytes
+			tile := FetchTile(memory, tileAddr)
+
+			// Handle flipping
+			if sprite.FlipY {
+				// Flip tile rows
+				for j := 0; j < 4; j++ {
+					tile.Rows[j], tile.Rows[7-j] = tile.Rows[7-j], tile.Rows[j]
+				}
+			}
+
+			// Render tile row by row with flip handling
+			for row := 0; row < 8; row++ {
+				y := int(sprite.Y) + row + tileOffset
+				if y < 0 || y >= height {
+					continue
+				}
+
+				for col := 0; col < 8; col++ {
+					x := int(sprite.X) + col
+					if x < 0 || x >= width {
+						continue
+					}
+
+					var colorIndex int
+					if sprite.FlipX {
+						colorIndex = tile.Rows[row].GetPixelFlipped(col)
+					} else {
+						colorIndex = tile.Rows[row].GetPixel(col)
+					}
+
+					// Color 0 is transparent for sprites
+					if colorIndex == 0 {
+						continue
+					}
+
+					offset := y*width + x
+					if offset >= 0 && offset < len(buffer) {
+						buffer[offset] = palette[colorIndex]
+					}
+				}
+			}
+		}
+	}
 }

@@ -74,10 +74,6 @@ func NewWithCartridge(cart *Cartridge) *MMU {
 	return mmu
 }
 
-func isBetween(addr, start, end uint16) bool {
-	return addr >= start && addr <= end
-}
-
 func initRegionMap(m *MMU) {
 	// ROM: 0x0000-0x7FFF
 	for i := 0x00; i <= 0x7F; i++ {

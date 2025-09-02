@@ -34,8 +34,9 @@ const (
 type GPU struct {
 	memory        *memory.MMU
 	framebuffer   *FrameBuffer
-	bgPixelBuffer []byte // stores background/window pixel colors for sprite priority
-	oam           *OAM   // OAM scanner for sprite management
+	bgPixelBuffer []byte        // stores background/window pixel colors for sprite priority
+	oam           *OAM          // OAM scanner for sprite management
+	Layers        *RenderLayers // separate layer framebuffers for debug visualization
 
 	// PPU state - these map to Game Boy hardware registers/behavior
 	mode                 GpuMode // current PPU mode (matches STAT bits 1-0)
@@ -57,6 +58,7 @@ func NewGpu(memory *memory.MMU) *GPU {
 		mode:          vblankMode,
 		bgPixelBuffer: make([]byte, FramebufferSize),
 		oam:           NewOAM(memory),
+		Layers:        NewRenderLayers(),
 
 		line: 144,
 	}
@@ -71,6 +73,13 @@ func NewGpu(memory *memory.MMU) *GPU {
 
 func (g *GPU) GetFrameBuffer() *FrameBuffer {
 	return g.framebuffer
+}
+
+func (g *GPU) SetLayerRenderingEnabled(enabled bool) {
+	g.Layers.Enabled = enabled
+	if enabled {
+		g.Layers.Clear()
+	}
 }
 
 // Tick simulates gpu behaviour for a certain amount of clock cycles.
@@ -180,6 +189,11 @@ func (g *GPU) drawScanline() {
 	g.drawBackground()
 	g.drawWindow()
 	g.drawSprites()
+
+	// Update layer framebuffers if enabled
+	if g.Layers.Enabled && g.line == 0 {
+		g.updateLayerFramebuffers()
+	}
 }
 
 func (g *GPU) drawBackground() {
@@ -193,6 +207,10 @@ func (g *GPU) drawBackground() {
 
 func (g *GPU) isBackgroundEnabled() bool {
 	return g.readLCDCVariable(bgDisplay) == 1
+}
+
+func (g *GPU) isWindowEnabled() bool {
+	return g.readLCDCVariable(windowDisplayEnable) == 1
 }
 
 // call when background is disabled, fill with color 0 from BGP
@@ -566,4 +584,59 @@ func (g *GPU) setLY(line int) {
 	g.line = line
 	g.memory.Write(addr.LY, byte(g.line))
 	g.compareLYToLYC()
+}
+
+// updateLayerFramebuffers renders complete tilemaps and sprites to layer buffers for debug visualization
+func (g *GPU) updateLayerFramebuffers() {
+	if !g.Layers.Enabled {
+		return
+	}
+
+	// Get palette data
+	bgPalette := ApplyPalette(g.memory.Read(addr.BGP))
+	obp0Palette := ApplyPalette(g.memory.Read(addr.OBP0))
+	obp1Palette := ApplyPalette(g.memory.Read(addr.OBP1))
+
+	// Render background tilemap
+	if g.isBackgroundEnabled() {
+		tileDataAddr := g.getTileDataAddress()
+		tileMapAddr := g.getBackgroundTileMapAddress()
+		useSigned := g.readLCDCVariable(bgWindowTileDataSelect) == 0
+		RenderTilemapToBuffer(g.memory, tileMapAddr, tileDataAddr,
+			g.Layers.Background.Buffer, bgPalette, useSigned)
+	}
+
+	// Render window tilemap
+	if g.isWindowEnabled() {
+		tileDataAddr := g.getTileDataAddress()
+		tileMapAddr := g.getWindowTileMapAddress()
+		useSigned := g.readLCDCVariable(bgWindowTileDataSelect) == 0
+		RenderTilemapToBuffer(g.memory, tileMapAddr, tileDataAddr,
+			g.Layers.Window.Buffer, bgPalette, useSigned)
+	}
+
+	// Render sprites
+	if g.readLCDCVariable(spriteDisplayEnable) == 1 {
+		// Collect all sprites
+		var allSprites []Sprite
+		for scanline := 0; scanline < 144; scanline++ {
+			sprites := g.oam.GetSpritesForScanline(scanline)
+			allSprites = append(allSprites, sprites...)
+		}
+
+		// Remove duplicates based on OAM index
+		uniqueSprites := make(map[int]Sprite)
+		for _, sprite := range allSprites {
+			uniqueSprites[sprite.OAMIndex] = sprite
+		}
+
+		// Convert map to slice
+		var sprites []Sprite
+		for _, sprite := range uniqueSprites {
+			sprites = append(sprites, sprite)
+		}
+
+		RenderSpritesToBuffer(sprites, g.memory, g.Layers.Sprites.Buffer,
+			obp0Palette, obp1Palette, 160, 144)
+	}
 }

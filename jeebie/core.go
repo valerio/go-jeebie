@@ -312,7 +312,7 @@ func (e *DMG) ExtractDebugData() *debug.Data {
 	pc := e.cpu.GetPC()
 
 	// Calculate start address, handling underflow
-	startAddr := pc
+	var startAddr uint16
 	if pc >= beforePC {
 		startAddr = pc - beforePC
 	} else {
@@ -357,6 +357,16 @@ func (e *DMG) ExtractDebugData() *debug.Data {
 	backgroundVis := debug.ExtractBackgroundData(e.mem)
 	paletteVis := debug.ExtractPaletteData(e.mem)
 
+	// Enable layer rendering when debug data is requested and extract framebuffers
+	var layerBuffers *video.RenderLayers
+	if e.gpu != nil && e.gpu.Layers != nil {
+		// Auto-enable layer rendering when debug data is requested
+		if !e.gpu.Layers.Enabled {
+			e.gpu.SetLayerRenderingEnabled(true)
+		}
+		layerBuffers = e.gpu.Layers
+	}
+
 	return &debug.Data{
 		OAM:             oamData,
 		VRAM:            vramData,
@@ -369,6 +379,7 @@ func (e *DMG) ExtractDebugData() *debug.Data {
 		SpriteVis:       spriteVis,
 		BackgroundVis:   backgroundVis,
 		PaletteVis:      paletteVis,
+		LayerBuffers:    layerBuffers,
 	}
 }
 

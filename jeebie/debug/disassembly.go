@@ -10,7 +10,25 @@ type DisasmLine struct {
 	IsCurrent   bool
 }
 
+// DisasmBuffer holds pre-allocated buffers for disassembly lines
+type DisasmBuffer struct {
+	Lines    []DisasmLine
+	AllLines []DisasmLine
+}
+
+func NewDisasmBuffer(maxLines int) *DisasmBuffer {
+	return &DisasmBuffer{
+		Lines:    make([]DisasmLine, 0, maxLines),
+		AllLines: make([]DisasmLine, 0, maxLines*3), // Extra space for context
+	}
+}
+
 func CreateDisassembly(snapshot *MemorySnapshot, pc uint16, maxLines int) []DisasmLine {
+	buf := NewDisasmBuffer(maxLines)
+	return CreateDisassemblyWithBuffer(snapshot, pc, maxLines, buf)
+}
+
+func CreateDisassemblyWithBuffer(snapshot *MemorySnapshot, pc uint16, maxLines int, buf *DisasmBuffer) []DisasmLine {
 	if snapshot == nil {
 		return nil
 	}
@@ -23,11 +41,12 @@ func CreateDisassembly(snapshot *MemorySnapshot, pc uint16, maxLines int) []Disa
 	}
 
 	if !pcInSnapshot {
-		lines := []DisasmLine{}
-		for i := 0; i < len(snapshot.Bytes) && len(lines) < maxLines-1; {
+		// Reset buffer and reuse it
+		buf.Lines = buf.Lines[:0]
+		for i := 0; i < len(snapshot.Bytes) && len(buf.Lines) < maxLines-1; {
 			addr := snapshot.StartAddr + uint16(i)
 			instruction, length := disasm.DisassembleBytes(snapshot.Bytes, i)
-			lines = append(lines, DisasmLine{
+			buf.Lines = append(buf.Lines, DisasmLine{
 				Address:     addr,
 				Instruction: instruction,
 				IsCurrent:   false,
@@ -35,15 +54,16 @@ func CreateDisassembly(snapshot *MemorySnapshot, pc uint16, maxLines int) []Disa
 			i += length
 		}
 		// Add a special line indicating PC is outside snapshot
-		lines = append(lines, DisasmLine{
+		buf.Lines = append(buf.Lines, DisasmLine{
 			Address:     pc,
 			Instruction: "[PC outside snapshot range]",
 			IsCurrent:   true,
 		})
-		return lines
+		return buf.Lines
 	}
 
-	allLines := []DisasmLine{}
+	// Reset buffer and reuse it
+	buf.AllLines = buf.AllLines[:0]
 
 	backwardBytes := 30
 	startOffset := pcOffset - backwardBytes
@@ -55,20 +75,20 @@ func CreateDisassembly(snapshot *MemorySnapshot, pc uint16, maxLines int) []Disa
 		addr := snapshot.StartAddr + uint16(i)
 		instruction, length := disasm.DisassembleBytes(snapshot.Bytes, i)
 
-		allLines = append(allLines, DisasmLine{
+		buf.AllLines = append(buf.AllLines, DisasmLine{
 			Address:     addr,
 			Instruction: instruction,
 			IsCurrent:   addr == pc,
 		})
 
 		i += length
-		if addr > pc && len(allLines) > maxLines*2 {
+		if addr > pc && len(buf.AllLines) > maxLines*2 {
 			break
 		}
 	}
 
 	pcIndex := -1
-	for i, line := range allLines {
+	for i, line := range buf.AllLines {
 		if line.Address == pc {
 			pcIndex = i
 			break
@@ -84,25 +104,28 @@ func CreateDisassembly(snapshot *MemorySnapshot, pc uint16, maxLines int) []Disa
 			startIdx = 0
 			endIdx = maxLines
 		}
-		if endIdx > len(allLines) {
-			endIdx = len(allLines)
+		if endIdx > len(buf.AllLines) {
+			endIdx = len(buf.AllLines)
 			startIdx = endIdx - maxLines
 			if startIdx < 0 {
 				startIdx = 0
 			}
 		}
 
-		return allLines[startIdx:endIdx]
+		// Reset Lines buffer and copy the visible range
+		buf.Lines = buf.Lines[:0]
+		buf.Lines = append(buf.Lines, buf.AllLines[startIdx:endIdx]...)
+		return buf.Lines
 	}
 
 	// PC should be in snapshot but we didn't find it in our disassembly
 	// This can happen if we started disassembling from the middle of an instruction
 	// Try to show instructions around where PC should be
-	if len(allLines) > 0 {
+	if len(buf.AllLines) > 0 {
 		// Find the closest instruction to PC
 		closestIdx := 0
 		closestDist := uint16(0xFFFF)
-		for i, line := range allLines {
+		for i, line := range buf.AllLines {
 			var dist uint16
 			if line.Address > pc {
 				dist = line.Address - pc
@@ -124,16 +147,19 @@ func CreateDisassembly(snapshot *MemorySnapshot, pc uint16, maxLines int) []Disa
 			startIdx = 0
 			endIdx = maxLines
 		}
-		if endIdx > len(allLines) {
-			endIdx = len(allLines)
+		if endIdx > len(buf.AllLines) {
+			endIdx = len(buf.AllLines)
 			startIdx = endIdx - maxLines
 			if startIdx < 0 {
 				startIdx = 0
 			}
 		}
 
-		return allLines[startIdx:endIdx]
+		// Reset Lines buffer and copy the visible range
+		buf.Lines = buf.Lines[:0]
+		buf.Lines = append(buf.Lines, buf.AllLines[startIdx:endIdx]...)
+		return buf.Lines
 	}
 
-	return allLines
+	return buf.AllLines
 }

@@ -1,5 +1,7 @@
 package debug
 
+import "github.com/valerio/go-jeebie/jeebie/video"
+
 // CPUState contains all CPU register information for debugging
 type CPUState struct {
 	A uint8
@@ -46,4 +48,5 @@ type Data struct {
 	SpriteVis       *SpriteVisualizer
 	BackgroundVis   *BackgroundVisualizer
 	PaletteVis      *PaletteVisualizer
+	LayerBuffers    *video.RenderLayers // Pre-rendered layer framebuffers from GPU
 }

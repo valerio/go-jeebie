@@ -12,11 +12,6 @@ type Limiter interface {
 	Reset()
 }
 
-// NewLimiter creates the default frame limiter (adaptive).
-func NewLimiter() Limiter {
-	return NewAdaptiveLimiter()
-}
-
 // NewNoOpLimiter returns a limiter that doesn't limit (for headless mode).
 func NewNoOpLimiter() Limiter {
 	return &noOpLimiter{}
