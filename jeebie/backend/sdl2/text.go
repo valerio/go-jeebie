@@ -4,6 +4,9 @@ package sdl2
 
 import "github.com/veandco/go-sdl2/sdl"
 
+// Global rect reused for all text rendering, reduces allocations
+var textRenderRect = sdl.Rect{}
+
 // Simple bitmap font for debug text (5x7 pixel characters)
 var fontData = map[rune][7]uint8{
 	'A': {0x70, 0x88, 0x88, 0xF8, 0x88, 0x88, 0x88},
@@ -94,18 +97,16 @@ func DrawChar(renderer *sdl.Renderer, ch rune, x, y int32, scale int32, r, g, b 
 	}
 
 	renderer.SetDrawColor(r, g, b, 255)
+	textRenderRect.W = scale
+	textRenderRect.H = scale
 
 	for row := 0; row < 7; row++ {
 		bits := bitmap[row]
 		for col := 0; col < 5; col++ {
 			if bits&(0x80>>col) != 0 {
-				rect := &sdl.Rect{
-					X: x + int32(col)*scale,
-					Y: y + int32(row)*scale,
-					W: scale,
-					H: scale,
-				}
-				renderer.FillRect(rect)
+				textRenderRect.X = x + int32(col)*scale
+				textRenderRect.Y = y + int32(row)*scale
+				renderer.FillRect(&textRenderRect)
 			}
 		}
 	}
