@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"os/signal"
 	"runtime"
 	"runtime/pprof"
+	"syscall"
 
 	"github.com/urfave/cli"
 	"github.com/valerio/go-jeebie/jeebie"
@@ -133,6 +135,13 @@ func runEmulator(c *cli.Context) error {
 	}
 
 	running := true
+
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+	go func() {
+		<-sigChan
+		running = false
+	}()
 
 	config := backend.BackendConfig{
 		Title:         "Jeebie",
