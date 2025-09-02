@@ -15,6 +15,7 @@ const (
 	DebugWindowWidth  = 1280
 	DebugWindowHeight = 800
 	maxDisasmLines    = 20
+	spriteScale       = 2
 )
 
 type DebugWindow struct {
@@ -140,7 +141,7 @@ func (dw *DebugWindow) Render() error {
 func (dw *DebugWindow) renderSpritePanel() {
 	dw.renderPanelLabel(10, 10, "Sprites (OAM)")
 
-	panelRect := &sdl.Rect{10, 35, 420, 340}
+	panelRect := &sdl.Rect{10, 35, 620, 300}
 	dw.renderer.SetDrawColor(40, 40, 40, 255)
 	dw.renderer.FillRect(panelRect)
 	dw.renderer.SetDrawColor(100, 100, 100, 255)
@@ -150,11 +151,11 @@ func (dw *DebugWindow) renderSpritePanel() {
 		return
 	}
 
-	// Show all 40 sprites in a 2-column layout
+	// Show all 40 sprites in a 3-column layout
 	sprites := dw.spriteVis.Sprites
-	const spritesPerColumn = 20
+	const spritesPerColumn = 14
 	const columnWidth = 200
-	const rowHeight = 16
+	const rowHeight = 20
 
 	for i := 0; i < len(sprites) && i < 40; i++ {
 		sprite := sprites[i]
@@ -166,7 +167,7 @@ func (dw *DebugWindow) renderSpritePanel() {
 		y := int32(45 + row*rowHeight)
 
 		// Render the small sprite tile
-		dw.renderSmallSpriteTile(sprite.TileData, x, y+2)
+		dw.renderSmallSpriteTile(sprite.TileData, x, y)
 
 		// Determine text color based on visibility
 		textR, textG, textB := uint8(200), uint8(200), uint8(200)
@@ -182,26 +183,26 @@ func (dw *DebugWindow) renderSpritePanel() {
 			sprite.Y,
 		)
 
-		DrawText(dw.renderer, info, x+12, y+3, 1, textR, textG, textB)
+		DrawText(dw.renderer, info, x+20, y+5, 1, textR, textG, textB)
 
 		// Show flags as single letters
 		flagX := x + 140
 		if sprite.Info.Sprite.FlipX {
-			DrawText(dw.renderer, "X", flagX, y+3, 1, 255, 150, 150)
+			DrawText(dw.renderer, "X", flagX, y+5, 1, 255, 150, 150)
 			flagX += 8
 		}
 		if sprite.Info.Sprite.FlipY {
-			DrawText(dw.renderer, "Y", flagX, y+3, 1, 150, 255, 150)
+			DrawText(dw.renderer, "Y", flagX, y+5, 1, 150, 255, 150)
 			flagX += 8
 		}
 		if sprite.Info.Sprite.BehindBG {
-			DrawText(dw.renderer, "B", flagX, y+3, 1, 150, 150, 255)
+			DrawText(dw.renderer, "B", flagX, y+5, 1, 150, 150, 255)
 			flagX += 8
 		}
 		if sprite.Info.Sprite.PaletteOBP1 {
-			DrawText(dw.renderer, "1", flagX, y+3, 1, 255, 255, 150)
+			DrawText(dw.renderer, "1", flagX, y+5, 1, 255, 255, 150)
 		} else {
-			DrawText(dw.renderer, "0", flagX, y+3, 1, 200, 200, 200)
+			DrawText(dw.renderer, "0", flagX, y+5, 1, 200, 200, 200)
 		}
 	}
 
@@ -212,9 +213,9 @@ func (dw *DebugWindow) renderSpritePanel() {
 }
 
 func (dw *DebugWindow) renderBackgroundPanel() {
-	dw.renderPanelLabel(450, 10, "Background Tilemap")
+	dw.renderPanelLabel(650, 10, "Background Tilemap")
 
-	panelRect := &sdl.Rect{450, 35, 320, 320}
+	panelRect := &sdl.Rect{650, 35, 320, 320}
 	dw.renderer.SetDrawColor(40, 40, 40, 255)
 	dw.renderer.FillRect(panelRect)
 	dw.renderer.SetDrawColor(100, 100, 100, 255)
@@ -229,14 +230,14 @@ func (dw *DebugWindow) renderBackgroundPanel() {
 
 	scrollX := int32(dw.bgVis.ScrollX)
 	scrollY := int32(dw.bgVis.ScrollY)
-	viewportX := int32(460) + scrollX
+	viewportX := int32(660) + scrollX
 	viewportY := int32(45) + scrollY
 	viewportRect := &sdl.Rect{viewportX, viewportY, 160, 144}
 	dw.renderer.SetDrawColor(255, 255, 0, 128)
 	dw.renderer.DrawRect(viewportRect)
 
 	if active, wx, wy := dw.bgVis.GetWindowViewport(); active {
-		windowRect := &sdl.Rect{int32(460 + wx), int32(45 + wy), 160, 144}
+		windowRect := &sdl.Rect{int32(660 + wx), int32(45 + wy), 160, 144}
 		dw.renderer.SetDrawColor(0, 255, 255, 128)
 		dw.renderer.DrawRect(windowRect)
 	}
@@ -249,7 +250,7 @@ func (dw *DebugWindow) renderBackgroundPanel() {
 	info := fmt.Sprintf("SCX:%d SCY:%d | Win: %s",
 		dw.bgVis.ScrollX, dw.bgVis.ScrollY, winStatus,
 	)
-	DrawText(dw.renderer, info, 460, infoY, 1, 200, 200, 200)
+	DrawText(dw.renderer, info, 660, infoY, 1, 200, 200, 200)
 
 	// Show tilemap addresses
 	bgMapAddr := "9800"
@@ -267,7 +268,7 @@ func (dw *DebugWindow) renderBackgroundPanel() {
 	mapInfo := fmt.Sprintf("BG Map:%s Win Map:%s Tiles:%s",
 		bgMapAddr, winMapAddr, tileDataAddr,
 	)
-	DrawText(dw.renderer, mapInfo, 460, infoY+15, 1, 150, 150, 150)
+	DrawText(dw.renderer, mapInfo, 660, infoY+15, 1, 150, 150, 150)
 }
 
 func (dw *DebugWindow) renderTilemap() {
@@ -287,14 +288,14 @@ func (dw *DebugWindow) renderTilemap() {
 	dw.bgTexture.Update(nil, unsafe.Pointer(&dw.tilemapPixelBuffer[0]), 256*4)
 
 	srcRect := &sdl.Rect{0, 0, 256, 256}
-	dstRect := &sdl.Rect{460, 45, 300, 300}
+	dstRect := &sdl.Rect{660, 45, 300, 300}
 	dw.renderer.Copy(dw.bgTexture, srcRect, dstRect)
 }
 
 func (dw *DebugWindow) renderPalettePanel() {
-	dw.renderPanelLabel(790, 10, "Palettes")
+	dw.renderPanelLabel(990, 10, "Palettes")
 
-	panelRect := &sdl.Rect{790, 35, 280, 130}
+	panelRect := &sdl.Rect{990, 35, 280, 130}
 	dw.renderer.SetDrawColor(40, 40, 40, 255)
 	dw.renderer.FillRect(panelRect)
 	dw.renderer.SetDrawColor(100, 100, 100, 255)
@@ -315,7 +316,7 @@ func (dw *DebugWindow) renderPalettePanel() {
 
 	for i, pal := range palettes {
 		y := int32(45 + i*35)
-		x := int32(800)
+		x := int32(1000)
 
 		DrawText(dw.renderer, pal.name, x, y, 1, 200, 200, 200)
 
@@ -337,16 +338,16 @@ func (dw *DebugWindow) renderPalettePanel() {
 }
 
 func (dw *DebugWindow) renderDisassemblyPanel() {
-	dw.renderPanelLabel(10, 390, "Disassembly")
+	dw.renderPanelLabel(10, 350, "Disassembly")
 
-	panelRect := &sdl.Rect{10, 415, 420, 370}
+	panelRect := &sdl.Rect{10, 375, 620, 410}
 	dw.renderer.SetDrawColor(40, 40, 40, 255)
 	dw.renderer.FillRect(panelRect)
 	dw.renderer.SetDrawColor(100, 100, 100, 255)
 	dw.renderer.DrawRect(panelRect)
 
 	if dw.debugData == nil || dw.debugData.CPU == nil || dw.debugData.Memory == nil {
-		DrawText(dw.renderer, "No debug data available", 20, 430, 1, 100, 100, 100)
+		DrawText(dw.renderer, "No debug data available", 20, 390, 1, 100, 100, 100)
 		return
 	}
 
@@ -355,7 +356,7 @@ func (dw *DebugWindow) renderDisassemblyPanel() {
 	disasmLines := debug.CreateDisassembly(dw.debugData.Memory, pc, maxDisasmLines)
 
 	// Render each line
-	y := int32(425)
+	y := int32(385)
 	lineHeight := int32(16)
 
 	for _, line := range disasmLines {
@@ -379,7 +380,7 @@ func (dw *DebugWindow) renderDisassemblyPanel() {
 
 	// Draw status line at bottom with background
 	statusY := int32(760)
-	statusBg := &sdl.Rect{10, statusY - 2, 420, 20}
+	statusBg := &sdl.Rect{10, statusY - 2, 620, 20}
 	dw.renderer.SetDrawColor(20, 20, 20, 255)
 	dw.renderer.FillRect(statusBg)
 
@@ -409,7 +410,15 @@ func (dw *DebugWindow) renderSmallSpriteTile(tile video.Tile, x, y int32) {
 		for px := 0; px < 8; px++ {
 			r, g, b, _ := dw.gbColorToRGBA(pixels[py][px])
 			dw.renderer.SetDrawColor(r, g, b, 255)
-			dw.renderer.DrawPoint(x+int32(px), y+int32(py))
+			// Draw scaled pixels
+			for sy := 0; sy < spriteScale; sy++ {
+				for sx := 0; sx < spriteScale; sx++ {
+					dw.renderer.DrawPoint(
+						x+int32(px*spriteScale+sx),
+						y+int32(py*spriteScale+sy),
+					)
+				}
+			}
 		}
 	}
 }
@@ -533,9 +542,9 @@ func (dw *DebugWindow) updateWaveformSamples() {
 }
 
 func (dw *DebugWindow) renderAudioPanel() {
-	dw.renderPanelLabel(450, 390, "Audio Channels")
+	dw.renderPanelLabel(650, 390, "Audio Channels")
 
-	audioRect := &sdl.Rect{450, 415, 380, 160}
+	audioRect := &sdl.Rect{650, 415, 380, 160}
 	dw.renderer.SetDrawColor(40, 40, 40, 255)
 	dw.renderer.FillRect(audioRect)
 	dw.renderer.SetDrawColor(100, 100, 100, 255)
@@ -543,7 +552,7 @@ func (dw *DebugWindow) renderAudioPanel() {
 
 	if !dw.audioData.APUEnabled {
 		dw.renderer.SetDrawColor(200, 100, 100, 255)
-		DrawText(dw.renderer, "APU DISABLED", 530, 470, 2, 200, 100, 100)
+		DrawText(dw.renderer, "APU DISABLED", 730, 470, 2, 200, 100, 100)
 		return
 	}
 
@@ -562,7 +571,7 @@ func (dw *DebugWindow) renderAudioPanel() {
 	}
 
 	for _, ch := range channels {
-		DrawText(dw.renderer, ch.name, 460, y, 1, 180, 180, 180)
+		DrawText(dw.renderer, ch.name, 660, y, 1, 180, 180, 180)
 
 		if ch.status.Enabled {
 			dw.renderer.SetDrawColor(ch.color[0], ch.color[1], ch.color[2], 255)
@@ -570,25 +579,25 @@ func (dw *DebugWindow) renderAudioPanel() {
 			dw.renderer.SetDrawColor(80, 80, 80, 255)
 		}
 
-		statusRect := &sdl.Rect{550, y, 10, 15}
+		statusRect := &sdl.Rect{750, y, 10, 15}
 		dw.renderer.FillRect(statusRect)
 
 		volumeWidth := int32(ch.status.Volume) * 10
 		if volumeWidth > 0 {
-			volumeRect := &sdl.Rect{570, y, volumeWidth, 15}
+			volumeRect := &sdl.Rect{770, y, volumeWidth, 15}
 			dw.renderer.FillRect(volumeRect)
 		}
 
-		DrawText(dw.renderer, ch.status.Note, 750, y, 1, 200, 200, 200)
+		DrawText(dw.renderer, ch.status.Note, 950, y, 1, 200, 200, 200)
 
 		y += lineHeight
 	}
 }
 
 func (dw *DebugWindow) renderWaveforms() {
-	dw.renderPanelLabel(450, 570, "Waveforms")
+	dw.renderPanelLabel(650, 580, "Waveforms")
 
-	waveRect := &sdl.Rect{450, 595, 620, 190}
+	waveRect := &sdl.Rect{650, 605, 620, 180}
 	dw.renderer.SetDrawColor(40, 40, 40, 255)
 	dw.renderer.FillRect(waveRect)
 	dw.renderer.SetDrawColor(100, 100, 100, 255)
@@ -603,9 +612,9 @@ func (dw *DebugWindow) renderWaveforms() {
 	}
 
 	waveHeight := int32(30)
-	waveY := int32(605)
-	waveStartX := int32(460)
-	waveEndX := int32(1060)
+	waveY := int32(615)
+	waveStartX := int32(660)
+	waveEndX := int32(1260)
 	waveWidth := waveEndX - waveStartX
 
 	channelNames := []string{"CH1", "CH2", "CH3", "CH4", "MIX"}
