@@ -60,7 +60,7 @@ type Backend struct {
 func New() *Backend {
 	return &Backend{
 		debugWindow:         NewDebugWindow(),
-		debugUpdateInterval: 3,
+		debugUpdateInterval: 5, // every 5 frames (~12 FPS)
 	}
 }
 

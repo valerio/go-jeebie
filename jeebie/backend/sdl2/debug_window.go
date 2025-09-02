@@ -47,6 +47,11 @@ type DebugWindow struct {
 	defaultPalette     []uint32            // Default grayscale palette
 	disasmBuffer       *debug.DisasmBuffer // Pre-allocated disassembly buffer
 
+	// Cached formatted strings to avoid sprintf on every frame
+	cachedDisasmLines []string // Cached disassembly text
+	cachedPC          uint16   // PC value when cache was created
+	disasmCacheValid  bool     // Whether cached disasm is still valid
+
 	needsUpdate bool
 }
 
@@ -114,6 +119,12 @@ func (dw *DebugWindow) Init() error {
 func (dw *DebugWindow) UpdateData(debugData *debug.Data) {
 	if debugData == nil {
 		return
+	}
+
+	// Invalidate disasm cache if PC changed
+	if dw.debugData != nil && dw.debugData.CPU != nil &&
+		debugData.CPU != nil && dw.debugData.CPU.PC != debugData.CPU.PC {
+		dw.disasmCacheValid = false
 	}
 
 	dw.debugData = debugData
@@ -384,19 +395,43 @@ func (dw *DebugWindow) renderDisassemblyPanel() {
 
 	pc := dw.debugData.CPU.PC
 
-	disasmLines := debug.CreateDisassemblyWithBuffer(dw.debugData.Memory, pc, maxDisasmLines, dw.disasmBuffer)
+	// Only update disassembly if PC changed or cache is invalid
+	if !dw.disasmCacheValid || dw.cachedPC != pc {
+		disasmLines := debug.CreateDisassemblyWithBuffer(dw.debugData.Memory, pc, maxDisasmLines, dw.disasmBuffer)
 
-	// Render each line
+		// Clear and rebuild cache
+		if cap(dw.cachedDisasmLines) < len(disasmLines)*2 {
+			dw.cachedDisasmLines = make([]string, 0, len(disasmLines)*2)
+		} else {
+			dw.cachedDisasmLines = dw.cachedDisasmLines[:0]
+		}
+
+		// Cache formatted strings
+		for _, line := range disasmLines {
+			if line.IsCurrent {
+				dw.cachedDisasmLines = append(dw.cachedDisasmLines, "current")
+			} else {
+				dw.cachedDisasmLines = append(dw.cachedDisasmLines, "")
+			}
+			text := fmt.Sprintf("%04X: %s", line.Address, line.Instruction)
+			dw.cachedDisasmLines = append(dw.cachedDisasmLines, text)
+		}
+
+		dw.cachedPC = pc
+		dw.disasmCacheValid = true
+	}
+
+	// Render cached lines
 	y := int32(385)
 	lineHeight := int32(16)
 
-	for _, line := range disasmLines {
+	for i := 0; i < len(dw.cachedDisasmLines); i += 2 {
 		if y+lineHeight > 750 { // Leave space for status line
 			break
 		}
 
 		var r, g, b uint8
-		if line.IsCurrent {
+		if dw.cachedDisasmLines[i] == "current" {
 			// Current instruction - bright yellow
 			r, g, b = 255, 255, 100
 			DrawText(dw.renderer, ">", 15, y, 1, 255, 255, 100)
@@ -404,8 +439,7 @@ func (dw *DebugWindow) renderDisassemblyPanel() {
 			// Normal instruction - light gray
 			r, g, b = 180, 180, 180
 		}
-		text := fmt.Sprintf("%04X: %s", line.Address, line.Instruction)
-		DrawText(dw.renderer, text, 30, y, 1, r, g, b)
+		DrawText(dw.renderer, dw.cachedDisasmLines[i+1], 30, y, 1, r, g, b)
 		y += lineHeight
 	}
 
