@@ -239,7 +239,8 @@ func (dw *DebugWindow) renderSpritePanel() {
 func (dw *DebugWindow) renderBackgroundPanel() {
 	dw.renderPanelLabel(650, 10, "Background Tilemap")
 
-	panelRect := &sdl.Rect{650, 35, 320, 320}
+	// Changed to 256x256 for pixel-perfect display
+	panelRect := &sdl.Rect{650, 35, 280, 280}
 	dw.renderer.SetDrawColor(40, 40, 40, 255)
 	dw.renderer.FillRect(panelRect)
 	dw.renderer.SetDrawColor(100, 100, 100, 255)
@@ -252,21 +253,7 @@ func (dw *DebugWindow) renderBackgroundPanel() {
 
 	dw.renderTilemap()
 
-	scrollX := int32(dw.bgVis.ScrollX)
-	scrollY := int32(dw.bgVis.ScrollY)
-	viewportX := int32(660) + scrollX
-	viewportY := int32(45) + scrollY
-	viewportRect := &sdl.Rect{viewportX, viewportY, 160, 144}
-	dw.renderer.SetDrawColor(255, 255, 0, 128)
-	dw.renderer.DrawRect(viewportRect)
-
-	if active, wx, wy := dw.bgVis.GetWindowViewport(); active {
-		windowRect := &sdl.Rect{int32(660 + wx), int32(45 + wy), 160, 144}
-		dw.renderer.SetDrawColor(0, 255, 255, 128)
-		dw.renderer.DrawRect(windowRect)
-	}
-
-	infoY := int32(360)
+	infoY := int32(320) // Adjusted for smaller tilemap display
 	winStatus := "OFF"
 	if dw.bgVis.WindowEnabled {
 		winStatus = fmt.Sprintf("ON (X:%d Y:%d)", dw.bgVis.WindowX, dw.bgVis.WindowY)
@@ -311,7 +298,7 @@ func (dw *DebugWindow) renderTilemap() {
 	dw.bgTexture.Update(nil, unsafe.Pointer(&dw.tilemapPixelBuffer[0]), 256*4)
 
 	srcRect := &sdl.Rect{0, 0, 256, 256}
-	dstRect := &sdl.Rect{660, 45, 300, 300}
+	dstRect := &sdl.Rect{660, 45, 256, 256} // Pixel-perfect 1:1 display
 	dw.renderer.Copy(dw.bgTexture, srcRect, dstRect)
 }
 
