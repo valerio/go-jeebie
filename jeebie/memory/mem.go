@@ -23,24 +23,41 @@ const (
 	regionHRAM
 )
 
+// JoypadKey represents a key on the Gameboy joypad
+type JoypadKey uint8
+
+const (
+	JoypadRight JoypadKey = iota
+	JoypadLeft
+	JoypadUp
+	JoypadDown
+	JoypadA
+	JoypadB
+	JoypadSelect
+	JoypadStart
+)
+
 // MMU allows access to all memory mapped I/O and data/registers
 type MMU struct {
 	cart      *Cartridge
 	mbc       MBC
 	memory    []byte
-	joypad    *Joypad
 	apu       *audio.APU
 	regionMap [256]memRegion
+
+	joypadButtons uint8 // Actual state of buttons A/B/Start/Select, mapped to low bits of P1
+	joypadDpad    uint8 // Actual state of d-pad directions, mapped to low bits of P1
 }
 
 // New creates a new memory unity with default data, i.e. nothing cartridge loaded.
 // Equivalent to turning on a Gameboy without a cartridge in.
 func New() *MMU {
 	mmu := &MMU{
-		memory: make([]byte, 0x10000),
-		cart:   NewCartridge(),
-		joypad: NewJoypad(),
-		apu:    audio.New(),
+		memory:        make([]byte, 0x10000),
+		cart:          NewCartridge(),
+		apu:           audio.New(),
+		joypadButtons: 0x0F,
+		joypadDpad:    0x0F,
 	}
 	initRegionMap(mmu)
 	return mmu
@@ -162,9 +179,6 @@ func (m *MMU) Read(address uint16) byte {
 		// Unused area 0xFEA0-0xFEFF
 		return m.memory[address]
 	case regionIO:
-		if address == 0xFF00 {
-			return m.joypad.Read()
-		}
 		if address >= 0xFF10 && address <= 0xFF3F {
 			return m.apu.ReadRegister(address)
 		}
@@ -209,8 +223,8 @@ func (m *MMU) Write(address uint16, value byte) {
 			m.memory[address] = value
 		}
 	case regionIO:
-		if address == 0xFF00 {
-			m.joypad.Write(value)
+		if address == addr.P1 {
+			m.writeJoypad(value)
 			return
 		}
 		if address >= 0xFF10 && address <= 0xFF3F {
@@ -238,22 +252,112 @@ func (m *MMU) Write(address uint16, value byte) {
 	}
 }
 
+// updateJoypadRegister sets the joypad register (P1) according to selection bits
+// and hardware (buttons) status.
+//
+// In real hw, this register is actually just a selector (bits 5-6) that control
+// to which set of buttons the low bits (0-3) are mapped to.
+//
+// The mapping:
+//   - if bit 4 is set, bits 0-3 are mapped to the 4 d-pad directions
+//   - if bit 5 is set, bits 0-3 are mapped to A, B, Start, Select
+//   - if both are set, hw does an AND of both button sets
+//   - if neither are set, return 0x0F (high impedence state)
+//
+// This function is called whenever:
+//   - there is a write to the P1 register (only set bits 4-5)
+//   - a button is pressed or released (tracked separately)
+//
+// Note that 1 -> button released, 0 -> button pressed.
+// Bits 6-7 are unused, they always read as 1 on real hardware.
+func (m *MMU) updateJoypadRegister() {
+	p1 := m.memory[addr.P1]
+	result := uint8(0b11000000) // Bits 6-7 are always read as 1
+	result |= p1 & 0b00110000   // Keep selection bits 4-5
+
+	// A button group is selected if the corresponding bit is 0
+	selectDpad := !bit.IsSet(4, p1)
+	selectButtons := !bit.IsSet(5, p1)
+
+	switch {
+	case selectButtons && !selectDpad:
+		result |= m.joypadButtons & 0x0F
+	case selectDpad && !selectButtons:
+		result |= m.joypadDpad & 0x0F
+	case selectButtons && selectDpad:
+		result |= m.joypadButtons & m.joypadDpad & 0x0F
+	default:
+		// no selection
+		result |= 0x0F
+	}
+
+	m.memory[addr.P1] = result
+}
+
+func (m *MMU) writeJoypad(value uint8) {
+	// Only bits 4-5 are writable (selection bits)
+	m.memory[addr.P1] = value & 0b00110000
+	m.updateJoypadRegister()
+}
+
 func (m *MMU) HandleKeyPress(key JoypadKey) {
-	m.joypad.Press(key)
+	oldButtons := m.joypadButtons
+	oldDpad := m.joypadDpad
+
+	switch key {
+	case JoypadRight:
+		m.joypadDpad = bit.Reset(0, m.joypadDpad)
+	case JoypadLeft:
+		m.joypadDpad = bit.Reset(1, m.joypadDpad)
+	case JoypadUp:
+		m.joypadDpad = bit.Reset(2, m.joypadDpad)
+	case JoypadDown:
+		m.joypadDpad = bit.Reset(3, m.joypadDpad)
+	case JoypadA:
+		m.joypadButtons = bit.Reset(0, m.joypadButtons)
+	case JoypadB:
+		m.joypadButtons = bit.Reset(1, m.joypadButtons)
+	case JoypadSelect:
+		m.joypadButtons = bit.Reset(2, m.joypadButtons)
+	case JoypadStart:
+		m.joypadButtons = bit.Reset(3, m.joypadButtons)
+	}
+
+	buttonTransitions := oldButtons & ^m.joypadButtons
+	dpadTransitions := oldDpad & ^m.joypadDpad
+	if buttonTransitions|dpadTransitions != 0 {
+		m.RequestInterrupt(addr.JoypadInterrupt)
+	}
+
+	m.updateJoypadRegister()
 }
 
 func (m *MMU) HandleKeyRelease(key JoypadKey) {
-	m.joypad.Release(key)
+	switch key {
+	case JoypadRight:
+		m.joypadDpad = bit.Set(0, m.joypadDpad)
+	case JoypadLeft:
+		m.joypadDpad = bit.Set(1, m.joypadDpad)
+	case JoypadUp:
+		m.joypadDpad = bit.Set(2, m.joypadDpad)
+	case JoypadDown:
+		m.joypadDpad = bit.Set(3, m.joypadDpad)
+	case JoypadA:
+		m.joypadButtons = bit.Set(0, m.joypadButtons)
+	case JoypadB:
+		m.joypadButtons = bit.Set(1, m.joypadButtons)
+	case JoypadSelect:
+		m.joypadButtons = bit.Set(2, m.joypadButtons)
+	case JoypadStart:
+		m.joypadButtons = bit.Set(3, m.joypadButtons)
+	}
+
+	m.updateJoypadRegister()
 }
 
 // GetJoypadState returns the raw joypad state for debugging
 func (m *MMU) GetJoypadState() (uint8, uint8) {
-	return m.joypad.buttons, m.joypad.dpad
-}
-
-// GetJoypad returns the joypad instance for direct access
-func (m *MMU) GetJoypad() *Joypad {
-	return m.joypad
+	return m.joypadButtons, m.joypadDpad
 }
 
 // GetAPU returns the APU instance for direct access

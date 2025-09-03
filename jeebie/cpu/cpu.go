@@ -47,6 +47,7 @@ type CPU struct {
 }
 
 func initializeMemory(mmu *memory.MMU) {
+	mmu.Write(addr.P1, 0xCF)
 	mmu.Write(addr.TIMA, 0x00)
 	mmu.Write(addr.TMA, 0x00)
 	mmu.Write(addr.TAC, 0x00)
