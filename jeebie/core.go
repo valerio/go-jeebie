@@ -151,7 +151,7 @@ func (e *DMG) RunUntilFrame() error {
 				cycles := e.cpu.Tick()
 				e.updateTimers(cycles)
 				e.gpu.Tick(cycles)
-				e.mem.GetAPU().Step(cycles)
+				e.mem.APU.Step(cycles)
 				e.instructionCount++
 				total += cycles
 
@@ -171,7 +171,7 @@ func (e *DMG) RunUntilFrame() error {
 		cycles := e.cpu.Tick()
 		e.updateTimers(cycles)
 		e.gpu.Tick(cycles)
-		e.mem.GetAPU().Step(cycles)
+		e.mem.APU.Step(cycles)
 		e.instructionCount++
 
 		total += cycles
@@ -189,7 +189,7 @@ func (e *DMG) GetCurrentFrame() *video.FrameBuffer {
 }
 
 func (e *DMG) GetAudioProvider() audio.Provider {
-	return e.mem.GetAPU()
+	return e.mem.APU
 }
 
 func (e *DMG) HandleKeyPress(key memory.JoypadKey) {
@@ -352,7 +352,7 @@ func (e *DMG) ExtractDebugData() *debug.Data {
 		debuggerState = debug.DebuggerRunning
 	}
 
-	audioData := debug.ExtractAudioData(e.mem, e.mem.GetAPU())
+	audioData := debug.ExtractAudioData(e.mem, e.mem.APU)
 	spriteVis := debug.ExtractSpriteData(e.mem, uint8(currentLine))
 	backgroundVis := debug.ExtractBackgroundData(e.mem)
 	paletteVis := debug.ExtractPaletteData(e.mem)

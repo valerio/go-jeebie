@@ -42,7 +42,7 @@ type MMU struct {
 	cart      *Cartridge
 	mbc       MBC
 	memory    []byte
-	apu       *audio.APU
+	APU       *audio.APU
 	regionMap [256]memRegion
 
 	joypadButtons uint8 // Actual state of buttons A/B/Start/Select, mapped to low bits of P1
@@ -55,7 +55,7 @@ func New() *MMU {
 	mmu := &MMU{
 		memory:        make([]byte, 0x10000),
 		cart:          NewCartridge(),
-		apu:           audio.New(),
+		APU:           audio.New(),
 		joypadButtons: 0x0F,
 		joypadDpad:    0x0F,
 	}
@@ -180,7 +180,7 @@ func (m *MMU) Read(address uint16) byte {
 		return m.memory[address]
 	case regionIO:
 		if address >= 0xFF10 && address <= 0xFF3F {
-			return m.apu.ReadRegister(address)
+			return m.APU.ReadRegister(address)
 		}
 		if address >= 0xFF80 {
 			// HRAM
@@ -228,7 +228,7 @@ func (m *MMU) Write(address uint16, value byte) {
 			return
 		}
 		if address >= 0xFF10 && address <= 0xFF3F {
-			m.apu.WriteRegister(address, value)
+			m.APU.WriteRegister(address, value)
 			return
 		}
 		if address == addr.DMA {
@@ -353,14 +353,4 @@ func (m *MMU) HandleKeyRelease(key JoypadKey) {
 	}
 
 	m.updateJoypadRegister()
-}
-
-// GetJoypadState returns the raw joypad state for debugging
-func (m *MMU) GetJoypadState() (uint8, uint8) {
-	return m.joypadButtons, m.joypadDpad
-}
-
-// GetAPU returns the APU instance for direct access
-func (m *MMU) GetAPU() *audio.APU {
-	return m.apu
 }
