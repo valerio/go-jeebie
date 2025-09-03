@@ -37,6 +37,17 @@ jobs:
           exit 1
         fi
     
+    - name: Cache test ROMs
+      uses: actions/cache@v3
+      with:
+        path: |
+          test-roms/game-boy-test-roms
+          test-roms/.version
+        key: test-roms-${{ hashFiles('Makefile') }}
+    
+    - name: Download test ROMs
+      run: make test-roms-download
+    
     - name: Build
       run: make build
     
@@ -44,7 +55,7 @@ jobs:
       run: make test
     
     - name: Run integration tests
-      run: make test-blargg
+      run: make test-integration
 
   sdl2-build:
     if: |

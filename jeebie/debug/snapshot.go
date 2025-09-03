@@ -3,6 +3,7 @@ package debug
 import (
 	"fmt"
 	"image"
+	"image/color"
 	"image/png"
 	"log/slog"
 	"os"
@@ -79,6 +80,42 @@ func SaveFramePNGToDir(frame *video.FrameBuffer, baseName, directory string) err
 
 	slog.Info("Snapshot saved", "path", filePath, "size", fmt.Sprintf("%dx%d", video.FramebufferWidth, video.FramebufferHeight), "format", "PNG")
 	return nil
+}
+
+// SaveFrameGrayPNG saves a framebuffer as a grayscale PNG (used in integration tests)
+func SaveFrameGrayPNG(frame *video.FrameBuffer, filepath string) error {
+	img := image.NewGray(image.Rect(0, 0, video.FramebufferWidth, video.FramebufferHeight))
+
+	frameData := frame.ToSlice()
+	for y := range video.FramebufferHeight {
+		for x := range video.FramebufferWidth {
+			pixel := frameData[y*video.FramebufferWidth+x]
+
+			var gray uint8
+			switch pixel {
+			case uint32(video.BlackColor):
+				gray = 0
+			case uint32(video.DarkGreyColor):
+				gray = 85
+			case uint32(video.LightGreyColor):
+				gray = 170
+			case uint32(video.WhiteColor):
+				gray = 255
+			default:
+				gray = 0
+			}
+
+			img.SetGray(x, y, color.Gray{gray})
+		}
+	}
+
+	file, err := os.Create(filepath)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	return png.Encode(file, img)
 }
 
 // gbPixelToRGBA converts Game Boy pixel to RGBA values

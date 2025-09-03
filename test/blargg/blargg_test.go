@@ -3,22 +3,12 @@ package blargg
 import (
 	"crypto/md5"
 	"fmt"
-	"image"
-	"image/color"
-	"image/png"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/valerio/go-jeebie/jeebie"
-	"github.com/valerio/go-jeebie/jeebie/video"
-)
-
-const (
-	BlackPixel     = 0x000000FF
-	DarkGrayPixel  = 0x4C4C4CFF
-	LightGrayPixel = 0x989898FF
-	WhitePixel     = 0xFFFFFFFF
+	"github.com/valerio/go-jeebie/jeebie/debug"
 )
 
 type BlarggTestCase struct {
@@ -31,7 +21,7 @@ type BlarggTestCase struct {
 }
 
 func GetBlarggTests() []BlarggTestCase {
-	baseDir := "../../test-roms"
+	baseDir := "../../test-roms/game-boy-test-roms/blargg/cpu_instrs/individual"
 
 	return []BlarggTestCase{
 		{
@@ -105,7 +95,7 @@ func GetBlarggTests() []BlarggTestCase {
 
 func runBlarggTest(t *testing.T, testCase BlarggTestCase) {
 	if _, err := os.Stat(testCase.ROMPath); os.IsNotExist(err) {
-		t.Skipf("ROM file not found: %s", testCase.ROMPath)
+		t.Fatalf("Test ROM not found: %s\n\nPlease download the test ROMs first by running:\n    make test-roms-download\n\nOr run the full test suite with:\n    make test-all", testCase.ROMPath)
 		return
 	}
 
@@ -144,7 +134,7 @@ func runBlarggTest(t *testing.T, testCase BlarggTestCase) {
 			t.Fatalf("Failed to write screen data file: %v", err)
 		}
 
-		if err := savePNG(fb, snapshotPath); err != nil {
+		if err := debug.SaveFrameGrayPNG(fb, snapshotPath); err != nil {
 			t.Fatalf("Failed to write snapshot PNG file: %v", err)
 		}
 
@@ -168,7 +158,7 @@ func runBlarggTest(t *testing.T, testCase BlarggTestCase) {
 		actualPngPath := filepath.Join("testdata", "snapshots", fmt.Sprintf("%s_actual.png", testName))
 
 		os.WriteFile(actualBinPath, binaryData, 0644)
-		savePNG(fb, actualPngPath)
+		debug.SaveFrameGrayPNG(fb, actualPngPath)
 
 		t.Errorf("Test output differs from expected\n  Expected hash: %s\n  Actual hash:   %s\n  Files saved:   %s, %s",
 			expectedHash, hash, actualBinPath, actualPngPath)
@@ -177,44 +167,19 @@ func runBlarggTest(t *testing.T, testCase BlarggTestCase) {
 	}
 }
 
-func savePNG(fb *video.FrameBuffer, filename string) error {
-	img := image.NewGray(image.Rect(0, 0, 160, 144))
-
-	frameData := fb.ToSlice()
-	for y := 0; y < 144; y++ {
-		for x := 0; x < 160; x++ {
-			pixel := frameData[y*160+x]
-
-			var gray uint8
-			switch pixel {
-			case BlackPixel:
-				gray = 0
-			case DarkGrayPixel:
-				gray = 85
-			case LightGrayPixel:
-				gray = 170
-			case WhitePixel:
-				gray = 255
-			default:
-				gray = 0
-			}
-
-			img.SetGray(x, y, color.Gray{gray})
-		}
-	}
-
-	file, err := os.Create(filename)
-	if err != nil {
-		return err
-	}
-	defer file.Close()
-
-	return png.Encode(file, img)
-}
-
 func TestBlarggSuite(t *testing.T) {
 	if testing.Short() {
 		t.Skip("Skipping Blargg integration tests in short mode")
+	}
+
+	// Check if test ROMs are available
+	testRomsPath := "../../test-roms/game-boy-test-roms"
+	if _, err := os.Stat(testRomsPath); os.IsNotExist(err) {
+		t.Fatalf("Test ROMs not found at %s\n\n"+
+			"Please download the test ROMs first by running:\n"+
+			"    make test-roms-download\n\n"+
+			"Or run the full test suite (which downloads automatically):\n"+
+			"    make test-all\n", testRomsPath)
 	}
 
 	tests := GetBlarggTests()

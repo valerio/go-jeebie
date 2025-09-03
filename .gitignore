@@ -30,7 +30,8 @@ bin/
 
 # Test roms dir
 test-roms/*.gb
-test-roms/game-boy-test-roms*
+test-roms/game-boy-test-roms/
+test-roms/.version
 !test-roms/dmg-acid2.gb
 !test-roms/*blargg*.gb
 *.gb:Zone.Identifier
