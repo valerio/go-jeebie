@@ -87,7 +87,7 @@ func (m *MBC1) Read(addr uint16) uint8 {
 		return m.rom[offset+uint32(addr-0x4000)]
 	case addr >= 0xA000 && addr <= 0xBFFF:
 		// RAM Bank
-		if !m.ramEnabled {
+		if !m.ramEnabled || len(m.ram) == 0 {
 			return 0xFF
 		}
 		offset := uint32(m.ramBank) * 0x2000
@@ -131,7 +131,7 @@ func (m *MBC1) Write(addr uint16, value uint8) uint8 {
 		}
 	case addr >= 0xA000 && addr <= 0xBFFF:
 		// RAM Bank
-		if !m.ramEnabled {
+		if !m.ramEnabled || len(m.ram) == 0 {
 			return 0xFF
 		}
 		offset := uint32(m.ramBank) * 0x2000
