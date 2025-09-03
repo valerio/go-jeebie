@@ -11,9 +11,9 @@ type Flag uint8
 
 const (
 	zeroFlag      Flag = 0x80
-	subFlag            = 0x40
-	halfCarryFlag      = 0x20
-	carryFlag          = 0x10
+	subFlag       Flag = 0x40
+	halfCarryFlag Flag = 0x20
+	carryFlag     Flag = 0x10
 )
 
 const (

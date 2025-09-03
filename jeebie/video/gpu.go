@@ -106,10 +106,10 @@ func (g *GPU) Tick(cycles int) {
 
 			// We're switching to VBlank Mode
 			// if enabled on STAT, trigger the LCDStat interrupt
-			if g.memory.ReadBit(statVblankIrq, addr.STAT) {
+			if g.memory.ReadBit(uint8(statVblankIrq), addr.STAT) {
 				g.memory.RequestInterrupt(addr.LCDSTATInterrupt)
 			}
-		} else if g.memory.ReadBit(statOamIrq, addr.STAT) {
+		} else if g.memory.ReadBit(uint8(statOamIrq), addr.STAT) {
 			// We're switching to OAM Read Mode
 			// if enabled on STAT, trigger the LCDStat interrupt
 			g.memory.RequestInterrupt(addr.LCDSTATInterrupt)
@@ -135,7 +135,7 @@ func (g *GPU) Tick(cycles int) {
 			g.setMode(oamReadMode)
 			// We're switching to OAM Read Mode
 			// if enabled on STAT, trigger the LCDStat interrupt
-			if g.memory.ReadBit(statOamIrq, addr.STAT) {
+			if g.memory.ReadBit(uint8(statOamIrq), addr.STAT) {
 				g.memory.RequestInterrupt(addr.LCDSTATInterrupt)
 			}
 		}
@@ -162,7 +162,7 @@ func (g *GPU) Tick(cycles int) {
 
 			// We're switching to HBlank Mode
 			// if enabled on STAT, trigger the LCDStat interrupt
-			if g.memory.ReadBit(statHblankIrq, addr.STAT) {
+			if g.memory.ReadBit(uint8(statHblankIrq), addr.STAT) {
 				g.memory.RequestInterrupt(addr.LCDSTATInterrupt)
 			}
 		}
@@ -514,12 +514,12 @@ type statFlag uint8
 
 const (
 	statLycIrq       statFlag = 6
-	statOamIrq                = 5
-	statVblankIrq             = 4
-	statHblankIrq             = 3
-	statLycCondition          = 2
-	statModeHigh              = 1
-	statModeLow               = 0
+	statOamIrq       statFlag = 5
+	statVblankIrq    statFlag = 4
+	statHblankIrq    statFlag = 3
+	statLycCondition statFlag = 2
+	statModeHigh     statFlag = 1
+	statModeLow      statFlag = 0
 )
 
 // LCDC (LCD Control) Register bit values
@@ -535,13 +535,13 @@ type lcdcFlag uint8
 
 const (
 	lcdDisplayEnable       lcdcFlag = 7
-	windowTileMapSelect             = 6
-	windowDisplayEnable             = 5
-	bgWindowTileDataSelect          = 4
-	bgTileMapDisplaySelect          = 3
-	spriteSize                      = 2
-	spriteDisplayEnable             = 1
-	bgDisplay                       = 0
+	windowTileMapSelect    lcdcFlag = 6
+	windowDisplayEnable    lcdcFlag = 5
+	bgWindowTileDataSelect lcdcFlag = 4
+	bgTileMapDisplaySelect lcdcFlag = 3
+	spriteSize             lcdcFlag = 2
+	spriteDisplayEnable    lcdcFlag = 1
+	bgDisplay              lcdcFlag = 0
 )
 
 func (g *GPU) readLCDCVariable(flag lcdcFlag) byte {
@@ -558,12 +558,12 @@ func (g *GPU) compareLYToLYC() {
 	stat := g.memory.Read(addr.STAT)
 
 	if ly == lyc {
-		stat = bit.Set(statLycCondition, stat)
+		stat = bit.Set(uint8(statLycCondition), stat)
 		if bit.IsSet(uint8(statLycIrq), stat) {
 			g.memory.RequestInterrupt(addr.LCDSTATInterrupt)
 		}
 	} else {
-		stat = bit.Reset(statLycCondition, stat)
+		stat = bit.Reset(uint8(statLycCondition), stat)
 	}
 
 	g.memory.Write(addr.STAT, stat)

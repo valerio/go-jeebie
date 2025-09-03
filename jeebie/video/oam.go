@@ -130,9 +130,7 @@ func (o *OAM) GetSpritesForScanline(scanline int) []Sprite {
 		sprites[i].PixelMask = mask
 	}
 
-	for i := range sprites {
-		o.spriteBuffer[i] = sprites[i]
-	}
+	copy(o.spriteBuffer[:], sprites)
 	return o.spriteBuffer[:len(sprites)]
 }
 

@@ -10,9 +10,9 @@ const (
 
 const (
 	WhiteColor     GBColor = 0xFFFFFFFF
-	LightGreyColor         = 0x989898FF
-	DarkGreyColor          = 0x4C4C4CFF
-	BlackColor             = 0x000000FF
+	LightGreyColor GBColor = 0x989898FF
+	DarkGreyColor  GBColor = 0x4C4C4CFF
+	BlackColor     GBColor = 0x000000FF
 )
 
 func ByteToColor(value byte) GBColor {

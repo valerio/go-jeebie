@@ -32,9 +32,7 @@ func DisassembleAt(pc uint16, mmu *memory.MMU) DisassemblyLine {
 
 		cbOpcode := mmu.Read(pc + 1)
 		length := CBInstructionLengths[cbOpcode]
-		template := CBInstructionTemplates[cbOpcode]
-
-		instruction := fmt.Sprintf(template)
+		instruction := CBInstructionTemplates[cbOpcode]
 
 		return DisassemblyLine{
 			Address:     pc,
@@ -52,7 +50,7 @@ func DisassembleAt(pc uint16, mmu *memory.MMU) DisassemblyLine {
 	// Format with immediate values based on length
 	switch length {
 	case 1:
-		instruction = fmt.Sprintf(template)
+		instruction = template
 	case 2:
 		if pc == 0xFFFF {
 			instruction = fmt.Sprintf(template, 0)
@@ -69,7 +67,7 @@ func DisassembleAt(pc uint16, mmu *memory.MMU) DisassemblyLine {
 			instruction = fmt.Sprintf(template, nn)
 		}
 	default:
-		instruction = fmt.Sprintf(template)
+		instruction = template
 	}
 
 	return DisassemblyLine{
@@ -84,7 +82,7 @@ func DisassembleRange(startPC uint16, count int, mmu *memory.MMU) []DisassemblyL
 	lines := make([]DisassemblyLine, 0, count)
 	pc := startPC
 
-	for i := 0; i < count && pc <= 0xFFFF; i++ {
+	for i := 0; i < count; i++ {
 		line := DisassembleAt(pc, mmu)
 		lines = append(lines, line)
 		pc += uint16(line.Length)
