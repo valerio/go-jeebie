@@ -22,12 +22,12 @@ test:
 .PHONY: test-integration
 test-integration:
 	@echo "Running integration tests (comparing screen data hashes)..."
-	go test -v ./test/blargg/...
+	go test -v ./test/integration/...
 
 .PHONY: test-integration-golden
 test-integration-golden:
 	@echo "Generating reference screen data and snapshots for integration tests..."
-	BLARGG_GENERATE_GOLDEN=true go test -v ./test/blargg/...
+	BLARGG_GENERATE_GOLDEN=true go test -v ./test/integration/...
 
 .PHONY: test-all
 test-all: test-roms-download test test-integration

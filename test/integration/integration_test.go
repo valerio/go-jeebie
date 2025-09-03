@@ -1,4 +1,4 @@
-package blargg
+package integration
 
 import (
 	"crypto/md5"
@@ -11,7 +11,7 @@ import (
 	"github.com/valerio/go-jeebie/jeebie/debug"
 )
 
-type BlarggTestCase struct {
+type IntegrationTestCase struct {
 	ROMPath      string
 	ExpectedHash string
 	MaxFrames    uint64
@@ -20,86 +20,93 @@ type BlarggTestCase struct {
 	Name         string
 }
 
-func GetBlarggTests() []BlarggTestCase {
+func GetIntegrationTests() []IntegrationTestCase {
 	baseDir := "../../test-roms/game-boy-test-roms/blargg/cpu_instrs/individual"
 
-	return []BlarggTestCase{
+	tests := []IntegrationTestCase{
 		{
 			ROMPath:      filepath.Join(baseDir, "01-special.gb"),
 			MaxFrames:    500,
-			MinLoopCount: 50,
+			MinLoopCount: 10,
 			Name:         "01-special",
 		},
 		{
 			ROMPath:      filepath.Join(baseDir, "02-interrupts.gb"),
 			MaxFrames:    500,
-			MinLoopCount: 50,
+			MinLoopCount: 10,
 			Name:         "02-interrupts",
 		},
 		{
 			ROMPath:      filepath.Join(baseDir, "03-op sp,hl.gb"),
 			MaxFrames:    500,
-			MinLoopCount: 50,
+			MinLoopCount: 10,
 			Name:         "03-op sp,hl",
 		},
 		{
 			ROMPath:      filepath.Join(baseDir, "04-op r,imm.gb"),
 			MaxFrames:    500,
-			MinLoopCount: 50,
+			MinLoopCount: 10,
 			Name:         "04-op r,imm",
 		},
 		{
 			ROMPath:      filepath.Join(baseDir, "05-op rp.gb"),
 			MaxFrames:    500,
-			MinLoopCount: 50,
+			MinLoopCount: 10,
 			Name:         "05-op rp",
 		},
 		{
 			ROMPath:      filepath.Join(baseDir, "06-ld r,r.gb"),
 			MaxFrames:    500,
-			MinLoopCount: 50,
+			MinLoopCount: 10,
 			Name:         "06-ld r,r",
 		},
 		{
 			ROMPath:      filepath.Join(baseDir, "07-jr,jp,call,ret,rst.gb"),
 			MaxFrames:    500,
-			MinLoopCount: 50,
+			MinLoopCount: 10,
 			Name:         "07-jr,jp,call,ret,rst",
 		},
 		{
 			ROMPath:      filepath.Join(baseDir, "08-misc instrs.gb"),
 			MaxFrames:    500,
-			MinLoopCount: 50,
+			MinLoopCount: 10,
 			Name:         "08-misc instrs",
 		},
 		{
 			ROMPath:      filepath.Join(baseDir, "09-op r,r.gb"),
 			MaxFrames:    1000,
-			MinLoopCount: 50,
+			MinLoopCount: 10,
 			Name:         "09-op r,r",
 		},
 		{
 			ROMPath:      filepath.Join(baseDir, "10-bit ops.gb"),
 			MaxFrames:    1000,
-			MinLoopCount: 50,
+			MinLoopCount: 10,
 			Name:         "10-bit ops",
 		},
 		{
 			ROMPath:      filepath.Join(baseDir, "11-op a,(hl).gb"),
 			MaxFrames:    1500,
-			MinLoopCount: 50,
+			MinLoopCount: 10,
 			Name:         "11-op a,(hl)",
 		},
+		{
+			ROMPath:   "../../test-roms/game-boy-test-roms/dmg-acid2/dmg-acid2.gb",
+			MaxFrames: 10, // run for fixed frames
+			Name:      "dmg-acid2",
+		},
 	}
+
+	return tests
 }
 
-func runBlarggTest(t *testing.T, testCase BlarggTestCase) {
+func runIntegrationTest(t *testing.T, testCase IntegrationTestCase) {
 	if _, err := os.Stat(testCase.ROMPath); os.IsNotExist(err) {
 		t.Fatalf("Test ROM not found: %s\n\nPlease download the test ROMs first by running:\n    make test-roms-download\n\nOr run the full test suite with:\n    make test-all", testCase.ROMPath)
 		return
 	}
 
-	t.Logf("Running Blargg test: %s (%s)", testCase.Name, testCase.ROMPath)
+	t.Logf("Running integration test: %s (%s)", testCase.Name, testCase.ROMPath)
 	emu, err := jeebie.NewWithFile(testCase.ROMPath)
 	if err != nil {
 		t.Fatalf("Failed to create emulator: %v", err)
@@ -143,7 +150,7 @@ func runBlarggTest(t *testing.T, testCase BlarggTestCase) {
 	}
 
 	if _, err := os.Stat(screenDataPath); os.IsNotExist(err) {
-		t.Fatalf("Screen data file not found: %s. Run 'make test-blargg-golden' to generate reference files first.", screenDataPath)
+		t.Fatalf("Screen data file not found: %s. Run 'make test-integration-golden' to generate reference files first.", screenDataPath)
 	}
 
 	expectedData, err := os.ReadFile(screenDataPath)
@@ -167,9 +174,9 @@ func runBlarggTest(t *testing.T, testCase BlarggTestCase) {
 	}
 }
 
-func TestBlarggSuite(t *testing.T) {
+func TestIntegrationSuite(t *testing.T) {
 	if testing.Short() {
-		t.Skip("Skipping Blargg integration tests in short mode")
+		t.Skip("Skipping integration tests in short mode")
 	}
 
 	// Check if test ROMs are available
@@ -182,12 +189,12 @@ func TestBlarggSuite(t *testing.T) {
 			"    make test-all\n", testRomsPath)
 	}
 
-	tests := GetBlarggTests()
+	tests := GetIntegrationTests()
 
 	for _, testCase := range tests {
 		t.Run(testCase.Name, func(t *testing.T) {
 			t.Parallel()
-			runBlarggTest(t, testCase)
+			runIntegrationTest(t, testCase)
 		})
 	}
 }
