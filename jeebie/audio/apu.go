@@ -359,7 +359,7 @@ func (a *APU) generateChannel4() int16 {
 		a.ch4LFSR = (a.ch4LFSR >> 1) | (feedbackBit << 14)
 
 		// 7-bit mode (width = 1)
-		if bit.IsSet(3, a.registers[0x22]) { // Bit 3: Width mode (7-bit LFSR)
+		if bit.IsSet(noiseWidthBit, a.registers[0x22]) { // Width mode (7-bit LFSR)
 			a.ch4LFSR = (a.ch4LFSR & 0xFF7F) | (feedbackBit << 6) // Also set bit 6
 		}
 	}
@@ -375,7 +375,7 @@ func (a *APU) generateChannel4() int16 {
 			a.ch4LFSR = (a.ch4LFSR >> 1) | (feedbackBit << 14)
 
 			// 7-bit mode (width = 1)
-			if bit.IsSet(3, a.registers[0x22]) { // Bit 3: Width mode (7-bit LFSR)
+			if bit.IsSet(noiseWidthBit, a.registers[0x22]) { // Width mode (7-bit LFSR)
 				a.ch4LFSR = (a.ch4LFSR & 0xFF7F) | (feedbackBit << 6) // Also set bit 6
 			}
 		}
@@ -478,7 +478,7 @@ func (a *APU) mapRegisterToState(address uint16, value uint8) {
 		a.channels[0].volume = value >> 4           // Bits 7-4: Initial volume
 		a.channels[0].enabled = (value & 0xF8) != 0 // DAC enabled if bits 3-7 are not all zero
 		a.channels[0].envelopePeriod = value & 0x07 // Bits 2-0: Envelope period
-		if bit.IsSet(3, value) {
+		if bit.IsSet(envelopeIncreaseBit, value) {
 			a.channels[0].envelopeDirection = 1 // Increase
 		} else {
 			a.channels[0].envelopeDirection = 0 // Decrease
@@ -488,7 +488,7 @@ func (a *APU) mapRegisterToState(address uint16, value uint8) {
 	case addr.NR14: // Channel 1 frequency high and control
 		a.channels[0].freq = updateFrequencyHigh(a.channels[0].freq, value)
 		a.channels[0].lengthEnabled = bit.IsSet(6, value)
-		if bit.IsSet(7, value) { // Bit 7: Trigger
+		if bit.IsSet(triggerBit, value) { // Trigger
 			// Only trigger if DAC is enabled
 			if (a.registers[0x12] & 0xF8) != 0 {
 				a.channels[0].counter = 0
@@ -512,7 +512,7 @@ func (a *APU) mapRegisterToState(address uint16, value uint8) {
 		a.channels[1].volume = value >> 4           // Bits 7-4: Initial volume
 		a.channels[1].enabled = (value & 0xF8) != 0 // DAC enabled if bits 3-7 are not all zero
 		a.channels[1].envelopePeriod = value & 0x07 // Bits 2-0: Envelope period
-		if bit.IsSet(3, value) {
+		if bit.IsSet(envelopeIncreaseBit, value) {
 			a.channels[1].envelopeDirection = 1 // Increase
 		} else {
 			a.channels[1].envelopeDirection = 0 // Decrease
@@ -522,7 +522,7 @@ func (a *APU) mapRegisterToState(address uint16, value uint8) {
 	case addr.NR24: // Channel 2 frequency high and control
 		a.channels[1].freq = updateFrequencyHigh(a.channels[1].freq, value)
 		a.channels[1].lengthEnabled = bit.IsSet(6, value)
-		if bit.IsSet(7, value) { // Bit 7: Trigger
+		if bit.IsSet(triggerBit, value) { // Trigger
 			// Only trigger if DAC is enabled
 			if (a.registers[0x17] & 0xF8) != 0 {
 				a.channels[1].counter = 0
@@ -540,7 +540,7 @@ func (a *APU) mapRegisterToState(address uint16, value uint8) {
 			}
 		}
 	case addr.NR30: // Channel 3 DAC enable
-		a.channels[2].enabled = bit.IsSet(7, value) // Bit 7: DAC enable
+		a.channels[2].enabled = bit.IsSet(waveDACBit, value) // DAC enable
 	case addr.NR31: // Channel 3 length
 		// Length data is stored in register, loaded on trigger
 	case addr.NR32: // Channel 3 output level
@@ -550,7 +550,7 @@ func (a *APU) mapRegisterToState(address uint16, value uint8) {
 	case addr.NR34: // Channel 3 frequency high and control
 		a.channels[2].freq = updateFrequencyHigh(a.channels[2].freq, value)
 		a.channels[2].lengthEnabled = bit.IsSet(6, value)
-		if bit.IsSet(7, value) { // Bit 7: Trigger
+		if bit.IsSet(triggerBit, value) { // Trigger
 			a.channels[2].counter = 0
 			// Always reload length counter on trigger
 			lengthData := a.registers[0x1B]
@@ -569,7 +569,7 @@ func (a *APU) mapRegisterToState(address uint16, value uint8) {
 			a.channels[3].enabled = false
 		}
 		a.channels[3].envelopePeriod = value & 0x07 // Bits 2-0: Envelope period
-		if bit.IsSet(3, value) {
+		if bit.IsSet(envelopeIncreaseBit, value) {
 			a.channels[3].envelopeDirection = 1 // Increase
 		} else {
 			a.channels[3].envelopeDirection = 0 // Decrease
@@ -602,7 +602,7 @@ func (a *APU) mapRegisterToState(address uint16, value uint8) {
 		// Ch4 frequency configured
 	case addr.NR44: // Channel 4 control
 		a.channels[3].lengthEnabled = bit.IsSet(6, value)
-		if bit.IsSet(7, value) { // Bit 7: Trigger
+		if bit.IsSet(triggerBit, value) { // Trigger
 			// Only enable channel if DAC is on (NR42 & 0xF8 != 0)
 			dacOn := (a.registers[0x21] & 0xF8) != 0
 			if dacOn {

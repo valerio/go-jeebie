@@ -10,9 +10,6 @@ const (
 	// sampleCycles is the number of CPU cycles per audio sample
 	// Target sample rate ~44100 Hz: 4194304 Hz / 44100 Hz ≈ 95 cycles
 	sampleCycles = 95
-
-	// cpuFrequency is the Game Boy CPU clock frequency in Hz
-	cpuFrequency = 4194304
 )
 
 // Fixed-point constants for precise frequency calculation
@@ -30,12 +27,6 @@ const (
 
 // Channel constants
 const (
-	// maxVolume is the maximum volume level for envelope (4 bits)
-	maxVolume = 15
-
-	// maxSweepPeriod is the maximum sweep period value (3 bits)
-	maxSweepPeriod = 7
-
 	// waveRAMSize is the size of wave pattern RAM in nibbles (32 x 4-bit samples)
 	waveRAMSize = 16 // 16 bytes = 32 nibbles
 
@@ -58,9 +49,6 @@ const (
 	// waveTableSize is the number of samples in the wave pattern
 	waveTableSize = 32
 
-	// noiseChannelPeriod is the base period for noise channel updates
-	noiseChannelPeriod = 64
-
 	// highFrequencyThreshold is the period threshold for high-frequency noise
 	// Below this, we update the LFSR multiple times per sample
 	highFrequencyThreshold = 256
@@ -70,12 +58,6 @@ const (
 
 	// dutyPhases is the number of phases in a duty cycle
 	dutyPhases = 8
-
-	// waveOutputBias is subtracted from wave samples to center them
-	waveOutputBias = 16384
-
-	// waveOutputScale is the multiplier for wave channel samples
-	waveOutputScale = 2048
 
 	// Buffer size constants
 	initialBufferCapacity = 1024
@@ -112,15 +94,15 @@ const (
 	nr52Ch4StatusMask = 0x08 // Bit 3: Channel 4 on
 	nr52UnusedMask    = 0x70 // Bits 4-6: Always read as 1
 
-	// Trigger bit (bit 7) for NR14, NR24, NR34, NR44
-	triggerMask = 0x80
+	// Trigger bit position for NR14, NR24, NR34, NR44
+	triggerBit = 7
 
-	// Envelope direction bit
-	envelopeIncreaseMask = 0x08
+	// Envelope increase direction bit position
+	envelopeIncreaseBit = 3
 
-	// Wave channel DAC enable bit
-	waveDACMask = 0x80
+	// Wave channel DAC enable bit position
+	waveDACBit = 7
 
-	// Noise channel width mode bit
-	noiseWidthMask = 0x08
+	// Noise channel width mode bit position
+	noiseWidthBit = 3
 )
