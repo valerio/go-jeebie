@@ -14,8 +14,8 @@ A Game Boy emulator written in Go.
 # Build the emulator
 make build
 
-# Run with a Game Boy ROM
-./bin/jeebie path/to/rom.gb
+# Run a Game Boy ROM with SDL2 (must have SDL2 installed)
+make run-sdl2 path/to/rom.gb
 
 # Run tests
 make test
@@ -27,27 +27,58 @@ make test-all
 
 ## Status
 
-Still a work in progress. Currently passes all of Blargg's CPU instruction tests and Matt Currie's [dmg-acid2](https://github.com/mattcurrie/dmg-acid2) PPU test.
+Still a work in progress. Can currently run some simple games, and passes basic test roms for rendering/CPU behavior, see the [Test ROMs](#test-roms) section below.
 
-### Graphics Tests & Game Screenshots
-
-dmg-acid2 test:
-
-![dmg-acid2](screenshots/dmg-acid2.png)
+### Games
 
 Simple games running in the emulator:
 
 ![Tetris](screenshots/tetris.png) ![Super Mario Land](screenshots/super-mario-land.png)
 
-### CPU Tests (Blargg's test suite - 11/11 passing)
+### Test ROMs
 
-![Blargg Tests](test/blargg/testdata/snapshots/01-special.png) ![Blargg Tests](test/blargg/testdata/snapshots/02-interrupts.png) ![Blargg Tests](test/blargg/testdata/snapshots/03-op%20sp,hl.png)
+ROMs are collected from the excellent [c-sp’s gameboy-test-roms collection](https://github.com/c-sp/gameboy-test-roms).
+Huge thanks to the original authors (Blargg, Matt Currie and more) and maintainers of these suites.
 
-![Blargg Tests](test/blargg/testdata/snapshots/04-op%20r,imm.png) ![Blargg Tests](test/blargg/testdata/snapshots/05-op%20rp.png) ![Blargg Tests](test/blargg/testdata/snapshots/06-ld%20r,r.png)
+These test ROMs are run as part of 
+```bash
+make test-integration
+```
 
-![Blargg Tests](test/blargg/testdata/snapshots/07-jr,jp,call,ret,rst.png) ![Blargg Tests](test/blargg/testdata/snapshots/08-misc%20instrs.png) ![Blargg Tests](test/blargg/testdata/snapshots/09-op%20r,r.png)
+A snapshot of the screen is taken at the end of each test, and compared to a reference snapshot stored in `test/integration/testdata/snapshots`.
 
-![Blargg Tests](test/blargg/testdata/snapshots/10-bit%20ops.png) ![Blargg Tests](test/blargg/testdata/snapshots/11-op%20a,(hl).png)
+<details>
+<summary>Passing Tests (with generated snapshots)</summary>
+
+<table>
+  <tr>
+    <td align="center"><img src="test/integration/testdata/snapshots/01-special.png" width="160" /><br><sub>01-special ✅</sub></td>
+    <td align="center"><img src="test/integration/testdata/snapshots/02-interrupts.png" width="160" /><br><sub>02-interrupts ✅</sub></td>
+    <td align="center"><img src="test/integration/testdata/snapshots/03-op%20sp%2Chl.png" width="160" /><br><sub>03-op sp,hl ✅</sub></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="test/integration/testdata/snapshots/04-op%20r%2Cimm.png" width="160" /><br><sub>04-op r,imm ✅</sub></td>
+    <td align="center"><img src="test/integration/testdata/snapshots/05-op%20rp.png" width="160" /><br><sub>05-op rp ✅</sub></td>
+    <td align="center"><img src="test/integration/testdata/snapshots/06-ld%20r%2Cr.png" width="160" /><br><sub>06-ld r,r ✅</sub></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="test/integration/testdata/snapshots/07-jr%2Cjp%2Ccall%2Cret%2Crst.png" width="160" /><br><sub>07-jr,jp,call,ret,rst ✅</sub></td>
+    <td align="center"><img src="test/integration/testdata/snapshots/08-misc%20instrs.png" width="160" /><br><sub>08-misc instrs ✅</sub></td>
+    <td align="center"><img src="test/integration/testdata/snapshots/09-op%20r%2Cr.png" width="160" /><br><sub>09-op r,r ✅</sub></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="test/integration/testdata/snapshots/10-bit%20ops.png" width="160" /><br><sub>10-bit ops ✅</sub></td>
+    <td align="center"><img src="test/integration/testdata/snapshots/11-op%20a%2C%28hl%29.png" width="160" /><br><sub>11-op a,(hl) ✅</sub></td>
+    <td align="center"><img src="test/integration/testdata/snapshots/halt_bug.png" width="160" /><br><sub>halt_bug ✅</sub></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="test/integration/testdata/snapshots/dmg-acid2.png" width="160" /><br><sub>dmg-acid2 ✅</sub></td>
+    <td></td>
+    <td></td>
+  </tr>
+</table>
+
+</details>
 
 
 
