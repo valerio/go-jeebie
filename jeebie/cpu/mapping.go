@@ -10,18 +10,20 @@ import (
 type Opcode func(*CPU) int
 
 // Decode retrieves the instruction identified by the value pointed at by the PC.
+// Note: PC must be incremented separately, this is so we can handle the "HALT bug".
 func Decode(c *CPU) Opcode {
-	code := c.readImmediate()
+	// peek PC+1|PC
+	instr := c.peekImmediateWord()
+	high, low := bit.High(instr), bit.Low(instr)
 
 	// 0xCB is only ever used as a prefix for the next byte.
-	if code == 0xCB {
-		code = c.readImmediate()
-		c.currentOpcode = bit.Combine(0xCB, code)
-		return opcodesCB[code]
+	if low == 0xCB {
+		c.currentOpcode = bit.Combine(0xCB, high)
+		return opcodesCB[high]
 	}
 
-	c.currentOpcode = bit.Combine(0, code)
-	return opcodes[code]
+	c.currentOpcode = bit.Combine(0, low)
+	return opcodes[low]
 }
 
 var opcodes = [...]Opcode{

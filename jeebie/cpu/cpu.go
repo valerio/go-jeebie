@@ -39,9 +39,13 @@ type CPU struct {
 	eiPending         bool // EI delay: interrupts enable after next instruction
 	currentOpcode     uint16
 	stopped           bool
-	halted            bool
-	haltBug           bool // HALT bug: PC doesn't increment properly
 	cycles            uint64
+	halted            bool
+
+	// haltBug indicates the next instruction should execute with the
+	// HALT bug semantics (skip first opcode-byte increment; operands still
+	// advance PC). Set by HALT, cleared after the affected instruction.
+	haltBug bool
 
 	memory *memory.MMU
 }
@@ -110,27 +114,35 @@ func (c *CPU) Tick() int {
 	if c.halted {
 		// Check if we should wake from HALT (IE & IF != 0)
 		if interruptPending {
+			// Waking from HALT: do NOT trigger the HALT bug here.
+			// The HALT bug only occurs when executing the HALT instruction
+			// while IME=0 and an interrupt is pending.
 			c.halted = false
-			// If IME=0 and interrupt pending, we have the HALT bug scenario
-			if !c.interruptsEnabled {
-				c.haltBug = true
-			}
 		} else {
 			// Still halted, consume cycles
 			return 4
 		}
 	}
 
-	// Handle HALT bug: don't increment PC for next instruction
-	if c.haltBug {
-		c.haltBug = false
-		// Execute instruction without incrementing PC first
-		// This causes the instruction after HALT to be read twice
+	instruction := Decode(c)
+
+	// Previous instruction triggered the halt bug, we have to skip the first PC increment,
+	// then, after running the instruction, we clear the halt bug flag.
+	skipFirstPCInc := c.haltBug
+	if !skipFirstPCInc {
+		c.pc++
+	}
+	if bit.High(c.currentOpcode) == 0xCB {
+		c.pc++
 	}
 
-	instruction := Decode(c)
 	cycles := instruction(c)
 	c.cycles += uint64(cycles)
+
+	// Clear halt bug flag IF we skipped the first PC increment this instruction.
+	if skipFirstPCInc {
+		c.haltBug = false
+	}
 
 	// Handle EI delay: enable interrupts after this instruction
 	if c.eiPending {
@@ -199,7 +211,6 @@ func (c CPU) peekImmediate() uint8 {
 func (c CPU) peekImmediateWord() uint16 {
 	low := c.memory.Read(c.pc)
 	high := c.memory.Read(c.pc + 1)
-
 	return bit.Combine(high, low)
 }
 
@@ -211,22 +222,55 @@ func (c CPU) peekSignedImmediate() int8 {
 
 // readImmediate acts similarly as its peek counterpart, but increments the PC once after reading
 func (c *CPU) readImmediate() uint8 {
-	n := c.peekImmediate()
-	c.pc++
+	var n uint8
+
+	// During the halt bug, the first operand byte re-reads the opcode byte (offset 0).
+	if c.haltBug {
+		offset := uint16(0)
+		n = c.memory.Read(c.pc + offset)
+		// Even under the halt bug, operand reads still advance PC
+		c.pc++
+	} else {
+		n = c.peekImmediate()
+		c.pc++
+	}
+
 	return n
 }
 
 // readImmediateWord acts similarly as its peek counterpart, but increments the PC twice after reading
 func (c *CPU) readImmediateWord() uint16 {
-	nn := c.peekImmediateWord()
-	c.pc += 2
+	var nn uint16
+
+	// During the halt bug, the first operand byte re-reads the opcode byte.
+	if c.haltBug {
+		low := c.memory.Read(c.pc + 0)
+		high := c.memory.Read(c.pc + 1)
+		nn = bit.Combine(high, low)
+		// Even under the halt bug, operand reads still advance PC
+		c.pc += 2
+	} else {
+		nn = c.peekImmediateWord()
+		c.pc += 2
+	}
+
 	return nn
 }
 
 // readSignedImmediate acts similarly as its peek counterpart, but increments the PC once after reading
 func (c *CPU) readSignedImmediate() int8 {
-	n := c.peekSignedImmediate()
-	c.pc++
+	var n int8
+
+	// During the halt bug, the first operand byte re-reads the opcode byte.
+	if c.haltBug {
+		n = int8(c.memory.Read(c.pc + 0))
+		// Even under the halt bug, operand reads still advance PC
+		c.pc++
+	} else {
+		n = c.peekSignedImmediate()
+		c.pc++
+	}
+
 	return n
 }
 

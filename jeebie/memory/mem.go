@@ -182,6 +182,12 @@ func (m *MMU) Read(address uint16) byte {
 		if address >= 0xFF10 && address <= 0xFF3F {
 			return m.APU.ReadRegister(address)
 		}
+		// Just in case, we always read the upper 3 bits of IF as 1.
+		// They're not used, but have caused me some headaches when checking for
+		// when the halt bug triggers (IF != 0).
+		if address == addr.IF {
+			return m.memory[address] | 0xE0
+		}
 		if address >= 0xFF80 {
 			// HRAM
 			return m.memory[address]
@@ -229,6 +235,12 @@ func (m *MMU) Write(address uint16, value byte) {
 		}
 		if address >= 0xFF10 && address <= 0xFF3F {
 			m.APU.WriteRegister(address, value)
+			return
+		}
+		if address == addr.IF {
+			// This goddamn register has its upper 3 bits always set as 1...
+			// Beware if you're trying to match halt bug behavior.
+			m.memory[address] = value | 0xE0
 			return
 		}
 		if address == addr.DMA {

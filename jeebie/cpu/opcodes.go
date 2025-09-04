@@ -1,6 +1,7 @@
 package cpu
 
 import (
+	"github.com/valerio/go-jeebie/jeebie/addr"
 	"github.com/valerio/go-jeebie/jeebie/bit"
 )
 
@@ -864,6 +865,17 @@ func opcode0x75(cpu *CPU) int {
 // HALT
 // #0x76:
 func opcode0x76(cpu *CPU) int {
+	iereg := cpu.memory.Read(addr.IE)
+	ifreg := cpu.memory.Read(addr.IF)
+
+	// The famed halt bug: we'll halt after the next instruction.
+	// In our case, we set a flag and keep executing normally until
+	// the next instruction, when we skip the first PC increment.
+	if !cpu.interruptsEnabled && ((iereg&ifreg)&0x1F) != 0 {
+		cpu.haltBug = true
+		return 4
+	}
+
 	cpu.halted = true
 	return 4
 }

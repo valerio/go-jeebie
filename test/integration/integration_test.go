@@ -95,6 +95,12 @@ func GetIntegrationTests() []IntegrationTestCase {
 			MaxFrames: 10, // run for fixed frames
 			Name:      "dmg-acid2",
 		},
+		{
+			ROMPath:      "../../test-roms/game-boy-test-roms/blargg/halt_bug.gb",
+			MaxFrames:    500,
+			MinLoopCount: 10,
+			Name:         "halt_bug",
+		},
 	}
 
 	return tests
