@@ -7,6 +7,7 @@ import (
 	"github.com/valerio/go-jeebie/jeebie/addr"
 	"github.com/valerio/go-jeebie/jeebie/audio"
 	"github.com/valerio/go-jeebie/jeebie/bit"
+	"github.com/valerio/go-jeebie/jeebie/serial"
 )
 
 type memRegion uint8
@@ -37,6 +38,15 @@ const (
 	JoypadStart
 )
 
+// SerialPort is the minimal interface for a serial device connected to SB/SC.
+// Implementations MUST only accept reads/writes to addr.SB and addr.SC.
+type SerialPort interface {
+	Write(address uint16, value byte)
+	Read(address uint16) byte
+	Tick(cycles int)
+	Reset()
+}
+
 // MMU allows access to all memory mapped I/O and data/registers
 type MMU struct {
 	cart      *Cartridge
@@ -47,6 +57,8 @@ type MMU struct {
 
 	joypadButtons uint8 // Actual state of buttons A/B/Start/Select, mapped to low bits of P1
 	joypadDpad    uint8 // Actual state of d-pad directions, mapped to low bits of P1
+
+	serial SerialPort
 }
 
 // New creates a new memory unity with default data, i.e. nothing cartridge loaded.
@@ -59,8 +71,16 @@ func New() *MMU {
 		joypadButtons: 0x0F,
 		joypadDpad:    0x0F,
 	}
+	mmu.serial = serial.NewLogSink(func() { mmu.RequestInterrupt(addr.SerialInterrupt) })
 	initRegionMap(mmu)
 	return mmu
+}
+
+// Tick advances any i/o that needs it, if any.
+func (m *MMU) Tick(cycles int) {
+	if m.serial != nil {
+		m.serial.Tick(cycles)
+	}
 }
 
 // NewWithCartridge creates a new memory unit with the provided cartridge data loaded.
@@ -179,6 +199,9 @@ func (m *MMU) Read(address uint16) byte {
 		// Unused area 0xFEA0-0xFEFF
 		return m.memory[address]
 	case regionIO:
+		if address == addr.SB || address == addr.SC {
+			return m.serial.Read(address)
+		}
 		if address >= 0xFF10 && address <= 0xFF3F {
 			return m.APU.ReadRegister(address)
 		}
@@ -231,6 +254,10 @@ func (m *MMU) Write(address uint16, value byte) {
 	case regionIO:
 		if address == addr.P1 {
 			m.writeJoypad(value)
+			return
+		}
+		if address == addr.SB || address == addr.SC {
+			m.serial.Write(address, value)
 			return
 		}
 		if address >= 0xFF10 && address <= 0xFF3F {

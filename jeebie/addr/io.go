@@ -110,9 +110,17 @@ const (
 
 // serial I/O
 const (
-	// SB is the Serial Bus register, used to read/write data to be transferred.
+	// SB (Serial transfer data, 0xFF01)
+	//
+	// Holds the 8-bit data to be transmitted. During a transfer, bits shift out MSB-first
+	// on SO and incoming bits shift in from SI. After completion, SB contains the received
+	// byte from the peer (typically 0xFF when no peer is connected).
 	SB uint16 = 0xFF01
-	// SC is the Serial Control register, used to control transmission on the serial port.
+	// SC (Serial transfer control, 0xFF02)
+	//  - Bit 7 (Start): Writing 1 starts an 8-bit transfer; hardware clears to 0 when done.
+	//  - Bit 0 (Clock): 1=internal clock (DMG master at ~8192 Hz bit clock), 0=external clock
+	//    (peer provides 8 pulses). CGB uses bit 1 for double-speed; ignored on DMG.
+	//  - On completion, the Serial interrupt (IF bit 3) is requested by hardware.
 	SC uint16 = 0xFF02
 )
 

@@ -125,6 +125,7 @@ func (e *DMG) RunUntilFrame() error {
 			cycles := e.cpu.Tick()
 			e.updateTimers(cycles)
 			e.gpu.Tick(cycles)
+			e.mem.Tick(cycles)
 			e.instructionCount++
 
 			// Pause after execution
@@ -152,6 +153,7 @@ func (e *DMG) RunUntilFrame() error {
 				e.updateTimers(cycles)
 				e.gpu.Tick(cycles)
 				e.mem.APU.Step(cycles)
+				e.mem.Tick(cycles)
 				e.instructionCount++
 				total += cycles
 
@@ -172,6 +174,7 @@ func (e *DMG) RunUntilFrame() error {
 		e.updateTimers(cycles)
 		e.gpu.Tick(cycles)
 		e.mem.APU.Step(cycles)
+		e.mem.Tick(cycles)
 		e.instructionCount++
 
 		total += cycles
