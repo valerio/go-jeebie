@@ -29,6 +29,12 @@ test-integration-golden:
 	@echo "Generating reference screen data and snapshots for integration tests..."
 	BLARGG_GENERATE_GOLDEN=true go test -v ./test/integration/...
 
+.PHONY: snapshots-update
+snapshots-update:
+	@echo "Updating README snapshots table..."
+	@go run ./cmd/gen_snapshots_table -readme README.md -cols $(or $(COLS),4)
+	@echo "README.md updated."
+
 .PHONY: test-all
 test-all: test-roms-download test test-integration
 
