@@ -20,10 +20,10 @@ var tacLookup = [4]uint16{9, 3, 5, 7}
 
 // Timer encapsulates the Game Boy timer/DIV/TIMA/TMA/TAC behavior.
 type Timer struct {
-	systemCounter uint16 // Internal 16-bit counter, DIV is upper 8 bits
-	lastTimerBit  bool   // Previous state of timer bit for edge detection
-	timaOverflow  int    // Cycles remaining in TIMA overflow state
-	timaDelayInt  bool   // Delayed interrupt flag setting (1 M-cycle after TMA load)
+	systemCounter     uint16 // Internal 16-bit counter, DIV is upper 8 bits
+	lastTimerBitIsSet bool   // Previous state of timer bit for edge detection (set == 1)
+	timaOverflow      int    // Cycles remaining in TIMA overflow state
+	timaDelayInt      bool   // Delayed interrupt flag setting (1 M-cycle after TMA load)
 
 	// Timer registers
 	tima byte
@@ -37,7 +37,7 @@ type Timer struct {
 // SetSeed initializes the internal divider counter and writes DIV accordingly.
 func (t *Timer) SetSeed(seed uint16) {
 	t.systemCounter = seed
-	t.lastTimerBit = false
+	t.lastTimerBitIsSet = false
 	t.timaOverflow = 0
 	t.timaDelayInt = false
 }
@@ -66,15 +66,14 @@ func (t *Timer) Tick(cycles int) {
 		timerEnabled := bit.IsSet(2, t.tac)
 
 		if timerEnabled {
-			currentTimerBit := bit.IsSet16(tacLookup[t.tac&0x03], t.systemCounter)
-
-			if t.lastTimerBit && !currentTimerBit {
+			currentTimerBitIsSet := bit.IsSet16(tacLookup[t.tac&0x03], t.systemCounter)
+			if t.lastTimerBitIsSet && !currentTimerBitIsSet {
 				t.incrementTIMA()
 			}
 
-			t.lastTimerBit = currentTimerBit
+			t.lastTimerBitIsSet = currentTimerBitIsSet
 		} else {
-			t.lastTimerBit = false
+			t.lastTimerBitIsSet = false
 		}
 	}
 }
@@ -104,12 +103,46 @@ func (t *Timer) Read(address uint16) byte {
 func (t *Timer) Write(address uint16, value byte) {
 	switch address {
 	case addr.DIV:
-		t.systemCounter = 0 // DIV writes reset the counter
+		// DIV writes reset the internal counter to 0, this means one of the bits
+		// used for timer input (if enabled) could go from 1 -> 0 (falling edge)
+		// We need to detect this and increment TIMA if so.
+		timerEnabled := bit.IsSet(2, t.tac)
+		wasSet := bit.IsSet16(tacLookup[t.tac&0x03], t.systemCounter)
+		if timerEnabled && wasSet {
+			t.incrementTIMA()
+		}
+		t.systemCounter = 0
+		t.lastTimerBitIsSet = false
 	case addr.TIMA:
+		// Writing TIMA during overflow cancels the pending interrupt
+		if t.timaOverflow > 0 || t.timaDelayInt {
+			t.timaOverflow = 0
+			t.timaDelayInt = false
+		}
 		t.tima = value
 	case addr.TMA:
 		t.tma = value
 	case addr.TAC:
-		t.tac = value
+		// Writing TAC can also cause a falling edge on the timer input.
+		// Similar to DIV, we detect and increment TIMA if so.
+		oldTac, oldEnabled := t.tac, bit.IsSet(2, t.tac)
+		newTac, newEnabled := value, bit.IsSet(2, value)
+
+		oldBitWasSet := bit.IsSet16(tacLookup[oldTac&0x03], t.systemCounter)
+		newBitIsSet := bit.IsSet16(tacLookup[newTac&0x03], t.systemCounter)
+
+		// If the timer input transitions 1 -> 0 due to this write while it
+		// was previously enabled, increment TIMA once.
+		if oldEnabled && oldBitWasSet && (!newEnabled || !newBitIsSet) {
+			t.incrementTIMA()
+		}
+
+		t.tac = newTac
+		// Resync edge detector to new configuration
+		if newEnabled {
+			t.lastTimerBitIsSet = newBitIsSet
+		} else {
+			t.lastTimerBitIsSet = false
+		}
 	}
 }
