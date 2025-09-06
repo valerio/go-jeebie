@@ -9,6 +9,14 @@ import (
 	"github.com/valerio/go-jeebie/jeebie/memory"
 )
 
+// Bus is used for communication with other components.
+type Bus interface {
+	Read(address uint16) byte
+	Write(address uint16, value byte)
+	ReadBit(index uint8, address uint16) bool
+	RequestInterrupt(interrupt addr.Interrupt)
+}
+
 // GpuMode represents the PPU's current rendering stage.
 // These values match the STAT register bits 1-0.
 type GpuMode int
@@ -32,7 +40,7 @@ const (
 )
 
 type GPU struct {
-	memory        *memory.MMU
+	bus           Bus
 	framebuffer   *FrameBuffer
 	bgPixelBuffer []byte        // stores background/window pixel colors for sprite priority
 	oam           *OAM          // OAM scanner for sprite management
@@ -51,22 +59,29 @@ type GPU struct {
 }
 
 func NewGpu(memory *memory.MMU) *GPU {
+	return New(memory)
+}
+
+func New(bus Bus) *GPU {
 	fb := NewFrameBuffer()
+
 	gpu := &GPU{
 		framebuffer:   fb,
-		memory:        memory,
+		bus:           bus,
 		mode:          vblankMode,
 		bgPixelBuffer: make([]byte, FramebufferSize),
-		oam:           NewOAM(memory),
+		oam:           NewOAM(bus),
 		Layers:        NewRenderLayers(),
 
 		line: 144,
 	}
 
-	// Log initial LCD state
-	lcdc := memory.Read(0xFF40)
-	bgp := memory.Read(0xFF47) // Background palette
-	slog.Debug("GPU initialized", "LCDC", fmt.Sprintf("0x%02X", lcdc), "LCD_enabled", (lcdc&0x80) != 0, "BGP", fmt.Sprintf("0x%02X", bgp))
+	// Log initial LCD state if bus is available
+	if bus != nil {
+		lcdc := bus.Read(0xFF40)
+		bgp := bus.Read(0xFF47) // Background palette
+		slog.Debug("GPU initialized", "LCDC", fmt.Sprintf("0x%02X", lcdc), "LCD_enabled", (lcdc&0x80) != 0, "BGP", fmt.Sprintf("0x%02X", bgp))
+	}
 
 	return gpu
 }
@@ -102,17 +117,17 @@ func (g *GPU) Tick(cycles int) {
 			g.windowLine = 0
 
 			// Always trigger the VBlank interrupt when switching
-			g.memory.RequestInterrupt(addr.VBlankInterrupt)
+			g.requestInterrupt(addr.VBlankInterrupt)
 
 			// We're switching to VBlank Mode
 			// if enabled on STAT, trigger the LCDStat interrupt
-			if g.memory.ReadBit(uint8(statVblankIrq), addr.STAT) {
-				g.memory.RequestInterrupt(addr.LCDSTATInterrupt)
+			if g.bus.ReadBit(uint8(statVblankIrq), addr.STAT) {
+				g.requestInterrupt(addr.LCDSTATInterrupt)
 			}
-		} else if g.memory.ReadBit(uint8(statOamIrq), addr.STAT) {
+		} else if g.bus.ReadBit(uint8(statOamIrq), addr.STAT) {
 			// We're switching to OAM Read Mode
 			// if enabled on STAT, trigger the LCDStat interrupt
-			g.memory.RequestInterrupt(addr.LCDSTATInterrupt)
+			g.requestInterrupt(addr.LCDSTATInterrupt)
 		}
 	case vblankMode:
 		g.modeCounterAux += cycles
@@ -135,8 +150,8 @@ func (g *GPU) Tick(cycles int) {
 			g.setMode(oamReadMode)
 			// We're switching to OAM Read Mode
 			// if enabled on STAT, trigger the LCDStat interrupt
-			if g.memory.ReadBit(uint8(statOamIrq), addr.STAT) {
-				g.memory.RequestInterrupt(addr.LCDSTATInterrupt)
+			if g.bus.ReadBit(uint8(statOamIrq), addr.STAT) {
+				g.requestInterrupt(addr.LCDSTATInterrupt)
 			}
 		}
 	case oamReadMode:
@@ -162,8 +177,8 @@ func (g *GPU) Tick(cycles int) {
 
 			// We're switching to HBlank Mode
 			// if enabled on STAT, trigger the LCDStat interrupt
-			if g.memory.ReadBit(uint8(statHblankIrq), addr.STAT) {
-				g.memory.RequestInterrupt(addr.LCDSTATInterrupt)
+			if g.bus.ReadBit(uint8(statHblankIrq), addr.STAT) {
+				g.requestInterrupt(addr.LCDSTATInterrupt)
 			}
 		}
 	}
@@ -216,7 +231,7 @@ func (g *GPU) isWindowEnabled() bool {
 // call when background is disabled, fill with color 0 from BGP
 func (g *GPU) clearBackground() {
 	lineWidth := g.line * FramebufferWidth
-	palette := g.memory.Read(addr.BGP)
+	palette := g.bus.Read(addr.BGP)
 	color0 := palette & 0x03
 	displayColor := uint32(ByteToColor(color0))
 
@@ -262,7 +277,7 @@ func (g *GPU) getBackgroundTileMapAddress() uint16 {
 }
 
 func (g *GPU) getBackgroundScroll() (x, y int) {
-	return int(g.memory.Read(addr.SCX)), int(g.memory.Read(addr.SCY))
+	return int(g.bus.Read(addr.SCX)), int(g.bus.Read(addr.SCY))
 }
 
 func (g *GPU) fetchBackgroundPixel(bgX, bgY int, tileDataAddr, tileMapAddr uint16, useSigned bool) int {
@@ -274,7 +289,7 @@ func (g *GPU) fetchBackgroundPixel(bgX, bgY int, tileDataAddr, tileMapAddr uint1
 
 	// fetch tile index from tilemap
 	tileMapOffset := tileY*32 + tileX
-	tileIndex := g.memory.Read(tileMapAddr + uint16(tileMapOffset))
+	tileIndex := g.bus.Read(tileMapAddr + uint16(tileMapOffset))
 
 	tileRow := g.fetchTileRow(tileIndex, pixelYInTile, tileDataAddr, useSigned)
 	return tileRow.GetPixel(pixelXInTile)
@@ -293,13 +308,13 @@ func (g *GPU) fetchTileRow(tileIndex byte, row int, baseAddr uint16, signed bool
 	}
 
 	return TileRow{
-		Low:  g.memory.Read(tileAddr),
-		High: g.memory.Read(tileAddr + 1),
+		Low:  g.bus.Read(tileAddr),
+		High: g.bus.Read(tileAddr + 1),
 	}
 }
 
 func (g *GPU) drawBackgroundPixel(position int, pixelColor int) {
-	palette := g.memory.Read(addr.BGP)
+	palette := g.bus.Read(addr.BGP)
 	paletteColor := (palette >> (pixelColor * 2)) & 0x03
 
 	g.framebuffer.buffer[position] = uint32(ByteToColor(paletteColor))
@@ -325,12 +340,12 @@ func (g *GPU) shouldRenderWindow() bool {
 		return false
 	}
 
-	wy := g.memory.Read(addr.WY)
+	wy := g.bus.Read(addr.WY)
 	if wy > 143 || int(wy) > g.line {
 		return false
 	}
 
-	wx := g.memory.Read(addr.WX)
+	wx := g.bus.Read(addr.WX)
 	if wx > 166 { // WX - 7 > 159
 		return false
 	}
@@ -342,7 +357,7 @@ func (g *GPU) renderWindowTiles() {
 	lineWidth := g.line * FramebufferWidth
 
 	// get window position
-	wx := int(g.memory.Read(addr.WX)) - 7
+	wx := int(g.bus.Read(addr.WX)) - 7
 
 	// determine tile data and tilemap sources
 	tileDataAddr := g.getTileDataAddress()
@@ -386,7 +401,7 @@ func (g *GPU) fetchWindowPixel(windowX, windowY int, tileDataAddr, tileMapAddr u
 
 	// fetch tile index from tilemap
 	tileMapOffset := tileY*32 + tileX
-	tileIndex := g.memory.Read(tileMapAddr + uint16(tileMapOffset))
+	tileIndex := g.bus.Read(tileMapAddr + uint16(tileMapOffset))
 
 	// fetch tile data (reuse background tile fetching)
 	tileRow := g.fetchTileRow(tileIndex, pixelYInTile, tileDataAddr, useSigned)
@@ -397,7 +412,7 @@ func (g *GPU) fetchWindowPixel(windowX, windowY int, tileDataAddr, tileMapAddr u
 
 func (g *GPU) drawWindowPixel(position int, pixelColor int) {
 	// window uses same palette as background
-	palette := g.memory.Read(addr.BGP)
+	palette := g.bus.Read(addr.BGP)
 	paletteColor := (palette >> (pixelColor * 2)) & 0x03
 
 	g.framebuffer.buffer[position] = uint32(ByteToColor(paletteColor))
@@ -480,8 +495,8 @@ func (g *GPU) fetchSpriteTileRow(sprite Sprite) TileRow {
 	tileAddr := addr.TileData0 + uint16(int(tileIndex)*16+tileRowOffset)
 
 	return TileRow{
-		Low:  g.memory.Read(tileAddr),
-		High: g.memory.Read(tileAddr + 1),
+		Low:  g.bus.Read(tileAddr),
+		High: g.bus.Read(tileAddr + 1),
 	}
 }
 
@@ -493,7 +508,7 @@ func (g *GPU) getSpritePaletteAddress(sprite Sprite) uint16 {
 }
 
 func (g *GPU) drawSpritePixel(position int, pixelColor int, paletteAddr uint16) {
-	palette := g.memory.Read(paletteAddr)
+	palette := g.bus.Read(paletteAddr)
 	color := (palette >> (pixelColor * 2)) & 0x03
 	g.framebuffer.buffer[position] = uint32(ByteToColor(color))
 }
@@ -545,7 +560,7 @@ const (
 )
 
 func (g *GPU) readLCDCVariable(flag lcdcFlag) byte {
-	if bit.IsSet(uint8(flag), g.memory.Read(addr.LCDC)) {
+	if bit.IsSet(uint8(flag), g.bus.Read(addr.LCDC)) {
 		return 1
 	}
 
@@ -553,36 +568,43 @@ func (g *GPU) readLCDCVariable(flag lcdcFlag) byte {
 }
 
 func (g *GPU) compareLYToLYC() {
-	ly := g.memory.Read(addr.LY)
-	lyc := g.memory.Read(addr.LYC)
-	stat := g.memory.Read(addr.STAT)
+	ly := g.bus.Read(addr.LY)
+	lyc := g.bus.Read(addr.LYC)
+	stat := g.bus.Read(addr.STAT)
 
 	if ly == lyc {
 		stat = bit.Set(uint8(statLycCondition), stat)
 		if bit.IsSet(uint8(statLycIrq), stat) {
-			g.memory.RequestInterrupt(addr.LCDSTATInterrupt)
+			g.requestInterrupt(addr.LCDSTATInterrupt)
 		}
 	} else {
 		stat = bit.Reset(uint8(statLycCondition), stat)
 	}
 
-	g.memory.Write(addr.STAT, stat)
+	g.bus.Write(addr.STAT, stat)
+}
+
+// requestInterrupt requests an interrupt via bus
+func (g *GPU) requestInterrupt(interrupt addr.Interrupt) {
+	if g.bus != nil {
+		g.bus.RequestInterrupt(interrupt)
+	}
 }
 
 // setMode sets the two bits (1,0) in the STAT register
 // according to the selected GPU mode.
 func (g *GPU) setMode(mode GpuMode) {
 	g.mode = mode
-	stat := g.memory.Read(addr.STAT)
+	stat := g.bus.Read(addr.STAT)
 	stat = stat&0xFC | byte(g.mode)
-	g.memory.Write(addr.STAT, stat)
+	g.bus.Write(addr.STAT, stat)
 }
 
 // setLY updates the current scanline (LY register).
 // This also triggers interrupts if necessary (LY/LYC comparison)
 func (g *GPU) setLY(line int) {
 	g.line = line
-	g.memory.Write(addr.LY, byte(g.line))
+	g.bus.Write(addr.LY, byte(g.line))
 	g.compareLYToLYC()
 }
 
@@ -593,16 +615,16 @@ func (g *GPU) updateLayerFramebuffers() {
 	}
 
 	// Get palette data
-	bgPalette := ApplyPalette(g.memory.Read(addr.BGP))
-	obp0Palette := ApplyPalette(g.memory.Read(addr.OBP0))
-	obp1Palette := ApplyPalette(g.memory.Read(addr.OBP1))
+	bgPalette := ApplyPalette(g.bus.Read(addr.BGP))
+	obp0Palette := ApplyPalette(g.bus.Read(addr.OBP0))
+	obp1Palette := ApplyPalette(g.bus.Read(addr.OBP1))
 
 	// Render background tilemap
 	if g.isBackgroundEnabled() {
 		tileDataAddr := g.getTileDataAddress()
 		tileMapAddr := g.getBackgroundTileMapAddress()
 		useSigned := g.readLCDCVariable(bgWindowTileDataSelect) == 0
-		RenderTilemapToBuffer(g.memory, tileMapAddr, tileDataAddr,
+		RenderTilemapToBuffer(g.bus, tileMapAddr, tileDataAddr,
 			g.Layers.Background.Buffer, bgPalette, useSigned)
 	}
 
@@ -611,7 +633,7 @@ func (g *GPU) updateLayerFramebuffers() {
 		tileDataAddr := g.getTileDataAddress()
 		tileMapAddr := g.getWindowTileMapAddress()
 		useSigned := g.readLCDCVariable(bgWindowTileDataSelect) == 0
-		RenderTilemapToBuffer(g.memory, tileMapAddr, tileDataAddr,
+		RenderTilemapToBuffer(g.bus, tileMapAddr, tileDataAddr,
 			g.Layers.Window.Buffer, bgPalette, useSigned)
 	}
 
@@ -636,7 +658,7 @@ func (g *GPU) updateLayerFramebuffers() {
 			sprites = append(sprites, sprite)
 		}
 
-		RenderSpritesToBuffer(sprites, g.memory, g.Layers.Sprites.Buffer,
+		RenderSpritesToBuffer(sprites, g.bus, g.Layers.Sprites.Buffer,
 			obp0Palette, obp1Palette, 160, 144)
 	}
 }

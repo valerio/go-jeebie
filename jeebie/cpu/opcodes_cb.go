@@ -46,9 +46,9 @@ func opcode0xCB05(c *CPU) int {
 // 0xCB06:
 func opcode0xCB06(c *CPU) int {
 	addr := c.getHL()
-	value := c.memory.Read(addr)
+	value := c.bus.Read(addr)
 	c.rlc(&value)
-	c.memory.Write(addr, value)
+	c.bus.Write(addr, value)
 	return 16
 }
 
@@ -105,9 +105,9 @@ func opcode0xCB0D(c *CPU) int {
 // 0xCB0E:
 func opcode0xCB0E(c *CPU) int {
 	addr := c.getHL()
-	value := c.memory.Read(addr)
+	value := c.bus.Read(addr)
 	c.rrc(&value)
-	c.memory.Write(addr, value)
+	c.bus.Write(addr, value)
 	return 16
 }
 
@@ -164,9 +164,9 @@ func opcode0xCB15(c *CPU) int {
 // 0xCB16:
 func opcode0xCB16(c *CPU) int {
 	addr := c.getHL()
-	value := c.memory.Read(addr)
+	value := c.bus.Read(addr)
 	c.rl(&value)
-	c.memory.Write(addr, value)
+	c.bus.Write(addr, value)
 	return 16
 }
 
@@ -223,9 +223,9 @@ func opcode0xCB1D(c *CPU) int {
 // 0xCB1E:
 func opcode0xCB1E(c *CPU) int {
 	addr := c.getHL()
-	value := c.memory.Read(addr)
+	value := c.bus.Read(addr)
 	c.rr(&value)
-	c.memory.Write(addr, value)
+	c.bus.Write(addr, value)
 	return 16
 }
 
@@ -282,9 +282,9 @@ func opcode0xCB25(c *CPU) int {
 // 0xCB26:
 func opcode0xCB26(c *CPU) int {
 	addr := c.getHL()
-	value := c.memory.Read(addr)
+	value := c.bus.Read(addr)
 	c.sla(&value)
-	c.memory.Write(addr, value)
+	c.bus.Write(addr, value)
 	return 16
 }
 
@@ -341,9 +341,9 @@ func opcode0xCB2D(c *CPU) int {
 // 0xCB2E:
 func opcode0xCB2E(c *CPU) int {
 	addr := c.getHL()
-	value := c.memory.Read(addr)
+	value := c.bus.Read(addr)
 	c.sra(&value)
-	c.memory.Write(addr, value)
+	c.bus.Write(addr, value)
 	return 16
 }
 
@@ -400,9 +400,9 @@ func opcode0xCB35(c *CPU) int {
 // 0xCB36":
 func opcode0xCB36(c *CPU) int {
 	addr := c.getHL()
-	value := c.memory.Read(addr)
+	value := c.bus.Read(addr)
 	c.swap(&value)
-	c.memory.Write(addr, value)
+	c.bus.Write(addr, value)
 	return 16
 }
 
@@ -459,9 +459,9 @@ func opcode0xCB3D(c *CPU) int {
 // 0xCB3E:
 func opcode0xCB3E(c *CPU) int {
 	addr := c.getHL()
-	value := c.memory.Read(addr)
+	value := c.bus.Read(addr)
 	c.srl(&value)
-	c.memory.Write(addr, value)
+	c.bus.Write(addr, value)
 	return 16
 }
 
@@ -517,8 +517,8 @@ func opcode0xCB45(c *CPU) int {
 // BIT 0 (HL)
 // 0xCB46:
 func opcode0xCB46(c *CPU) int {
-	c.bit(0, c.memory.Read(c.getHL()))
-	return 12
+	c.bit(0, c.bus.Read(c.getHL()))
+	return 16
 }
 
 // BIT 0 A
@@ -573,8 +573,8 @@ func opcode0xCB4D(c *CPU) int {
 // BIT 1 (HL)
 // 0xCB4E:
 func opcode0xCB4E(c *CPU) int {
-	c.bit(1, c.memory.Read(c.getHL()))
-	return 12
+	c.bit(1, c.bus.Read(c.getHL()))
+	return 16
 }
 
 // BIT 1 A
@@ -629,8 +629,8 @@ func opcode0xCB55(c *CPU) int {
 // BIT 2 (HL)
 // 0xCB56:
 func opcode0xCB56(c *CPU) int {
-	c.bit(2, c.memory.Read(c.getHL()))
-	return 12
+	c.bit(2, c.bus.Read(c.getHL()))
+	return 16
 }
 
 // BIT 2 A
@@ -685,8 +685,8 @@ func opcode0xCB5D(c *CPU) int {
 // BIT 3 (HL)
 // 0xCB5E:
 func opcode0xCB5E(c *CPU) int {
-	c.bit(3, c.memory.Read(c.getHL()))
-	return 12
+	c.bit(3, c.bus.Read(c.getHL()))
+	return 16
 }
 
 // BIT 3 A
@@ -741,8 +741,8 @@ func opcode0xCB65(c *CPU) int {
 // BIT 4 (HL)
 // 0xCB66:
 func opcode0xCB66(c *CPU) int {
-	c.bit(4, c.memory.Read(c.getHL()))
-	return 12
+	c.bit(4, c.bus.Read(c.getHL()))
+	return 16
 }
 
 // BIT 4 A
@@ -797,8 +797,8 @@ func opcode0xCB6D(c *CPU) int {
 // BIT 5 (HL)
 // 0xCB6E:
 func opcode0xCB6E(c *CPU) int {
-	c.bit(5, c.memory.Read(c.getHL()))
-	return 12
+	c.bit(5, c.bus.Read(c.getHL()))
+	return 16
 }
 
 // BIT 5 A
@@ -853,8 +853,8 @@ func opcode0xCB75(c *CPU) int {
 // BIT 6 (HL)
 // 0xCB76:
 func opcode0xCB76(c *CPU) int {
-	c.bit(6, c.memory.Read(c.getHL()))
-	return 12
+	c.bit(6, c.bus.Read(c.getHL()))
+	return 16
 }
 
 // BIT 6 A
@@ -909,8 +909,8 @@ func opcode0xCB7D(c *CPU) int {
 // BIT 7 (HL)
 // 0xCB7E:
 func opcode0xCB7E(c *CPU) int {
-	c.bit(7, c.memory.Read(c.getHL()))
-	return 12
+	c.bit(7, c.bus.Read(c.getHL()))
+	return 16
 }
 
 // BIT 7 A
@@ -966,9 +966,9 @@ func opcode0xCB85(c *CPU) int {
 // 0xCB86:
 func opcode0xCB86(c *CPU) int {
 	addr := c.getHL()
-	value := c.memory.Read(addr)
+	value := c.bus.Read(addr)
 	c.res(0, &value)
-	c.memory.Write(addr, value)
+	c.bus.Write(addr, value)
 	return 16
 }
 
@@ -1025,9 +1025,9 @@ func opcode0xCB8D(c *CPU) int {
 // 0xCB8E:
 func opcode0xCB8E(c *CPU) int {
 	addr := c.getHL()
-	value := c.memory.Read(addr)
+	value := c.bus.Read(addr)
 	c.res(1, &value)
-	c.memory.Write(addr, value)
+	c.bus.Write(addr, value)
 	return 16
 }
 
@@ -1084,9 +1084,9 @@ func opcode0xCB95(c *CPU) int {
 // 0xCB96:
 func opcode0xCB96(c *CPU) int {
 	addr := c.getHL()
-	value := c.memory.Read(addr)
+	value := c.bus.Read(addr)
 	c.res(2, &value)
-	c.memory.Write(addr, value)
+	c.bus.Write(addr, value)
 	return 16
 }
 
@@ -1143,9 +1143,9 @@ func opcode0xCB9D(c *CPU) int {
 // 0xCB9E:
 func opcode0xCB9E(c *CPU) int {
 	addr := c.getHL()
-	value := c.memory.Read(addr)
+	value := c.bus.Read(addr)
 	c.res(3, &value)
-	c.memory.Write(addr, value)
+	c.bus.Write(addr, value)
 	return 16
 }
 
@@ -1202,9 +1202,9 @@ func opcode0xCBA5(c *CPU) int {
 // 0xCBA6:
 func opcode0xCBA6(c *CPU) int {
 	addr := c.getHL()
-	value := c.memory.Read(addr)
+	value := c.bus.Read(addr)
 	c.res(4, &value)
-	c.memory.Write(addr, value)
+	c.bus.Write(addr, value)
 	return 16
 }
 
@@ -1261,9 +1261,9 @@ func opcode0xCBAD(c *CPU) int {
 // 0xCBAE:
 func opcode0xCBAE(c *CPU) int {
 	addr := c.getHL()
-	value := c.memory.Read(addr)
+	value := c.bus.Read(addr)
 	c.res(5, &value)
-	c.memory.Write(addr, value)
+	c.bus.Write(addr, value)
 	return 16
 }
 
@@ -1320,9 +1320,9 @@ func opcode0xCBB5(c *CPU) int {
 // 0xCBB6:
 func opcode0xCBB6(c *CPU) int {
 	addr := c.getHL()
-	value := c.memory.Read(addr)
+	value := c.bus.Read(addr)
 	c.res(6, &value)
-	c.memory.Write(addr, value)
+	c.bus.Write(addr, value)
 	return 16
 }
 
@@ -1379,9 +1379,9 @@ func opcode0xCBBD(c *CPU) int {
 // 0xCBBE:
 func opcode0xCBBE(c *CPU) int {
 	addr := c.getHL()
-	value := c.memory.Read(addr)
+	value := c.bus.Read(addr)
 	c.res(7, &value)
-	c.memory.Write(addr, value)
+	c.bus.Write(addr, value)
 	return 16
 }
 
@@ -1438,9 +1438,9 @@ func opcode0xCBC5(c *CPU) int {
 // 0xCBC6:
 func opcode0xCBC6(c *CPU) int {
 	addr := c.getHL()
-	value := c.memory.Read(addr)
+	value := c.bus.Read(addr)
 	c.set(0, &value)
-	c.memory.Write(addr, value)
+	c.bus.Write(addr, value)
 	return 16
 }
 
@@ -1497,9 +1497,9 @@ func opcode0xCBCD(c *CPU) int {
 // 0xCBCE:
 func opcode0xCBCE(c *CPU) int {
 	addr := c.getHL()
-	value := c.memory.Read(addr)
+	value := c.bus.Read(addr)
 	c.set(1, &value)
-	c.memory.Write(addr, value)
+	c.bus.Write(addr, value)
 	return 16
 }
 
@@ -1556,9 +1556,9 @@ func opcode0xCBD5(c *CPU) int {
 // 0xCBD6:
 func opcode0xCBD6(c *CPU) int {
 	addr := c.getHL()
-	value := c.memory.Read(addr)
+	value := c.bus.Read(addr)
 	c.set(2, &value)
-	c.memory.Write(addr, value)
+	c.bus.Write(addr, value)
 	return 16
 }
 
@@ -1615,9 +1615,9 @@ func opcode0xCBDD(c *CPU) int {
 // 0xCBDE:
 func opcode0xCBDE(c *CPU) int {
 	addr := c.getHL()
-	value := c.memory.Read(addr)
+	value := c.bus.Read(addr)
 	c.set(3, &value)
-	c.memory.Write(addr, value)
+	c.bus.Write(addr, value)
 	return 16
 }
 
@@ -1674,9 +1674,9 @@ func opcode0xCBE5(c *CPU) int {
 // 0xCBE6:
 func opcode0xCBE6(c *CPU) int {
 	addr := c.getHL()
-	value := c.memory.Read(addr)
+	value := c.bus.Read(addr)
 	c.set(4, &value)
-	c.memory.Write(addr, value)
+	c.bus.Write(addr, value)
 	return 16
 }
 
@@ -1733,9 +1733,9 @@ func opcode0xCBED(c *CPU) int {
 // 0xCBEE:
 func opcode0xCBEE(c *CPU) int {
 	addr := c.getHL()
-	value := c.memory.Read(addr)
+	value := c.bus.Read(addr)
 	c.set(5, &value)
-	c.memory.Write(addr, value)
+	c.bus.Write(addr, value)
 	return 16
 }
 
@@ -1792,9 +1792,9 @@ func opcode0xCBF5(c *CPU) int {
 // 0xCBF6:
 func opcode0xCBF6(c *CPU) int {
 	addr := c.getHL()
-	value := c.memory.Read(addr)
+	value := c.bus.Read(addr)
 	c.set(6, &value)
-	c.memory.Write(addr, value)
+	c.bus.Write(addr, value)
 	return 16
 }
 
@@ -1851,9 +1851,9 @@ func opcode0xCBFD(c *CPU) int {
 // 0xCBFE:
 func opcode0xCBFE(c *CPU) int {
 	addr := c.getHL()
-	value := c.memory.Read(addr)
+	value := c.bus.Read(addr)
 	c.set(7, &value)
-	c.memory.Write(addr, value)
+	c.bus.Write(addr, value)
 	return 16
 }
 

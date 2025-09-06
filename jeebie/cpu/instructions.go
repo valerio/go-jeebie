@@ -8,15 +8,15 @@ import (
 
 func (c *CPU) pushStack(r uint16) {
 	c.sp--
-	c.memory.Write(c.sp, bit.High(r))
+	c.bus.Write(c.sp, bit.High(r))
 	c.sp--
-	c.memory.Write(c.sp, bit.Low(r))
+	c.bus.Write(c.sp, bit.Low(r))
 }
 
 func (c *CPU) popStack() uint16 {
-	low := c.memory.Read(c.sp)
+	low := c.bus.Read(c.sp)
 	c.sp++
-	high := c.memory.Read(c.sp)
+	high := c.bus.Read(c.sp)
 	c.sp++
 
 	return bit.Combine(high, low)

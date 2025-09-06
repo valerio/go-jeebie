@@ -37,9 +37,6 @@ type Timer struct {
 // SetSeed initializes the internal divider counter and writes DIV accordingly.
 func (t *Timer) SetSeed(seed uint16) {
 	t.systemCounter = seed
-	t.lastTimerBitIsSet = false
-	t.timaOverflow = 0
-	t.timaDelayInt = false
 }
 
 func (t *Timer) Tick(cycles int) {

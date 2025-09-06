@@ -74,6 +74,7 @@ func New() *MMU {
 	}
 	mmu.serial = serial.NewLogSink(func() { mmu.RequestInterrupt(addr.SerialInterrupt) })
 	mmu.timer.TimerInterruptHandler = func() { mmu.RequestInterrupt(addr.TimerInterrupt) }
+	mmu.timer.SetSeed(0xABCC)
 	initRegionMap(mmu)
 	return mmu
 }
@@ -84,11 +85,6 @@ func (m *MMU) Tick(cycles int) {
 	if m.serial != nil {
 		m.serial.Tick(cycles)
 	}
-}
-
-// SetTimerSeed initializes the internal timer divider seed and DIV register.
-func (m *MMU) SetTimerSeed(seed uint16) {
-	m.timer.SetSeed(seed)
 }
 
 // NewWithCartridge creates a new memory unit with the provided cartridge data loaded.

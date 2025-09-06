@@ -80,8 +80,8 @@ func TestDecode(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			mmu := memory.New()
 			cpu := &CPU{
-				memory: mmu,
-				pc:     tt.pc,
+				bus: mmu,
+				pc:  tt.pc,
 			}
 
 			for addr, value := range tt.memorySetup {

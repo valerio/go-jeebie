@@ -52,9 +52,7 @@ func NewTestCompletionDetector() *TestCompletionDetector {
 
 // DMG represents the Game Boy emulator (Dot Matrix Game)
 type DMG struct {
-	cpu *cpu.CPU
-	gpu *video.GPU
-	mem *memory.MMU
+	bus *Bus
 
 	// Debugger state
 	debuggerState    DebuggerState
@@ -72,10 +70,10 @@ type DMG struct {
 }
 
 func (e *DMG) init(mem *memory.MMU) {
-	e.cpu = cpu.New(mem)
-	e.gpu = video.NewGpu(mem)
-	e.mem = mem
-	e.mem.SetTimerSeed(0xABCC)
+	e.bus = NewBus()
+	e.bus.MMU = mem
+	e.bus.CPU = cpu.New(e.bus)
+	e.bus.GPU = video.New(e.bus)
 	e.completionDetector = NewTestCompletionDetector()
 	e.limiter = timing.NewNoOpLimiter()
 }
@@ -111,9 +109,7 @@ func (e *DMG) RunUntilFrame() error {
 			e.debuggerMutex.Unlock()
 
 			// Execute one CPU instruction
-			cycles := e.cpu.Tick()
-			e.mem.Tick(cycles)
-			e.gpu.Tick(cycles)
+			e.bus.TickInstruction()
 			e.instructionCount++
 
 			// Pause after execution
@@ -137,10 +133,7 @@ func (e *DMG) RunUntilFrame() error {
 			// Execute one full frame
 			total := 0
 			for {
-				cycles := e.cpu.Tick()
-				e.mem.Tick(cycles)
-				e.gpu.Tick(cycles)
-				e.mem.APU.Tick(cycles)
+				cycles := e.bus.TickInstruction()
 				e.instructionCount++
 				total += cycles
 
@@ -157,10 +150,7 @@ func (e *DMG) RunUntilFrame() error {
 	// Normal execution (DebuggerRunning)
 	total := 0
 	for {
-		cycles := e.cpu.Tick()
-		e.mem.Tick(cycles)
-		e.gpu.Tick(cycles)
-		e.mem.APU.Tick(cycles)
+		cycles := e.bus.TickInstruction()
 		e.instructionCount++
 
 		total += cycles
@@ -174,19 +164,19 @@ func (e *DMG) RunUntilFrame() error {
 }
 
 func (e *DMG) GetCurrentFrame() *video.FrameBuffer {
-	return e.gpu.GetFrameBuffer()
+	return e.bus.GPU.GetFrameBuffer()
 }
 
 func (e *DMG) GetAudioProvider() audio.Provider {
-	return e.mem.APU
+	return e.bus.MMU.APU
 }
 
 func (e *DMG) HandleKeyPress(key memory.JoypadKey) {
-	e.mem.HandleKeyPress(key)
+	e.bus.MMU.HandleKeyPress(key)
 }
 
 func (e *DMG) HandleKeyRelease(key memory.JoypadKey) {
-	e.mem.HandleKeyRelease(key)
+	e.bus.MMU.HandleKeyRelease(key)
 }
 
 func (e *DMG) HandleAction(act action.Action, pressed bool) {
@@ -245,9 +235,9 @@ func (e *DMG) HandleAction(act action.Action, pressed bool) {
 	}
 
 	if pressed {
-		e.mem.HandleKeyPress(key)
+		e.bus.MMU.HandleKeyPress(key)
 	} else {
-		e.mem.HandleKeyRelease(key)
+		e.bus.MMU.HandleKeyRelease(key)
 	}
 }
 
@@ -267,38 +257,38 @@ func (e *DMG) GetFrameCount() uint64 {
 }
 
 func (e *DMG) ExtractDebugData() *debug.Data {
-	if e.mem == nil || e.cpu == nil {
+	if e.bus == nil || e.bus.MMU == nil || e.bus.CPU == nil {
 		return nil
 	}
 
 	spriteHeight := 8
-	if e.mem.ReadBit(2, addr.LCDC) {
+	if e.bus.MMU.ReadBit(2, addr.LCDC) {
 		spriteHeight = 16
 	}
 
 	// Get current scanline
-	currentLine := int(e.mem.Read(addr.LY))
-	oamData := debug.ExtractOAMData(e.mem, currentLine, spriteHeight)
-	vramData := debug.ExtractVRAMData(e.mem)
+	currentLine := int(e.bus.MMU.Read(addr.LY))
+	oamData := debug.ExtractOAMData(e.bus.MMU, currentLine, spriteHeight)
+	vramData := debug.ExtractVRAMData(e.bus.MMU)
 
 	cpuState := &debug.CPUState{
-		A:      e.cpu.GetA(),
-		F:      e.cpu.GetF(),
-		B:      e.cpu.GetB(),
-		C:      e.cpu.GetC(),
-		D:      e.cpu.GetD(),
-		E:      e.cpu.GetE(),
-		H:      e.cpu.GetH(),
-		L:      e.cpu.GetL(),
-		SP:     e.cpu.GetSP(),
-		PC:     e.cpu.GetPC(),
-		IME:    e.cpu.GetIME(),
+		A:      e.bus.CPU.GetA(),
+		F:      e.bus.CPU.GetF(),
+		B:      e.bus.CPU.GetB(),
+		C:      e.bus.CPU.GetC(),
+		D:      e.bus.CPU.GetD(),
+		E:      e.bus.CPU.GetE(),
+		H:      e.bus.CPU.GetH(),
+		L:      e.bus.CPU.GetL(),
+		SP:     e.bus.CPU.GetSP(),
+		PC:     e.bus.CPU.GetPC(),
+		IME:    e.bus.CPU.GetIME(),
 		Cycles: e.instructionCount,
 	}
 
 	const snapshotSize = 200 // Enough for disassembly before and after PC
 	const beforePC = 50      // Bytes before PC to capture
-	pc := e.cpu.GetPC()
+	pc := e.bus.CPU.GetPC()
 
 	// Calculate start address, handling underflow
 	var startAddr uint16
@@ -322,7 +312,7 @@ func (e *DMG) ExtractDebugData() *debug.Data {
 		addr := startAddr + uint16(i)
 		if addr < 0x8000 || (addr >= 0xA000 && addr < 0xE000) || addr >= 0xFE00 {
 			// Safe to read from these areas
-			memSnapshot.Bytes[i] = e.mem.Read(addr)
+			memSnapshot.Bytes[i] = e.bus.MMU.Read(addr)
 		} else {
 			// VRAM/OAM might be inaccessible, use NOP
 			memSnapshot.Bytes[i] = 0x00
@@ -341,19 +331,19 @@ func (e *DMG) ExtractDebugData() *debug.Data {
 		debuggerState = debug.DebuggerRunning
 	}
 
-	audioData := debug.ExtractAudioData(e.mem, e.mem.APU)
-	spriteVis := debug.ExtractSpriteData(e.mem, uint8(currentLine))
-	backgroundVis := debug.ExtractBackgroundData(e.mem)
-	paletteVis := debug.ExtractPaletteData(e.mem)
+	audioData := debug.ExtractAudioData(e.bus.MMU, e.bus.MMU.APU)
+	spriteVis := debug.ExtractSpriteData(e.bus.MMU, uint8(currentLine))
+	backgroundVis := debug.ExtractBackgroundData(e.bus.MMU)
+	paletteVis := debug.ExtractPaletteData(e.bus.MMU)
 
 	// Enable layer rendering when debug data is requested and extract framebuffers
 	var layerBuffers *video.RenderLayers
-	if e.gpu != nil && e.gpu.Layers != nil {
+	if e.bus.GPU != nil && e.bus.GPU.Layers != nil {
 		// Auto-enable layer rendering when debug data is requested
-		if !e.gpu.Layers.Enabled {
-			e.gpu.SetLayerRenderingEnabled(true)
+		if !e.bus.GPU.Layers.Enabled {
+			e.bus.GPU.SetLayerRenderingEnabled(true)
 		}
-		layerBuffers = e.gpu.Layers
+		layerBuffers = e.bus.GPU.Layers
 	}
 
 	return &debug.Data{
@@ -362,8 +352,8 @@ func (e *DMG) ExtractDebugData() *debug.Data {
 		CPU:             cpuState,
 		Memory:          memSnapshot,
 		DebuggerState:   debuggerState,
-		InterruptEnable: e.mem.Read(addr.IE),
-		InterruptFlags:  e.mem.Read(addr.IF),
+		InterruptEnable: e.bus.MMU.Read(addr.IE),
+		InterruptFlags:  e.bus.MMU.Read(addr.IF),
 		Audio:           audioData,
 		SpriteVis:       spriteVis,
 		BackgroundVis:   backgroundVis,
@@ -380,7 +370,7 @@ func (e *DMG) UpdateCompletionDetection() {
 		return
 	}
 
-	currentPC := e.cpu.GetPC()
+	currentPC := e.bus.CPU.GetPC()
 
 	// Check for JR -2 pattern (0x18, 0xFE)
 	if currentPC == e.completionDetector.LastPC {
@@ -393,9 +383,9 @@ func (e *DMG) UpdateCompletionDetection() {
 	}
 
 	// Additional check for JR -2 instruction pattern
-	instruction := e.mem.Read(currentPC)
+	instruction := e.bus.MMU.Read(currentPC)
 	if instruction == 0x18 { // JR instruction
-		operand := e.mem.Read(currentPC + 1)
+		operand := e.bus.MMU.Read(currentPC + 1)
 		if operand == 0xFE { // -2 in two's complement
 			e.completionDetector.LastInstruction = instruction
 			e.completionDetector.LastOperand = operand
@@ -412,7 +402,7 @@ func (e *DMG) IsTestComplete() bool {
 	detector := e.completionDetector
 
 	// Safety timeout based on total cycles
-	totalCycles := e.cpu.GetCycles()
+	totalCycles := e.bus.CPU.GetCycles()
 	if totalCycles >= detector.MaxCycles {
 		slog.Debug("Test completion: cycle timeout reached", "cycles", totalCycles, "max", detector.MaxCycles)
 		return true
@@ -426,9 +416,9 @@ func (e *DMG) IsTestComplete() bool {
 
 	// Check for JR -2 loop pattern
 	if detector.LoopCount >= detector.MinLoopCount {
-		currentPC := e.cpu.GetPC()
-		instruction := e.mem.Read(currentPC)
-		operand := e.mem.Read(currentPC + 1)
+		currentPC := e.bus.CPU.GetPC()
+		instruction := e.bus.MMU.Read(currentPC)
+		operand := e.bus.MMU.Read(currentPC + 1)
 
 		if instruction == 0x18 && operand == 0xFE {
 			slog.Debug("Test completion: JR -2 loop detected", "pc", fmt.Sprintf("0x%04X", currentPC), "loops", detector.LoopCount)

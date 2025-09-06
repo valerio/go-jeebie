@@ -3,8 +3,14 @@ package cpu
 import (
 	"github.com/valerio/go-jeebie/jeebie/addr"
 	"github.com/valerio/go-jeebie/jeebie/bit"
-	"github.com/valerio/go-jeebie/jeebie/memory"
 )
+
+// Bus provides the interface for component communication
+type Bus interface {
+	Read(address uint16) byte
+	Write(address uint16, value byte)
+	RequestInterrupt(interrupt addr.Interrupt)
+}
 
 // Flag is one of the 4 possible flags used in the flag register (high part of AF)
 type Flag uint8
@@ -47,52 +53,52 @@ type CPU struct {
 	// advance PC). Set by HALT, cleared after the affected instruction.
 	haltBug bool
 
-	memory *memory.MMU
+	bus Bus
 }
 
-func initializeMemory(mmu *memory.MMU) {
-	mmu.Write(addr.P1, 0xCF)
-	mmu.Write(addr.TIMA, 0x00)
-	mmu.Write(addr.TMA, 0x00)
-	mmu.Write(addr.TAC, 0x00)
-	mmu.Write(addr.LCDC, 0x91)
-	mmu.Write(addr.SCY, 0x00)
-	mmu.Write(addr.SCX, 0x00)
-	mmu.Write(addr.LYC, 0x00)
-	mmu.Write(addr.BGP, 0xFC)
-	mmu.Write(addr.OBP0, 0xFF)
-	mmu.Write(addr.OBP1, 0xFF)
-	mmu.Write(addr.WY, 0x00)
-	mmu.Write(addr.WX, 0x00)
-	mmu.Write(addr.IE, 0x00)
+func initializeMemory(bus Bus) {
+	bus.Write(addr.P1, 0xCF)
+	bus.Write(addr.TIMA, 0x00)
+	bus.Write(addr.TMA, 0x00)
+	bus.Write(addr.TAC, 0x00)
+	bus.Write(addr.LCDC, 0x91)
+	bus.Write(addr.SCY, 0x00)
+	bus.Write(addr.SCX, 0x00)
+	bus.Write(addr.LYC, 0x00)
+	bus.Write(addr.BGP, 0xFC)
+	bus.Write(addr.OBP0, 0xFF)
+	bus.Write(addr.OBP1, 0xFF)
+	bus.Write(addr.WY, 0x00)
+	bus.Write(addr.WX, 0x00)
+	bus.Write(addr.IE, 0x00)
 
 	// TODO: make the audio registers constant
-	mmu.Write(0xFF10, 0x80) //    ; NR10
-	mmu.Write(0xFF11, 0xBF) //    ; NR11
-	mmu.Write(0xFF12, 0xF3) //    ; NR12
-	mmu.Write(0xFF14, 0xBF) //    ; NR14
-	mmu.Write(0xFF16, 0x3F) //    ; NR21
-	mmu.Write(0xFF17, 0x00) //    ; NR22
-	mmu.Write(0xFF19, 0xBF) //    ; NR24
-	mmu.Write(0xFF1A, 0x7F) //    ; NR30
-	mmu.Write(0xFF1B, 0xFF) //    ; NR31
-	mmu.Write(0xFF1C, 0x9F) //    ; NR32
-	mmu.Write(0xFF1E, 0xBF) //    ; NR33
-	mmu.Write(0xFF20, 0xFF) //    ; NR41
-	mmu.Write(0xFF21, 0x00) //    ; NR42
-	mmu.Write(0xFF22, 0x00) //    ; NR43
-	mmu.Write(0xFF23, 0xBF) //    ; NR30
-	mmu.Write(0xFF24, 0x77) //    ; NR50
-	mmu.Write(0xFF25, 0xF3) //    ; NR51
-	mmu.Write(0xFF26, 0xF1) //    ; NR52  -- should be 0xF0 on SGB
+	bus.Write(0xFF10, 0x80) //    ; NR10
+	bus.Write(0xFF11, 0xBF) //    ; NR11
+	bus.Write(0xFF12, 0xF3) //    ; NR12
+	bus.Write(0xFF14, 0xBF) //    ; NR14
+	bus.Write(0xFF16, 0x3F) //    ; NR21
+	bus.Write(0xFF17, 0x00) //    ; NR22
+	bus.Write(0xFF19, 0xBF) //    ; NR24
+	bus.Write(0xFF1A, 0x7F) //    ; NR30
+	bus.Write(0xFF1B, 0xFF) //    ; NR31
+	bus.Write(0xFF1C, 0x9F) //    ; NR32
+	bus.Write(0xFF1E, 0xBF) //    ; NR33
+	bus.Write(0xFF20, 0xFF) //    ; NR41
+	bus.Write(0xFF21, 0x00) //    ; NR42
+	bus.Write(0xFF22, 0x00) //    ; NR43
+	bus.Write(0xFF23, 0xBF) //    ; NR30
+	bus.Write(0xFF24, 0x77) //    ; NR50
+	bus.Write(0xFF25, 0xF3) //    ; NR51
+	bus.Write(0xFF26, 0xF1) //    ; NR52  -- should be 0xF0 on SGB
 }
 
 // New returns an initialized CPU instance
-func New(memory *memory.MMU) *CPU {
-	initializeMemory(memory)
+func New(bus Bus) *CPU {
+	initializeMemory(bus)
 
 	cpu := &CPU{
-		memory: memory,
+		bus: bus,
 	}
 
 	cpu.setAF(0x01B0)
@@ -157,8 +163,8 @@ func (c *CPU) Tick() int {
 // Returns true if there are pending interrupts (IE & IF != 0).
 func (c *CPU) handleInterrupts() bool {
 	// retrieve the two masks
-	enabledInterruptsMask := c.memory.Read(addr.IE)
-	firedInterrupts := c.memory.Read(addr.IF)
+	enabledInterruptsMask := c.bus.Read(addr.IE)
+	firedInterrupts := c.bus.Read(addr.IF)
 
 	// check if any enabled interrupts are pending
 	pendingInterrupts := (enabledInterruptsMask & firedInterrupts) != 0
@@ -179,7 +185,7 @@ func (c *CPU) handleInterrupts() bool {
 			address := uint16(i)*8 + baseInterruptAddress
 
 			// mark as handled by clearing the bit at i
-			c.memory.Write(addr.IF, bit.Clear(i, firedInterrupts))
+			c.bus.Write(addr.IF, bit.Clear(i, firedInterrupts))
 
 			// move PC to interrupt handler address
 			c.pushStack(c.pc)
@@ -202,15 +208,15 @@ func (c *CPU) handleInterrupts() bool {
 // peekImmediate returns the byte at the memory address pointed by the PC
 // this value is known as immediate ('n' in mnemonics), some opcodes use it as a parameter
 func (c CPU) peekImmediate() uint8 {
-	n := c.memory.Read(c.pc)
+	n := c.bus.Read(c.pc)
 	return n
 }
 
 // peekImmediateWord returns the two bytes at the memory address pointed by PC and PC+1
 // this value is known as immediate ('nn' in mnemonics), some opcodes use it as a parameter
 func (c CPU) peekImmediateWord() uint16 {
-	low := c.memory.Read(c.pc)
-	high := c.memory.Read(c.pc + 1)
+	low := c.bus.Read(c.pc)
+	high := c.bus.Read(c.pc + 1)
 	return bit.Combine(high, low)
 }
 
@@ -227,7 +233,7 @@ func (c *CPU) readImmediate() uint8 {
 	// During the halt bug, the first operand byte re-reads the opcode byte (offset 0).
 	if c.haltBug {
 		offset := uint16(0)
-		n = c.memory.Read(c.pc + offset)
+		n = c.bus.Read(c.pc + offset)
 		// Even under the halt bug, operand reads still advance PC
 		c.pc++
 	} else {
@@ -244,8 +250,8 @@ func (c *CPU) readImmediateWord() uint16 {
 
 	// During the halt bug, the first operand byte re-reads the opcode byte.
 	if c.haltBug {
-		low := c.memory.Read(c.pc + 0)
-		high := c.memory.Read(c.pc + 1)
+		low := c.bus.Read(c.pc + 0)
+		high := c.bus.Read(c.pc + 1)
 		nn = bit.Combine(high, low)
 		// Even under the halt bug, operand reads still advance PC
 		c.pc += 2
@@ -263,7 +269,7 @@ func (c *CPU) readSignedImmediate() int8 {
 
 	// During the halt bug, the first operand byte re-reads the opcode byte.
 	if c.haltBug {
-		n = int8(c.memory.Read(c.pc + 0))
+		n = int8(c.bus.Read(c.pc + 0))
 		// Even under the halt bug, operand reads still advance PC
 		c.pc++
 	} else {
@@ -357,8 +363,8 @@ func (c *CPU) GetCycles() uint64 { return c.cycles }
 // Interrupt state getters
 func (c *CPU) GetIME() bool   { return c.interruptsEnabled }
 func (c *CPU) IsHalted() bool { return c.halted }
-func (c *CPU) GetIE() uint8   { return c.memory.Read(0xFFFF) }
-func (c *CPU) GetIF() uint8   { return c.memory.Read(0xFF0F) }
+func (c *CPU) GetIE() uint8   { return c.bus.Read(0xFFFF) }
+func (c *CPU) GetIF() uint8   { return c.bus.Read(0xFF0F) }
 
 // GetPendingInterrupts returns which interrupts are both enabled and requested
 func (c *CPU) GetPendingInterrupts() uint8 {

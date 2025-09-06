@@ -3,7 +3,6 @@ package video
 import (
 	"github.com/valerio/go-jeebie/jeebie/addr"
 	"github.com/valerio/go-jeebie/jeebie/bit"
-	"github.com/valerio/go-jeebie/jeebie/memory"
 )
 
 // Sprite represents a single sprite/object in OAM memory.
@@ -48,16 +47,21 @@ func (s *Sprite) HasPriorityForPixel(pixelX int) bool {
 	return s.PixelMask&pixelBit != 0
 }
 
+// OAMBus is the interface OAM needs for memory access
+type OAMBus interface {
+	Read(address uint16) byte
+}
+
 // OAM manages Object Attribute Memory and sprite data.
 type OAM struct {
-	memory         *memory.MMU
+	bus            OAMBus
 	priorityBuffer SpritePriorityBuffer
 	spriteBuffer   [10]Sprite // scanline sprites (hardware limit is 10)
 }
 
-func NewOAM(memory *memory.MMU) *OAM {
+func NewOAM(bus OAMBus) *OAM {
 	return &OAM{
-		memory: memory,
+		bus: bus,
 	}
 }
 
@@ -71,7 +75,7 @@ func (o *OAM) GetSpritesForScanline(scanline int) []Sprite {
 	sprites := o.spriteBuffer[:0]
 	o.priorityBuffer.Clear()
 
-	lcdc := o.memory.Read(addr.LCDC)
+	lcdc := o.bus.Read(addr.LCDC)
 	spriteHeight := 8
 	if bit.IsSet(2, lcdc) {
 		spriteHeight = 16
@@ -82,15 +86,15 @@ func (o *OAM) GetSpritesForScanline(scanline int) []Sprite {
 		baseAddr := addr.OAMStart + uint16(i*4)
 
 		// read sprite Y position and check if it's on this scanline
-		rawY := o.memory.Read(baseAddr)
+		rawY := o.bus.Read(baseAddr)
 		spriteY := int(rawY) - 16 // adjust for hardware offset
 
 		// check if sprite overlaps this scanline
 		// sprite is visible if: spriteY <= scanline < spriteY + height
 		if spriteY <= scanline && scanline < spriteY+spriteHeight {
-			rawX := o.memory.Read(baseAddr + 1)
-			tileIndex := o.memory.Read(baseAddr + 2)
-			flags := o.memory.Read(baseAddr + 3)
+			rawX := o.bus.Read(baseAddr + 1)
+			tileIndex := o.bus.Read(baseAddr + 2)
+			flags := o.bus.Read(baseAddr + 3)
 
 			sprite := Sprite{
 				Y:         uint8(spriteY),
@@ -137,12 +141,12 @@ func (o *OAM) GetSpritesForScanline(scanline int) []Sprite {
 func (o *OAM) readSprite(index int) Sprite {
 	baseAddr := addr.OAMStart + uint16(index*4)
 
-	rawY := o.memory.Read(baseAddr)
-	rawX := o.memory.Read(baseAddr + 1)
-	tileIndex := o.memory.Read(baseAddr + 2)
-	flags := o.memory.Read(baseAddr + 3)
+	rawY := o.bus.Read(baseAddr)
+	rawX := o.bus.Read(baseAddr + 1)
+	tileIndex := o.bus.Read(baseAddr + 2)
+	flags := o.bus.Read(baseAddr + 3)
 
-	lcdc := o.memory.Read(addr.LCDC)
+	lcdc := o.bus.Read(addr.LCDC)
 	spriteHeight := 8
 	if bit.IsSet(2, lcdc) {
 		spriteHeight = 16

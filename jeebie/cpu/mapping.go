@@ -66,18 +66,18 @@ var opcodesCB = [...]Opcode{
 
 // GetOpcodeName returns a string with the opcode name and immediate values
 func GetOpcodeName(c *CPU) string {
-	code := c.memory.Read(c.pc)
+	code := c.bus.Read(c.pc)
 
 	// 0xCB is only ever used as a prefix for the next byte.
 	if code == 0xCB {
-		code = c.memory.Read(c.pc + 1)
-		n := c.memory.Read(c.pc + 2)
-		nn := bit.Combine(c.memory.Read(c.pc+3), n)
+		code = c.bus.Read(c.pc + 1)
+		n := c.bus.Read(c.pc + 2)
+		nn := bit.Combine(c.bus.Read(c.pc+3), n)
 		return fmt.Sprintf("0xcb%x (%s) n=0x%x nn=0x%x", code, opcodeNamesCB[code], n, nn)
 	}
 
-	n := c.memory.Read(c.pc + 1)
-	nn := bit.Combine(c.memory.Read(c.pc+2), n)
+	n := c.bus.Read(c.pc + 1)
+	nn := bit.Combine(c.bus.Read(c.pc+2), n)
 	return fmt.Sprintf("0x%x (%s) n=0x%x nn=0x%x", code, opcodeNames[code], n, nn)
 }
 
