@@ -28,15 +28,15 @@ func TestFrameSequencerTiming(t *testing.T) {
 
 	initialFrame := apu.frameCounter
 
-	apu.Step(8191)
+	apu.Tick(8191)
 	assert.Equal(t, initialFrame, apu.frameCounter, "Frame counter should not advance before 8192 cycles")
 
-	apu.Step(1)
+	apu.Tick(1)
 	expectedFrame := (initialFrame + 1) & 7
 	assert.Equal(t, expectedFrame, apu.frameCounter, "Frame counter should advance after 8192 cycles")
 
 	for i := 0; i < 7; i++ {
-		apu.Step(8192)
+		apu.Tick(8192)
 	}
 	assert.Equal(t, initialFrame, apu.frameCounter, "Frame counter should wrap around after 8 steps")
 }
@@ -51,7 +51,7 @@ func TestBasicSampleGeneration(t *testing.T) {
 	apu.WriteRegister(addr.NR14, 0x87)
 
 	for i := 0; i < 100; i++ {
-		apu.Step(95)
+		apu.Tick(95)
 	}
 
 	samples := apu.GetSamples(100)

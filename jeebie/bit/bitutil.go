@@ -37,6 +37,10 @@ func IsSet(index, byte uint8) bool {
 	return ((byte >> index) & 1) == 1
 }
 
+func IsSet16(index, value uint16) bool {
+	return ((value >> index) & 1) == 1
+}
+
 // Clear will return the passed byte with the bit at the specified index Set to 0.
 func Clear(index, byte uint8) uint8 {
 	return byte & ^(1 << index)

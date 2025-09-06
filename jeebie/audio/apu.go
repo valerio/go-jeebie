@@ -123,7 +123,7 @@ func (a *APU) initRegisters() {
 	a.channels[3].noisePeriod = 21
 }
 
-func (a *APU) Step(cycles int) {
+func (a *APU) Tick(cycles int) {
 	if !a.enabled {
 		return
 	}

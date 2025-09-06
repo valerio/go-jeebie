@@ -59,6 +59,7 @@ type MMU struct {
 	joypadDpad    uint8 // Actual state of d-pad directions, mapped to low bits of P1
 
 	serial SerialPort
+	timer  Timer
 }
 
 // New creates a new memory unity with default data, i.e. nothing cartridge loaded.
@@ -72,15 +73,22 @@ func New() *MMU {
 		joypadDpad:    0x0F,
 	}
 	mmu.serial = serial.NewLogSink(func() { mmu.RequestInterrupt(addr.SerialInterrupt) })
+	mmu.timer.TimerInterruptHandler = func() { mmu.RequestInterrupt(addr.TimerInterrupt) }
 	initRegionMap(mmu)
 	return mmu
 }
 
 // Tick advances any i/o that needs it, if any.
 func (m *MMU) Tick(cycles int) {
+	m.timer.Tick(cycles)
 	if m.serial != nil {
 		m.serial.Tick(cycles)
 	}
+}
+
+// SetTimerSeed initializes the internal timer divider seed and DIV register.
+func (m *MMU) SetTimerSeed(seed uint16) {
+	m.timer.SetSeed(seed)
 }
 
 // NewWithCartridge creates a new memory unit with the provided cartridge data loaded.
@@ -202,6 +210,9 @@ func (m *MMU) Read(address uint16) byte {
 		if address == addr.SB || address == addr.SC {
 			return m.serial.Read(address)
 		}
+		if address == addr.DIV || address == addr.TIMA || address == addr.TMA || address == addr.TAC {
+			return m.timer.Read(address)
+		}
 		if address >= 0xFF10 && address <= 0xFF3F {
 			return m.APU.ReadRegister(address)
 		}
@@ -258,6 +269,10 @@ func (m *MMU) Write(address uint16, value byte) {
 		}
 		if address == addr.SB || address == addr.SC {
 			m.serial.Write(address, value)
+			return
+		}
+		if address == addr.DIV || address == addr.TIMA || address == addr.TMA || address == addr.TAC {
+			m.timer.Write(address, value)
 			return
 		}
 		if address >= 0xFF10 && address <= 0xFF3F {
