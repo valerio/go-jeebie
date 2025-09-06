@@ -101,6 +101,12 @@ func GetIntegrationTests() []IntegrationTestCase {
 			MinLoopCount: 10,
 			Name:         "halt_bug",
 		},
+		{
+			ROMPath:      "../../test-roms/game-boy-test-roms/blargg/instr_timing/instr_timing.gb",
+			MaxFrames:    1200,
+			MinLoopCount: 10,
+			Name:         "instr_timing",
+		},
 	}
 
 	return tests

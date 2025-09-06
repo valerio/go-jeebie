@@ -387,7 +387,7 @@ func opcode0x32(cpu *CPU) int {
 // #0x33:
 func opcode0x33(cpu *CPU) int {
 	cpu.sp++
-	return 4
+	return 8
 }
 
 // INC (HL)
@@ -1789,7 +1789,7 @@ func opcode0xED(cpu *CPU) int {
 // #0xEE:
 func opcode0xEE(cpu *CPU) int {
 	cpu.xor(cpu.readImmediate())
-	return 4
+	return 8
 }
 
 // RST 0x28
