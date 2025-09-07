@@ -10,6 +10,7 @@ type Bus interface {
 	Read(address uint16) byte
 	Write(address uint16, value byte)
 	RequestInterrupt(interrupt addr.Interrupt)
+	Tick(cycles int)
 }
 
 // Flag is one of the 4 possible flags used in the flag register (high part of AF)
@@ -111,9 +112,9 @@ func New(bus Bus) *CPU {
 	return cpu
 }
 
-// Tick emulates a single step during the main loop for the cpu.
+// Exec executes a single CPU instruction without ticking components.
 // Returns the amount of cycles that execution has taken.
-func (c *CPU) Tick() int {
+func (c *CPU) Exec() int {
 	// Check for interrupts - this may wake from HALT
 	interruptPending := c.handleInterrupts()
 
@@ -126,6 +127,8 @@ func (c *CPU) Tick() int {
 			c.halted = false
 		} else {
 			// Still halted, consume cycles
+			// Note: When halted, we need to tick components manually
+			c.bus.Tick(4)
 			return 4
 		}
 	}

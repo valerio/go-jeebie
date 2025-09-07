@@ -7,7 +7,8 @@ import (
 
 // NOP
 // #0x00:
-func opcode0x00(_ *CPU) int {
+func opcode0x00(cpu *CPU) int {
+	cpu.bus.Tick(4)
 	return 4
 }
 
@@ -15,6 +16,7 @@ func opcode0x00(_ *CPU) int {
 // #0x01:
 func opcode0x01(cpu *CPU) int {
 	cpu.setBC(cpu.readImmediateWord())
+	cpu.bus.Tick(12)
 	return 12
 }
 
@@ -22,6 +24,7 @@ func opcode0x01(cpu *CPU) int {
 // #0x02:
 func opcode0x02(cpu *CPU) int {
 	cpu.bus.Write(cpu.getBC(), cpu.a)
+	cpu.bus.Tick(8)
 	return 8
 }
 
@@ -29,6 +32,7 @@ func opcode0x02(cpu *CPU) int {
 // #0x03:
 func opcode0x03(cpu *CPU) int {
 	cpu.setBC(cpu.getBC() + 1)
+	cpu.bus.Tick(8)
 	return 8
 }
 
@@ -36,6 +40,7 @@ func opcode0x03(cpu *CPU) int {
 // #0x04:
 func opcode0x04(cpu *CPU) int {
 	cpu.inc(&cpu.b)
+	cpu.bus.Tick(4)
 	return 4
 }
 
@@ -43,6 +48,7 @@ func opcode0x04(cpu *CPU) int {
 // #0x05:
 func opcode0x05(cpu *CPU) int {
 	cpu.dec(&cpu.b)
+	cpu.bus.Tick(4)
 	return 4
 }
 
@@ -50,6 +56,7 @@ func opcode0x05(cpu *CPU) int {
 // #0x06:
 func opcode0x06(cpu *CPU) int {
 	cpu.b = cpu.readImmediate()
+	cpu.bus.Tick(8)
 	return 8
 }
 
@@ -57,6 +64,7 @@ func opcode0x06(cpu *CPU) int {
 // #0x07:
 func opcode0x07(cpu *CPU) int {
 	cpu.rlcaNonCB()
+	cpu.bus.Tick(4)
 	return 4
 }
 
@@ -66,6 +74,7 @@ func opcode0x08(cpu *CPU) int {
 	addr := cpu.readImmediateWord()
 	cpu.bus.Write(addr, bit.Low(cpu.sp))
 	cpu.bus.Write(addr+1, bit.High(cpu.sp))
+	cpu.bus.Tick(20)
 	return 20
 }
 
@@ -73,6 +82,7 @@ func opcode0x08(cpu *CPU) int {
 // #0x09:
 func opcode0x09(cpu *CPU) int {
 	cpu.addToHL(cpu.getBC())
+	cpu.bus.Tick(8)
 	return 8
 }
 
@@ -80,6 +90,7 @@ func opcode0x09(cpu *CPU) int {
 // #0x0A:
 func opcode0x0A(cpu *CPU) int {
 	cpu.a = cpu.bus.Read(cpu.getBC())
+	cpu.bus.Tick(8)
 	return 8
 }
 
@@ -87,6 +98,7 @@ func opcode0x0A(cpu *CPU) int {
 // #0x0B:
 func opcode0x0B(cpu *CPU) int {
 	cpu.setBC(cpu.getBC() - 1)
+	cpu.bus.Tick(8)
 	return 8
 }
 
@@ -94,6 +106,7 @@ func opcode0x0B(cpu *CPU) int {
 // #0x0C:
 func opcode0x0C(cpu *CPU) int {
 	cpu.inc(&cpu.c)
+	cpu.bus.Tick(4)
 	return 4
 }
 
@@ -101,6 +114,7 @@ func opcode0x0C(cpu *CPU) int {
 // #0x0D:
 func opcode0x0D(cpu *CPU) int {
 	cpu.dec(&cpu.c)
+	cpu.bus.Tick(4)
 	return 4
 }
 
@@ -108,6 +122,7 @@ func opcode0x0D(cpu *CPU) int {
 // #0x0E:
 func opcode0x0E(cpu *CPU) int {
 	cpu.c = cpu.readImmediate()
+	cpu.bus.Tick(8)
 	return 8
 }
 
@@ -115,6 +130,7 @@ func opcode0x0E(cpu *CPU) int {
 // #0x0F:
 func opcode0x0F(cpu *CPU) int {
 	cpu.rrcaNonCB()
+	cpu.bus.Tick(4)
 	return 4
 }
 
@@ -122,6 +138,7 @@ func opcode0x0F(cpu *CPU) int {
 // #0x10:
 func opcode0x10(cpu *CPU) int {
 	cpu.stopped = true
+	cpu.bus.Tick(4)
 	return 4
 }
 
@@ -129,6 +146,7 @@ func opcode0x10(cpu *CPU) int {
 // #0x11:
 func opcode0x11(cpu *CPU) int {
 	cpu.setDE(cpu.readImmediateWord())
+	cpu.bus.Tick(12)
 	return 12
 }
 
@@ -136,6 +154,7 @@ func opcode0x11(cpu *CPU) int {
 // #0x12:
 func opcode0x12(cpu *CPU) int {
 	cpu.bus.Write(cpu.getDE(), cpu.a)
+	cpu.bus.Tick(8)
 	return 8
 }
 
@@ -143,6 +162,7 @@ func opcode0x12(cpu *CPU) int {
 // #0x13:
 func opcode0x13(cpu *CPU) int {
 	cpu.setDE(cpu.getDE() + 1)
+	cpu.bus.Tick(8)
 	return 8
 }
 
@@ -150,6 +170,7 @@ func opcode0x13(cpu *CPU) int {
 // #0x14:
 func opcode0x14(cpu *CPU) int {
 	cpu.inc(&cpu.d)
+	cpu.bus.Tick(4)
 	return 4
 }
 
@@ -157,6 +178,7 @@ func opcode0x14(cpu *CPU) int {
 // #0x15:
 func opcode0x15(cpu *CPU) int {
 	cpu.dec(&cpu.d)
+	cpu.bus.Tick(4)
 	return 4
 }
 
@@ -164,6 +186,7 @@ func opcode0x15(cpu *CPU) int {
 // #0x16:
 func opcode0x16(cpu *CPU) int {
 	cpu.d = cpu.readImmediate()
+	cpu.bus.Tick(8)
 	return 8
 }
 
@@ -171,6 +194,7 @@ func opcode0x16(cpu *CPU) int {
 // #0x17:
 func opcode0x17(cpu *CPU) int {
 	cpu.rlaNonCB()
+	cpu.bus.Tick(4)
 	return 4
 }
 
@@ -178,6 +202,7 @@ func opcode0x17(cpu *CPU) int {
 // #0x18:
 func opcode0x18(cpu *CPU) int {
 	cpu.jr()
+	cpu.bus.Tick(12)
 	return 12
 }
 
@@ -185,6 +210,7 @@ func opcode0x18(cpu *CPU) int {
 // #0x19:
 func opcode0x19(cpu *CPU) int {
 	cpu.addToHL(cpu.getDE())
+	cpu.bus.Tick(8)
 	return 8
 }
 
@@ -192,6 +218,7 @@ func opcode0x19(cpu *CPU) int {
 // #0x1A:
 func opcode0x1A(cpu *CPU) int {
 	cpu.a = cpu.bus.Read(cpu.getDE())
+	cpu.bus.Tick(8)
 	return 8
 }
 
@@ -199,6 +226,7 @@ func opcode0x1A(cpu *CPU) int {
 // #0x1B:
 func opcode0x1B(cpu *CPU) int {
 	cpu.setDE(cpu.getDE() - 1)
+	cpu.bus.Tick(8)
 	return 8
 }
 
@@ -206,6 +234,7 @@ func opcode0x1B(cpu *CPU) int {
 // #0x1C:
 func opcode0x1C(cpu *CPU) int {
 	cpu.inc(&cpu.e)
+	cpu.bus.Tick(4)
 	return 4
 }
 
@@ -213,6 +242,7 @@ func opcode0x1C(cpu *CPU) int {
 // #0x1D:
 func opcode0x1D(cpu *CPU) int {
 	cpu.dec(&cpu.e)
+	cpu.bus.Tick(4)
 	return 4
 }
 
@@ -220,6 +250,7 @@ func opcode0x1D(cpu *CPU) int {
 // #0x1E:
 func opcode0x1E(cpu *CPU) int {
 	cpu.e = cpu.readImmediate()
+	cpu.bus.Tick(8)
 	return 8
 }
 
@@ -227,6 +258,7 @@ func opcode0x1E(cpu *CPU) int {
 // #0x1F:
 func opcode0x1F(cpu *CPU) int {
 	cpu.rraNonCB()
+	cpu.bus.Tick(4)
 	return 4
 }
 
@@ -235,10 +267,12 @@ func opcode0x1F(cpu *CPU) int {
 func opcode0x20(cpu *CPU) int {
 	if !cpu.isSetFlag(zeroFlag) {
 		cpu.jr()
+		cpu.bus.Tick(12)
 		return 12
 	}
 
 	cpu.pc++
+	cpu.bus.Tick(8)
 	return 8
 }
 
@@ -246,6 +280,7 @@ func opcode0x20(cpu *CPU) int {
 // #0x21:
 func opcode0x21(cpu *CPU) int {
 	cpu.setHL(cpu.readImmediateWord())
+	cpu.bus.Tick(12)
 	return 12
 }
 
@@ -254,6 +289,7 @@ func opcode0x21(cpu *CPU) int {
 func opcode0x22(cpu *CPU) int {
 	cpu.bus.Write(cpu.getHL(), cpu.a)
 	cpu.setHL(cpu.getHL() + 1)
+	cpu.bus.Tick(8)
 	return 8
 }
 
@@ -261,6 +297,7 @@ func opcode0x22(cpu *CPU) int {
 // #0x23:
 func opcode0x23(cpu *CPU) int {
 	cpu.setHL(cpu.getHL() + 1)
+	cpu.bus.Tick(8)
 	return 8
 }
 
@@ -268,6 +305,7 @@ func opcode0x23(cpu *CPU) int {
 // #0x24:
 func opcode0x24(cpu *CPU) int {
 	cpu.inc(&cpu.h)
+	cpu.bus.Tick(4)
 	return 4
 }
 
@@ -275,6 +313,7 @@ func opcode0x24(cpu *CPU) int {
 // #0x25:
 func opcode0x25(cpu *CPU) int {
 	cpu.dec(&cpu.h)
+	cpu.bus.Tick(4)
 	return 4
 }
 
@@ -282,6 +321,7 @@ func opcode0x25(cpu *CPU) int {
 // #0x26:
 func opcode0x26(cpu *CPU) int {
 	cpu.h = cpu.readImmediate()
+	cpu.bus.Tick(8)
 	return 8
 }
 
@@ -289,6 +329,7 @@ func opcode0x26(cpu *CPU) int {
 // #0x27:
 func opcode0x27(cpu *CPU) int {
 	cpu.daa()
+	cpu.bus.Tick(4)
 	return 4
 }
 
@@ -297,10 +338,12 @@ func opcode0x27(cpu *CPU) int {
 func opcode0x28(cpu *CPU) int {
 	if cpu.isSetFlag(zeroFlag) {
 		cpu.jr()
+		cpu.bus.Tick(12)
 		return 12
 	}
 
 	cpu.pc++
+	cpu.bus.Tick(8)
 	return 8
 }
 
@@ -308,6 +351,7 @@ func opcode0x28(cpu *CPU) int {
 // #0x29:
 func opcode0x29(cpu *CPU) int {
 	cpu.addToHL(cpu.getHL())
+	cpu.bus.Tick(8)
 	return 8
 }
 
@@ -316,6 +360,7 @@ func opcode0x29(cpu *CPU) int {
 func opcode0x2A(cpu *CPU) int {
 	cpu.a = cpu.bus.Read(cpu.getHL())
 	cpu.setHL(cpu.getHL() + 1)
+	cpu.bus.Tick(8)
 	return 8
 }
 
@@ -323,6 +368,7 @@ func opcode0x2A(cpu *CPU) int {
 // #0x2B:
 func opcode0x2B(cpu *CPU) int {
 	cpu.setHL(cpu.getHL() - 1)
+	cpu.bus.Tick(8)
 	return 8
 }
 
@@ -330,6 +376,7 @@ func opcode0x2B(cpu *CPU) int {
 // #0x2C:
 func opcode0x2C(cpu *CPU) int {
 	cpu.inc(&cpu.l)
+	cpu.bus.Tick(4)
 	return 4
 }
 
@@ -337,6 +384,7 @@ func opcode0x2C(cpu *CPU) int {
 // #0x2D:
 func opcode0x2D(cpu *CPU) int {
 	cpu.dec(&cpu.l)
+	cpu.bus.Tick(4)
 	return 4
 }
 
@@ -344,6 +392,7 @@ func opcode0x2D(cpu *CPU) int {
 // #0x2E:
 func opcode0x2E(cpu *CPU) int {
 	cpu.l = cpu.readImmediate()
+	cpu.bus.Tick(8)
 	return 8
 }
 
@@ -353,6 +402,7 @@ func opcode0x2F(cpu *CPU) int {
 	cpu.a ^= 0xFF
 	cpu.setFlag(halfCarryFlag)
 	cpu.setFlag(subFlag)
+	cpu.bus.Tick(4)
 	return 4
 }
 
@@ -361,10 +411,12 @@ func opcode0x2F(cpu *CPU) int {
 func opcode0x30(cpu *CPU) int {
 	if !cpu.isSetFlag(carryFlag) {
 		cpu.jr()
+		cpu.bus.Tick(12)
 		return 12
 	}
 
 	cpu.pc++
+	cpu.bus.Tick(8)
 	return 8
 }
 
@@ -372,6 +424,7 @@ func opcode0x30(cpu *CPU) int {
 // #0x31:
 func opcode0x31(cpu *CPU) int {
 	cpu.sp = cpu.readImmediateWord()
+	cpu.bus.Tick(12)
 	return 12
 }
 
@@ -380,6 +433,7 @@ func opcode0x31(cpu *CPU) int {
 func opcode0x32(cpu *CPU) int {
 	cpu.bus.Write(cpu.getHL(), cpu.a)
 	cpu.setHL(cpu.getHL() - 1)
+	cpu.bus.Tick(8)
 	return 8
 }
 
@@ -387,6 +441,7 @@ func opcode0x32(cpu *CPU) int {
 // #0x33:
 func opcode0x33(cpu *CPU) int {
 	cpu.sp++
+	cpu.bus.Tick(8)
 	return 8
 }
 
@@ -397,6 +452,7 @@ func opcode0x34(cpu *CPU) int {
 	value := cpu.bus.Read(addr)
 	cpu.inc(&value)
 	cpu.bus.Write(addr, value)
+	cpu.bus.Tick(12)
 	return 12
 }
 
@@ -407,6 +463,7 @@ func opcode0x35(cpu *CPU) int {
 	value := cpu.bus.Read(addr)
 	cpu.dec(&value)
 	cpu.bus.Write(addr, value)
+	cpu.bus.Tick(12)
 	return 12
 }
 
@@ -414,6 +471,7 @@ func opcode0x35(cpu *CPU) int {
 // #0x36:
 func opcode0x36(cpu *CPU) int {
 	cpu.bus.Write(cpu.getHL(), cpu.readImmediate())
+	cpu.bus.Tick(12)
 	return 12
 }
 
@@ -423,6 +481,7 @@ func opcode0x37(cpu *CPU) int {
 	cpu.setFlag(carryFlag)
 	cpu.resetFlag(subFlag)
 	cpu.resetFlag(halfCarryFlag)
+	cpu.bus.Tick(4)
 	return 4
 }
 
@@ -431,10 +490,12 @@ func opcode0x37(cpu *CPU) int {
 func opcode0x38(cpu *CPU) int {
 	if cpu.isSetFlag(carryFlag) {
 		cpu.jr()
+		cpu.bus.Tick(12)
 		return 12
 	}
 
 	cpu.pc++
+	cpu.bus.Tick(8)
 	return 8
 }
 
@@ -442,6 +503,7 @@ func opcode0x38(cpu *CPU) int {
 // #0x39:
 func opcode0x39(cpu *CPU) int {
 	cpu.addToHL(cpu.sp)
+	cpu.bus.Tick(8)
 	return 8
 }
 
@@ -450,6 +512,7 @@ func opcode0x39(cpu *CPU) int {
 func opcode0x3A(cpu *CPU) int {
 	cpu.a = cpu.bus.Read(cpu.getHL())
 	cpu.setHL(cpu.getHL() - 1)
+	cpu.bus.Tick(8)
 	return 8
 }
 
@@ -457,6 +520,7 @@ func opcode0x3A(cpu *CPU) int {
 // #0x3B:
 func opcode0x3B(cpu *CPU) int {
 	cpu.sp--
+	cpu.bus.Tick(8)
 	return 8
 }
 
@@ -464,6 +528,7 @@ func opcode0x3B(cpu *CPU) int {
 // #0x3C:
 func opcode0x3C(cpu *CPU) int {
 	cpu.inc(&cpu.a)
+	cpu.bus.Tick(4)
 	return 4
 }
 
@@ -471,6 +536,7 @@ func opcode0x3C(cpu *CPU) int {
 // #0x3D:
 func opcode0x3D(cpu *CPU) int {
 	cpu.dec(&cpu.a)
+	cpu.bus.Tick(4)
 	return 4
 }
 
@@ -478,6 +544,7 @@ func opcode0x3D(cpu *CPU) int {
 // #0x3E:
 func opcode0x3E(cpu *CPU) int {
 	cpu.a = cpu.readImmediate()
+	cpu.bus.Tick(8)
 	return 8
 }
 
@@ -487,12 +554,14 @@ func opcode0x3F(cpu *CPU) int {
 	cpu.resetFlag(subFlag)
 	cpu.resetFlag(halfCarryFlag)
 	cpu.setFlagToCondition(carryFlag, !cpu.isSetFlag(carryFlag))
+	cpu.bus.Tick(4)
 	return 4
 }
 
 // LD B, B
 // #0x40:
 func opcode0x40(cpu *CPU) int {
+	cpu.bus.Tick(4)
 	return 4
 }
 
@@ -500,6 +569,7 @@ func opcode0x40(cpu *CPU) int {
 // #0x41:
 func opcode0x41(cpu *CPU) int {
 	cpu.b = cpu.c
+	cpu.bus.Tick(4)
 	return 4
 }
 
@@ -507,6 +577,7 @@ func opcode0x41(cpu *CPU) int {
 // #0x42:
 func opcode0x42(cpu *CPU) int {
 	cpu.b = cpu.d
+	cpu.bus.Tick(4)
 	return 4
 }
 
@@ -514,6 +585,7 @@ func opcode0x42(cpu *CPU) int {
 // #0x43:
 func opcode0x43(cpu *CPU) int {
 	cpu.b = cpu.e
+	cpu.bus.Tick(4)
 	return 4
 }
 
@@ -521,6 +593,7 @@ func opcode0x43(cpu *CPU) int {
 // #0x44:
 func opcode0x44(cpu *CPU) int {
 	cpu.b = cpu.h
+	cpu.bus.Tick(4)
 	return 4
 }
 
@@ -528,6 +601,7 @@ func opcode0x44(cpu *CPU) int {
 // #0x45:
 func opcode0x45(cpu *CPU) int {
 	cpu.b = cpu.l
+	cpu.bus.Tick(4)
 	return 4
 }
 
@@ -535,6 +609,7 @@ func opcode0x45(cpu *CPU) int {
 // #0x46:
 func opcode0x46(cpu *CPU) int {
 	cpu.b = cpu.bus.Read(cpu.getHL())
+	cpu.bus.Tick(8)
 	return 8
 }
 
@@ -542,6 +617,7 @@ func opcode0x46(cpu *CPU) int {
 // #0x47:
 func opcode0x47(cpu *CPU) int {
 	cpu.b = cpu.a
+	cpu.bus.Tick(4)
 	return 4
 }
 
@@ -549,12 +625,14 @@ func opcode0x47(cpu *CPU) int {
 // #0x48:
 func opcode0x48(cpu *CPU) int {
 	cpu.c = cpu.b
+	cpu.bus.Tick(4)
 	return 4
 }
 
 // LD C, C
 // #0x49:
 func opcode0x49(cpu *CPU) int {
+	cpu.bus.Tick(4)
 	return 4
 }
 
@@ -562,6 +640,7 @@ func opcode0x49(cpu *CPU) int {
 // #0x4A:
 func opcode0x4A(cpu *CPU) int {
 	cpu.c = cpu.d
+	cpu.bus.Tick(4)
 	return 4
 }
 
@@ -569,6 +648,7 @@ func opcode0x4A(cpu *CPU) int {
 // #0x4B:
 func opcode0x4B(cpu *CPU) int {
 	cpu.c = cpu.e
+	cpu.bus.Tick(4)
 	return 4
 }
 
@@ -576,6 +656,7 @@ func opcode0x4B(cpu *CPU) int {
 // #0x4C:
 func opcode0x4C(cpu *CPU) int {
 	cpu.c = cpu.h
+	cpu.bus.Tick(4)
 	return 4
 }
 
@@ -583,6 +664,7 @@ func opcode0x4C(cpu *CPU) int {
 // #0x4D:
 func opcode0x4D(cpu *CPU) int {
 	cpu.c = cpu.l
+	cpu.bus.Tick(4)
 	return 4
 }
 
@@ -590,6 +672,7 @@ func opcode0x4D(cpu *CPU) int {
 // #0x4E:
 func opcode0x4E(cpu *CPU) int {
 	cpu.c = cpu.bus.Read(cpu.getHL())
+	cpu.bus.Tick(8)
 	return 8
 }
 
@@ -597,6 +680,7 @@ func opcode0x4E(cpu *CPU) int {
 // #0x4F:
 func opcode0x4F(cpu *CPU) int {
 	cpu.c = cpu.a
+	cpu.bus.Tick(4)
 	return 4
 }
 
@@ -604,6 +688,7 @@ func opcode0x4F(cpu *CPU) int {
 // #0x50:
 func opcode0x50(cpu *CPU) int {
 	cpu.d = cpu.b
+	cpu.bus.Tick(4)
 	return 4
 }
 
@@ -611,12 +696,14 @@ func opcode0x50(cpu *CPU) int {
 // #0x51:
 func opcode0x51(cpu *CPU) int {
 	cpu.d = cpu.c
+	cpu.bus.Tick(4)
 	return 4
 }
 
 // LD D, D
 // #0x52:
 func opcode0x52(cpu *CPU) int {
+	cpu.bus.Tick(4)
 	return 4
 }
 
@@ -624,6 +711,7 @@ func opcode0x52(cpu *CPU) int {
 // #0x53:
 func opcode0x53(cpu *CPU) int {
 	cpu.d = cpu.e
+	cpu.bus.Tick(4)
 	return 4
 }
 
@@ -631,6 +719,7 @@ func opcode0x53(cpu *CPU) int {
 // #0x54:
 func opcode0x54(cpu *CPU) int {
 	cpu.d = cpu.h
+	cpu.bus.Tick(4)
 	return 4
 }
 
@@ -638,6 +727,7 @@ func opcode0x54(cpu *CPU) int {
 // #0x55:
 func opcode0x55(cpu *CPU) int {
 	cpu.d = cpu.l
+	cpu.bus.Tick(4)
 	return 4
 }
 
@@ -645,6 +735,7 @@ func opcode0x55(cpu *CPU) int {
 // #0x56:
 func opcode0x56(cpu *CPU) int {
 	cpu.d = cpu.bus.Read(cpu.getHL())
+	cpu.bus.Tick(8)
 	return 8
 }
 
@@ -652,6 +743,7 @@ func opcode0x56(cpu *CPU) int {
 // #0x57:
 func opcode0x57(cpu *CPU) int {
 	cpu.d = cpu.a
+	cpu.bus.Tick(4)
 	return 4
 }
 
@@ -659,6 +751,7 @@ func opcode0x57(cpu *CPU) int {
 // #0x58:
 func opcode0x58(cpu *CPU) int {
 	cpu.e = cpu.b
+	cpu.bus.Tick(4)
 	return 4
 }
 
@@ -666,6 +759,7 @@ func opcode0x58(cpu *CPU) int {
 // #0x59:
 func opcode0x59(cpu *CPU) int {
 	cpu.e = cpu.c
+	cpu.bus.Tick(4)
 	return 4
 }
 
@@ -673,12 +767,14 @@ func opcode0x59(cpu *CPU) int {
 // #0x5A:
 func opcode0x5A(cpu *CPU) int {
 	cpu.e = cpu.d
+	cpu.bus.Tick(4)
 	return 4
 }
 
 // LD E, E
 // #0x5B:
 func opcode0x5B(cpu *CPU) int {
+	cpu.bus.Tick(4)
 	return 4
 }
 
@@ -686,6 +782,7 @@ func opcode0x5B(cpu *CPU) int {
 // #0x5C:
 func opcode0x5C(cpu *CPU) int {
 	cpu.e = cpu.h
+	cpu.bus.Tick(4)
 	return 4
 }
 
@@ -693,6 +790,7 @@ func opcode0x5C(cpu *CPU) int {
 // #0x5D:
 func opcode0x5D(cpu *CPU) int {
 	cpu.e = cpu.l
+	cpu.bus.Tick(4)
 	return 4
 }
 
@@ -700,6 +798,7 @@ func opcode0x5D(cpu *CPU) int {
 // #0x5E:
 func opcode0x5E(cpu *CPU) int {
 	cpu.e = cpu.bus.Read(cpu.getHL())
+	cpu.bus.Tick(8)
 	return 8
 }
 
@@ -707,6 +806,7 @@ func opcode0x5E(cpu *CPU) int {
 // #0x5F:
 func opcode0x5F(cpu *CPU) int {
 	cpu.e = cpu.a
+	cpu.bus.Tick(4)
 	return 4
 }
 
@@ -714,6 +814,7 @@ func opcode0x5F(cpu *CPU) int {
 // #0x60:
 func opcode0x60(cpu *CPU) int {
 	cpu.h = cpu.b
+	cpu.bus.Tick(4)
 	return 4
 }
 
@@ -721,6 +822,7 @@ func opcode0x60(cpu *CPU) int {
 // #0x61:
 func opcode0x61(cpu *CPU) int {
 	cpu.h = cpu.c
+	cpu.bus.Tick(4)
 	return 4
 }
 
@@ -728,6 +830,7 @@ func opcode0x61(cpu *CPU) int {
 // #0x62:
 func opcode0x62(cpu *CPU) int {
 	cpu.h = cpu.d
+	cpu.bus.Tick(4)
 	return 4
 }
 
@@ -735,12 +838,14 @@ func opcode0x62(cpu *CPU) int {
 // #0x63:
 func opcode0x63(cpu *CPU) int {
 	cpu.h = cpu.e
+	cpu.bus.Tick(4)
 	return 4
 }
 
 // LD H, H
 // #0x64:
 func opcode0x64(cpu *CPU) int {
+	cpu.bus.Tick(4)
 	return 4
 }
 
@@ -748,6 +853,7 @@ func opcode0x64(cpu *CPU) int {
 // #0x65:
 func opcode0x65(cpu *CPU) int {
 	cpu.h = cpu.l
+	cpu.bus.Tick(4)
 	return 4
 }
 
@@ -755,6 +861,7 @@ func opcode0x65(cpu *CPU) int {
 // #0x66:
 func opcode0x66(cpu *CPU) int {
 	cpu.h = cpu.bus.Read(cpu.getHL())
+	cpu.bus.Tick(8)
 	return 8
 }
 
@@ -762,6 +869,7 @@ func opcode0x66(cpu *CPU) int {
 // #0x67:
 func opcode0x67(cpu *CPU) int {
 	cpu.h = cpu.a
+	cpu.bus.Tick(4)
 	return 4
 }
 
@@ -769,6 +877,7 @@ func opcode0x67(cpu *CPU) int {
 // #0x68:
 func opcode0x68(cpu *CPU) int {
 	cpu.l = cpu.b
+	cpu.bus.Tick(4)
 	return 4
 }
 
@@ -776,6 +885,7 @@ func opcode0x68(cpu *CPU) int {
 // #0x69:
 func opcode0x69(cpu *CPU) int {
 	cpu.l = cpu.c
+	cpu.bus.Tick(4)
 	return 4
 }
 
@@ -783,6 +893,7 @@ func opcode0x69(cpu *CPU) int {
 // #0x6A:
 func opcode0x6A(cpu *CPU) int {
 	cpu.l = cpu.d
+	cpu.bus.Tick(4)
 	return 4
 }
 
@@ -790,6 +901,7 @@ func opcode0x6A(cpu *CPU) int {
 // #0x6B:
 func opcode0x6B(cpu *CPU) int {
 	cpu.l = cpu.e
+	cpu.bus.Tick(4)
 	return 4
 }
 
@@ -797,12 +909,14 @@ func opcode0x6B(cpu *CPU) int {
 // #0x6C:
 func opcode0x6C(cpu *CPU) int {
 	cpu.l = cpu.h
+	cpu.bus.Tick(4)
 	return 4
 }
 
 // LD L, L
 // #0x6D:
 func opcode0x6D(cpu *CPU) int {
+	cpu.bus.Tick(4)
 	return 4
 }
 
@@ -810,6 +924,7 @@ func opcode0x6D(cpu *CPU) int {
 // #0x6E:
 func opcode0x6E(cpu *CPU) int {
 	cpu.l = cpu.bus.Read(cpu.getHL())
+	cpu.bus.Tick(8)
 	return 8
 }
 
@@ -817,6 +932,7 @@ func opcode0x6E(cpu *CPU) int {
 // #0x6F:
 func opcode0x6F(cpu *CPU) int {
 	cpu.l = cpu.a
+	cpu.bus.Tick(4)
 	return 4
 }
 
@@ -824,6 +940,7 @@ func opcode0x6F(cpu *CPU) int {
 // #0x70:
 func opcode0x70(cpu *CPU) int {
 	cpu.bus.Write(cpu.getHL(), cpu.b)
+	cpu.bus.Tick(8)
 	return 8
 }
 
@@ -831,6 +948,7 @@ func opcode0x70(cpu *CPU) int {
 // #0x71:
 func opcode0x71(cpu *CPU) int {
 	cpu.bus.Write(cpu.getHL(), cpu.c)
+	cpu.bus.Tick(8)
 	return 8
 }
 
@@ -838,6 +956,7 @@ func opcode0x71(cpu *CPU) int {
 // #0x72:
 func opcode0x72(cpu *CPU) int {
 	cpu.bus.Write(cpu.getHL(), cpu.d)
+	cpu.bus.Tick(8)
 	return 8
 }
 
@@ -845,6 +964,7 @@ func opcode0x72(cpu *CPU) int {
 // #0x73:
 func opcode0x73(cpu *CPU) int {
 	cpu.bus.Write(cpu.getHL(), cpu.e)
+	cpu.bus.Tick(8)
 	return 8
 }
 
@@ -852,6 +972,7 @@ func opcode0x73(cpu *CPU) int {
 // #0x74:
 func opcode0x74(cpu *CPU) int {
 	cpu.bus.Write(cpu.getHL(), cpu.h)
+	cpu.bus.Tick(8)
 	return 8
 }
 
@@ -859,6 +980,7 @@ func opcode0x74(cpu *CPU) int {
 // #0x75:
 func opcode0x75(cpu *CPU) int {
 	cpu.bus.Write(cpu.getHL(), cpu.l)
+	cpu.bus.Tick(8)
 	return 8
 }
 
@@ -873,10 +995,12 @@ func opcode0x76(cpu *CPU) int {
 	// the next instruction, when we skip the first PC increment.
 	if !cpu.interruptsEnabled && ((iereg&ifreg)&0x1F) != 0 {
 		cpu.haltBug = true
+		cpu.bus.Tick(4)
 		return 4
 	}
 
 	cpu.halted = true
+	cpu.bus.Tick(4)
 	return 4
 }
 
@@ -884,6 +1008,7 @@ func opcode0x76(cpu *CPU) int {
 // #0x77:
 func opcode0x77(cpu *CPU) int {
 	cpu.bus.Write(cpu.getHL(), cpu.a)
+	cpu.bus.Tick(8)
 	return 8
 }
 
@@ -891,6 +1016,7 @@ func opcode0x77(cpu *CPU) int {
 // #0x78:
 func opcode0x78(cpu *CPU) int {
 	cpu.a = cpu.b
+	cpu.bus.Tick(4)
 	return 4
 }
 
@@ -898,6 +1024,7 @@ func opcode0x78(cpu *CPU) int {
 // #0x79:
 func opcode0x79(cpu *CPU) int {
 	cpu.a = cpu.c
+	cpu.bus.Tick(4)
 	return 4
 }
 
@@ -905,6 +1032,7 @@ func opcode0x79(cpu *CPU) int {
 // #0x7A:
 func opcode0x7A(cpu *CPU) int {
 	cpu.a = cpu.d
+	cpu.bus.Tick(4)
 	return 4
 }
 
@@ -912,6 +1040,7 @@ func opcode0x7A(cpu *CPU) int {
 // #0x7B:
 func opcode0x7B(cpu *CPU) int {
 	cpu.a = cpu.e
+	cpu.bus.Tick(4)
 	return 4
 }
 
@@ -919,6 +1048,7 @@ func opcode0x7B(cpu *CPU) int {
 // #0x7C:
 func opcode0x7C(cpu *CPU) int {
 	cpu.a = cpu.h
+	cpu.bus.Tick(4)
 	return 4
 }
 
@@ -926,6 +1056,7 @@ func opcode0x7C(cpu *CPU) int {
 // #0x7D:
 func opcode0x7D(cpu *CPU) int {
 	cpu.a = cpu.l
+	cpu.bus.Tick(4)
 	return 4
 }
 
@@ -933,12 +1064,14 @@ func opcode0x7D(cpu *CPU) int {
 // #0x7E:
 func opcode0x7E(cpu *CPU) int {
 	cpu.a = cpu.bus.Read(cpu.getHL())
+	cpu.bus.Tick(8)
 	return 8
 }
 
 // LD A, A
 // #0x7F:
 func opcode0x7F(cpu *CPU) int {
+	cpu.bus.Tick(4)
 	return 4
 }
 
@@ -946,6 +1079,7 @@ func opcode0x7F(cpu *CPU) int {
 // #0x80:
 func opcode0x80(cpu *CPU) int {
 	cpu.addToA(cpu.b)
+	cpu.bus.Tick(4)
 	return 4
 }
 
@@ -953,6 +1087,7 @@ func opcode0x80(cpu *CPU) int {
 // #0x81:
 func opcode0x81(cpu *CPU) int {
 	cpu.addToA(cpu.c)
+	cpu.bus.Tick(4)
 	return 4
 }
 
@@ -960,6 +1095,7 @@ func opcode0x81(cpu *CPU) int {
 // #0x82:
 func opcode0x82(cpu *CPU) int {
 	cpu.addToA(cpu.d)
+	cpu.bus.Tick(4)
 	return 4
 }
 
@@ -967,6 +1103,7 @@ func opcode0x82(cpu *CPU) int {
 // #0x83:
 func opcode0x83(cpu *CPU) int {
 	cpu.addToA(cpu.e)
+	cpu.bus.Tick(4)
 	return 4
 }
 
@@ -974,6 +1111,7 @@ func opcode0x83(cpu *CPU) int {
 // #0x84:
 func opcode0x84(cpu *CPU) int {
 	cpu.addToA(cpu.h)
+	cpu.bus.Tick(4)
 	return 4
 }
 
@@ -981,6 +1119,7 @@ func opcode0x84(cpu *CPU) int {
 // #0x85:
 func opcode0x85(cpu *CPU) int {
 	cpu.addToA(cpu.l)
+	cpu.bus.Tick(4)
 	return 4
 }
 
@@ -988,6 +1127,7 @@ func opcode0x85(cpu *CPU) int {
 // #0x86:
 func opcode0x86(cpu *CPU) int {
 	cpu.addToA(cpu.bus.Read(cpu.getHL()))
+	cpu.bus.Tick(8)
 	return 8
 }
 
@@ -995,6 +1135,7 @@ func opcode0x86(cpu *CPU) int {
 // #0x87:
 func opcode0x87(cpu *CPU) int {
 	cpu.addToA(cpu.a)
+	cpu.bus.Tick(4)
 	return 4
 }
 
@@ -1002,6 +1143,7 @@ func opcode0x87(cpu *CPU) int {
 // #0x88:
 func opcode0x88(cpu *CPU) int {
 	cpu.adc(cpu.b)
+	cpu.bus.Tick(4)
 	return 4
 }
 
@@ -1009,6 +1151,7 @@ func opcode0x88(cpu *CPU) int {
 // #0x89:
 func opcode0x89(cpu *CPU) int {
 	cpu.adc(cpu.c)
+	cpu.bus.Tick(4)
 	return 4
 }
 
@@ -1016,6 +1159,7 @@ func opcode0x89(cpu *CPU) int {
 // #0x8A:
 func opcode0x8A(cpu *CPU) int {
 	cpu.adc(cpu.d)
+	cpu.bus.Tick(4)
 	return 4
 }
 
@@ -1023,6 +1167,7 @@ func opcode0x8A(cpu *CPU) int {
 // #0x8B:
 func opcode0x8B(cpu *CPU) int {
 	cpu.adc(cpu.e)
+	cpu.bus.Tick(4)
 	return 4
 }
 
@@ -1030,6 +1175,7 @@ func opcode0x8B(cpu *CPU) int {
 // #0x8C:
 func opcode0x8C(cpu *CPU) int {
 	cpu.adc(cpu.h)
+	cpu.bus.Tick(4)
 	return 4
 }
 
@@ -1037,13 +1183,21 @@ func opcode0x8C(cpu *CPU) int {
 // #0x8D:
 func opcode0x8D(cpu *CPU) int {
 	cpu.adc(cpu.l)
+	cpu.bus.Tick(4)
 	return 4
 }
 
 // ADC A, (HL)
 // #0x8E:
 func opcode0x8E(cpu *CPU) int {
-	cpu.adc(cpu.bus.Read(cpu.getHL()))
+	// Opcode fetch already happened (4 cycles)
+	cpu.bus.Tick(4)
+
+	// Read from (HL) (4 cycles)
+	value := cpu.bus.Read(cpu.getHL())
+	cpu.bus.Tick(4)
+
+	cpu.adc(value)
 	return 8
 }
 
@@ -1051,6 +1205,7 @@ func opcode0x8E(cpu *CPU) int {
 // #0x8F:
 func opcode0x8F(cpu *CPU) int {
 	cpu.adc(cpu.a)
+	cpu.bus.Tick(4)
 	return 4
 }
 
@@ -1058,6 +1213,7 @@ func opcode0x8F(cpu *CPU) int {
 // #0x90:
 func opcode0x90(cpu *CPU) int {
 	cpu.sub(cpu.b)
+	cpu.bus.Tick(4)
 	return 4
 }
 
@@ -1065,6 +1221,7 @@ func opcode0x90(cpu *CPU) int {
 // #0x91:
 func opcode0x91(cpu *CPU) int {
 	cpu.sub(cpu.c)
+	cpu.bus.Tick(4)
 	return 4
 }
 
@@ -1072,6 +1229,7 @@ func opcode0x91(cpu *CPU) int {
 // #0x92:
 func opcode0x92(cpu *CPU) int {
 	cpu.sub(cpu.d)
+	cpu.bus.Tick(4)
 	return 4
 }
 
@@ -1079,6 +1237,7 @@ func opcode0x92(cpu *CPU) int {
 // #0x93:
 func opcode0x93(cpu *CPU) int {
 	cpu.sub(cpu.e)
+	cpu.bus.Tick(4)
 	return 4
 }
 
@@ -1086,6 +1245,7 @@ func opcode0x93(cpu *CPU) int {
 // #0x94:
 func opcode0x94(cpu *CPU) int {
 	cpu.sub(cpu.h)
+	cpu.bus.Tick(4)
 	return 4
 }
 
@@ -1093,6 +1253,7 @@ func opcode0x94(cpu *CPU) int {
 // #0x95:
 func opcode0x95(cpu *CPU) int {
 	cpu.sub(cpu.l)
+	cpu.bus.Tick(4)
 	return 4
 }
 
@@ -1100,6 +1261,7 @@ func opcode0x95(cpu *CPU) int {
 // #0x96:
 func opcode0x96(cpu *CPU) int {
 	cpu.sub(cpu.bus.Read(cpu.getHL()))
+	cpu.bus.Tick(8)
 	return 8
 }
 
@@ -1107,6 +1269,7 @@ func opcode0x96(cpu *CPU) int {
 // #0x97:
 func opcode0x97(cpu *CPU) int {
 	cpu.sub(cpu.a)
+	cpu.bus.Tick(4)
 	return 4
 }
 
@@ -1114,6 +1277,7 @@ func opcode0x97(cpu *CPU) int {
 // #0x98:
 func opcode0x98(cpu *CPU) int {
 	cpu.sbc(cpu.b)
+	cpu.bus.Tick(4)
 	return 4
 }
 
@@ -1121,6 +1285,7 @@ func opcode0x98(cpu *CPU) int {
 // #0x99:
 func opcode0x99(cpu *CPU) int {
 	cpu.sbc(cpu.c)
+	cpu.bus.Tick(4)
 	return 4
 }
 
@@ -1128,6 +1293,7 @@ func opcode0x99(cpu *CPU) int {
 // #0x9A:
 func opcode0x9A(cpu *CPU) int {
 	cpu.sbc(cpu.d)
+	cpu.bus.Tick(4)
 	return 4
 }
 
@@ -1135,6 +1301,7 @@ func opcode0x9A(cpu *CPU) int {
 // #0x9B:
 func opcode0x9B(cpu *CPU) int {
 	cpu.sbc(cpu.e)
+	cpu.bus.Tick(4)
 	return 4
 }
 
@@ -1142,6 +1309,7 @@ func opcode0x9B(cpu *CPU) int {
 // #0x9C:
 func opcode0x9C(cpu *CPU) int {
 	cpu.sbc(cpu.h)
+	cpu.bus.Tick(4)
 	return 4
 }
 
@@ -1149,6 +1317,7 @@ func opcode0x9C(cpu *CPU) int {
 // #0x9D:
 func opcode0x9D(cpu *CPU) int {
 	cpu.sbc(cpu.l)
+	cpu.bus.Tick(4)
 	return 4
 }
 
@@ -1156,6 +1325,7 @@ func opcode0x9D(cpu *CPU) int {
 // #0x9E:
 func opcode0x9E(cpu *CPU) int {
 	cpu.sbc(cpu.bus.Read(cpu.getHL()))
+	cpu.bus.Tick(8)
 	return 8
 }
 
@@ -1163,6 +1333,7 @@ func opcode0x9E(cpu *CPU) int {
 // #0x9F:
 func opcode0x9F(cpu *CPU) int {
 	cpu.sbc(cpu.a)
+	cpu.bus.Tick(4)
 	return 4
 }
 
@@ -1170,6 +1341,7 @@ func opcode0x9F(cpu *CPU) int {
 // #0xA0:
 func opcode0xA0(cpu *CPU) int {
 	cpu.and(cpu.b)
+	cpu.bus.Tick(4)
 	return 4
 }
 
@@ -1177,6 +1349,7 @@ func opcode0xA0(cpu *CPU) int {
 // #0xA1:
 func opcode0xA1(cpu *CPU) int {
 	cpu.and(cpu.c)
+	cpu.bus.Tick(4)
 	return 4
 }
 
@@ -1184,6 +1357,7 @@ func opcode0xA1(cpu *CPU) int {
 // #0xA2:
 func opcode0xA2(cpu *CPU) int {
 	cpu.and(cpu.d)
+	cpu.bus.Tick(4)
 	return 4
 }
 
@@ -1191,6 +1365,7 @@ func opcode0xA2(cpu *CPU) int {
 // #0xA3:
 func opcode0xA3(cpu *CPU) int {
 	cpu.and(cpu.e)
+	cpu.bus.Tick(4)
 	return 4
 }
 
@@ -1198,6 +1373,7 @@ func opcode0xA3(cpu *CPU) int {
 // #0xA4:
 func opcode0xA4(cpu *CPU) int {
 	cpu.and(cpu.h)
+	cpu.bus.Tick(4)
 	return 4
 }
 
@@ -1205,6 +1381,7 @@ func opcode0xA4(cpu *CPU) int {
 // #0xA5:
 func opcode0xA5(cpu *CPU) int {
 	cpu.and(cpu.l)
+	cpu.bus.Tick(4)
 	return 4
 }
 
@@ -1212,6 +1389,7 @@ func opcode0xA5(cpu *CPU) int {
 // #0xA6:
 func opcode0xA6(cpu *CPU) int {
 	cpu.and(cpu.bus.Read(cpu.getHL()))
+	cpu.bus.Tick(8)
 	return 8
 }
 
@@ -1219,6 +1397,7 @@ func opcode0xA6(cpu *CPU) int {
 // #0xA7:
 func opcode0xA7(cpu *CPU) int {
 	cpu.and(cpu.a)
+	cpu.bus.Tick(4)
 	return 4
 }
 
@@ -1226,6 +1405,7 @@ func opcode0xA7(cpu *CPU) int {
 // #0xA8:
 func opcode0xA8(cpu *CPU) int {
 	cpu.xor(cpu.b)
+	cpu.bus.Tick(4)
 	return 4
 }
 
@@ -1233,6 +1413,7 @@ func opcode0xA8(cpu *CPU) int {
 // #0xA9:
 func opcode0xA9(cpu *CPU) int {
 	cpu.xor(cpu.c)
+	cpu.bus.Tick(4)
 	return 4
 }
 
@@ -1240,6 +1421,7 @@ func opcode0xA9(cpu *CPU) int {
 // #0xAA:
 func opcode0xAA(cpu *CPU) int {
 	cpu.xor(cpu.d)
+	cpu.bus.Tick(4)
 	return 4
 }
 
@@ -1247,6 +1429,7 @@ func opcode0xAA(cpu *CPU) int {
 // #0xAB:
 func opcode0xAB(cpu *CPU) int {
 	cpu.xor(cpu.e)
+	cpu.bus.Tick(4)
 	return 4
 }
 
@@ -1254,6 +1437,7 @@ func opcode0xAB(cpu *CPU) int {
 // #0xAC:
 func opcode0xAC(cpu *CPU) int {
 	cpu.xor(cpu.h)
+	cpu.bus.Tick(4)
 	return 4
 }
 
@@ -1261,6 +1445,7 @@ func opcode0xAC(cpu *CPU) int {
 // #0xAD:
 func opcode0xAD(cpu *CPU) int {
 	cpu.xor(cpu.l)
+	cpu.bus.Tick(4)
 	return 4
 }
 
@@ -1268,6 +1453,7 @@ func opcode0xAD(cpu *CPU) int {
 // #0xAE:
 func opcode0xAE(cpu *CPU) int {
 	cpu.xor(cpu.bus.Read(cpu.getHL()))
+	cpu.bus.Tick(8)
 	return 8
 }
 
@@ -1275,6 +1461,7 @@ func opcode0xAE(cpu *CPU) int {
 // #0xAF:
 func opcode0xAF(cpu *CPU) int {
 	cpu.xor(cpu.a)
+	cpu.bus.Tick(4)
 	return 4
 }
 
@@ -1282,6 +1469,7 @@ func opcode0xAF(cpu *CPU) int {
 // #0xB0:
 func opcode0xB0(cpu *CPU) int {
 	cpu.or(cpu.b)
+	cpu.bus.Tick(4)
 	return 4
 }
 
@@ -1289,6 +1477,7 @@ func opcode0xB0(cpu *CPU) int {
 // #0xB1:
 func opcode0xB1(cpu *CPU) int {
 	cpu.or(cpu.c)
+	cpu.bus.Tick(4)
 	return 4
 }
 
@@ -1296,6 +1485,7 @@ func opcode0xB1(cpu *CPU) int {
 // #0xB2:
 func opcode0xB2(cpu *CPU) int {
 	cpu.or(cpu.d)
+	cpu.bus.Tick(4)
 	return 4
 }
 
@@ -1303,6 +1493,7 @@ func opcode0xB2(cpu *CPU) int {
 // #0xB3:
 func opcode0xB3(cpu *CPU) int {
 	cpu.or(cpu.e)
+	cpu.bus.Tick(4)
 	return 4
 }
 
@@ -1310,6 +1501,7 @@ func opcode0xB3(cpu *CPU) int {
 // #0xB4:
 func opcode0xB4(cpu *CPU) int {
 	cpu.or(cpu.h)
+	cpu.bus.Tick(4)
 	return 4
 }
 
@@ -1317,13 +1509,21 @@ func opcode0xB4(cpu *CPU) int {
 // #0xB5:
 func opcode0xB5(cpu *CPU) int {
 	cpu.or(cpu.l)
+	cpu.bus.Tick(4)
 	return 4
 }
 
 // OR (HL)
 // #0xB6:
 func opcode0xB6(cpu *CPU) int {
-	cpu.or(cpu.bus.Read(cpu.getHL()))
+	// Opcode fetch already happened (4 cycles)
+	cpu.bus.Tick(4)
+
+	// Read from (HL) (4 cycles)
+	value := cpu.bus.Read(cpu.getHL())
+	cpu.bus.Tick(4)
+
+	cpu.or(value)
 	return 8
 }
 
@@ -1331,6 +1531,7 @@ func opcode0xB6(cpu *CPU) int {
 // #0xB7:
 func opcode0xB7(cpu *CPU) int {
 	cpu.or(cpu.a)
+	cpu.bus.Tick(4)
 	return 4
 }
 
@@ -1338,6 +1539,7 @@ func opcode0xB7(cpu *CPU) int {
 // #0xB8:
 func opcode0xB8(cpu *CPU) int {
 	cpu.cp(cpu.b)
+	cpu.bus.Tick(4)
 	return 4
 }
 
@@ -1345,6 +1547,7 @@ func opcode0xB8(cpu *CPU) int {
 // #0xB9:
 func opcode0xB9(cpu *CPU) int {
 	cpu.cp(cpu.c)
+	cpu.bus.Tick(4)
 	return 4
 }
 
@@ -1352,6 +1555,7 @@ func opcode0xB9(cpu *CPU) int {
 // #0xBA:
 func opcode0xBA(cpu *CPU) int {
 	cpu.cp(cpu.d)
+	cpu.bus.Tick(4)
 	return 4
 }
 
@@ -1359,6 +1563,7 @@ func opcode0xBA(cpu *CPU) int {
 // #0xBB:
 func opcode0xBB(cpu *CPU) int {
 	cpu.cp(cpu.e)
+	cpu.bus.Tick(4)
 	return 4
 }
 
@@ -1366,6 +1571,7 @@ func opcode0xBB(cpu *CPU) int {
 // #0xBC:
 func opcode0xBC(cpu *CPU) int {
 	cpu.cp(cpu.h)
+	cpu.bus.Tick(4)
 	return 4
 }
 
@@ -1373,13 +1579,21 @@ func opcode0xBC(cpu *CPU) int {
 // #0xBD:
 func opcode0xBD(cpu *CPU) int {
 	cpu.cp(cpu.l)
+	cpu.bus.Tick(4)
 	return 4
 }
 
 // CP (HL)
 // #0xBE:
 func opcode0xBE(cpu *CPU) int {
-	cpu.cp(cpu.bus.Read(cpu.getHL()))
+	// Opcode fetch already happened (4 cycles)
+	cpu.bus.Tick(4)
+
+	// Read from (HL) (4 cycles)
+	value := cpu.bus.Read(cpu.getHL())
+	cpu.bus.Tick(4)
+
+	cpu.cp(value)
 	return 8
 }
 
@@ -1387,6 +1601,7 @@ func opcode0xBE(cpu *CPU) int {
 // #0xBF:
 func opcode0xBF(cpu *CPU) int {
 	cpu.cp(cpu.a)
+	cpu.bus.Tick(4)
 	return 4
 }
 
@@ -1395,8 +1610,10 @@ func opcode0xBF(cpu *CPU) int {
 func opcode0xC0(cpu *CPU) int {
 	if !cpu.isSetFlag(zeroFlag) {
 		cpu.pc = cpu.popStack()
+		cpu.bus.Tick(20)
 		return 20
 	}
+	cpu.bus.Tick(8)
 	return 8
 }
 
@@ -1404,6 +1621,7 @@ func opcode0xC0(cpu *CPU) int {
 // #0xC1:
 func opcode0xC1(cpu *CPU) int {
 	cpu.setBC(cpu.popStack())
+	cpu.bus.Tick(12)
 	return 12
 }
 
@@ -1412,10 +1630,12 @@ func opcode0xC1(cpu *CPU) int {
 func opcode0xC2(cpu *CPU) int {
 	if !cpu.isSetFlag(zeroFlag) {
 		cpu.pc = cpu.peekImmediateWord()
+		cpu.bus.Tick(16)
 		return 16
 	}
 	// jump wasn't taken, we need to skip the immediate value (nn)
 	cpu.pc += 2
+	cpu.bus.Tick(12)
 	return 12
 }
 
@@ -1423,6 +1643,7 @@ func opcode0xC2(cpu *CPU) int {
 // #0xC3:
 func opcode0xC3(cpu *CPU) int {
 	cpu.pc = cpu.peekImmediateWord()
+	cpu.bus.Tick(16)
 	return 16
 }
 
@@ -1433,10 +1654,12 @@ func opcode0xC4(cpu *CPU) int {
 		addr := cpu.readImmediateWord()
 		cpu.pushStack(cpu.pc)
 		cpu.pc = addr
+		cpu.bus.Tick(24)
 		return 24
 	}
 
 	cpu.pc += 2
+	cpu.bus.Tick(12)
 	return 12
 }
 
@@ -1444,6 +1667,7 @@ func opcode0xC4(cpu *CPU) int {
 // #0xC5:
 func opcode0xC5(cpu *CPU) int {
 	cpu.pushStack(cpu.getBC())
+	cpu.bus.Tick(16)
 	return 16
 }
 
@@ -1451,6 +1675,7 @@ func opcode0xC5(cpu *CPU) int {
 // #0xC6:
 func opcode0xC6(cpu *CPU) int {
 	cpu.addToA(cpu.readImmediate())
+	cpu.bus.Tick(8)
 	return 8
 }
 
@@ -1459,6 +1684,7 @@ func opcode0xC6(cpu *CPU) int {
 func opcode0xC7(cpu *CPU) int {
 	cpu.pushStack(cpu.pc)
 	cpu.pc = 0
+	cpu.bus.Tick(16)
 	return 16
 }
 
@@ -1467,8 +1693,10 @@ func opcode0xC7(cpu *CPU) int {
 func opcode0xC8(cpu *CPU) int {
 	if cpu.isSetFlag(zeroFlag) {
 		cpu.pc = cpu.popStack()
+		cpu.bus.Tick(20)
 		return 20
 	}
+	cpu.bus.Tick(8)
 	return 8
 }
 
@@ -1476,6 +1704,7 @@ func opcode0xC8(cpu *CPU) int {
 // #0xC9:
 func opcode0xC9(cpu *CPU) int {
 	cpu.pc = cpu.popStack()
+	cpu.bus.Tick(16)
 	return 16
 }
 
@@ -1484,16 +1713,19 @@ func opcode0xC9(cpu *CPU) int {
 func opcode0xCA(cpu *CPU) int {
 	if cpu.isSetFlag(zeroFlag) {
 		cpu.pc = cpu.peekImmediateWord()
+		cpu.bus.Tick(16)
 		return 16
 	}
 	// jump wasn't taken, we need to skip the immediate value (nn)
 	cpu.pc += 2
+	cpu.bus.Tick(12)
 	return 12
 }
 
 // Secondary OP Code Set:
 // #0xCB:
 func opcode0xCB(cpu *CPU) int {
+	cpu.bus.Tick(0)
 	return 0
 }
 
@@ -1504,10 +1736,12 @@ func opcode0xCC(cpu *CPU) int {
 		addr := cpu.readImmediateWord()
 		cpu.pushStack(cpu.pc)
 		cpu.pc = addr
+		cpu.bus.Tick(24)
 		return 24
 	}
 
 	cpu.pc += 2
+	cpu.bus.Tick(12)
 	return 12
 }
 
@@ -1517,6 +1751,7 @@ func opcode0xCD(cpu *CPU) int {
 	addr := cpu.readImmediateWord()
 	cpu.pushStack(cpu.pc)
 	cpu.pc = addr
+	cpu.bus.Tick(24)
 	return 24
 }
 
@@ -1524,6 +1759,7 @@ func opcode0xCD(cpu *CPU) int {
 // #0xCE:
 func opcode0xCE(cpu *CPU) int {
 	cpu.adc(cpu.readImmediate())
+	cpu.bus.Tick(8)
 	return 8
 }
 
@@ -1532,6 +1768,7 @@ func opcode0xCE(cpu *CPU) int {
 func opcode0xCF(cpu *CPU) int {
 	cpu.pushStack(cpu.pc)
 	cpu.pc = 0x8
+	cpu.bus.Tick(16)
 	return 16
 }
 
@@ -1540,8 +1777,10 @@ func opcode0xCF(cpu *CPU) int {
 func opcode0xD0(cpu *CPU) int {
 	if !cpu.isSetFlag(carryFlag) {
 		cpu.pc = cpu.popStack()
+		cpu.bus.Tick(20)
 		return 20
 	}
+	cpu.bus.Tick(8)
 	return 8
 }
 
@@ -1549,6 +1788,7 @@ func opcode0xD0(cpu *CPU) int {
 // #0xD1:
 func opcode0xD1(cpu *CPU) int {
 	cpu.setDE(cpu.popStack())
+	cpu.bus.Tick(12)
 	return 12
 }
 
@@ -1557,16 +1797,19 @@ func opcode0xD1(cpu *CPU) int {
 func opcode0xD2(cpu *CPU) int {
 	if !cpu.isSetFlag(carryFlag) {
 		cpu.pc = cpu.peekImmediateWord()
+		cpu.bus.Tick(16)
 		return 16
 	}
 	// jump wasn't taken, we need to skip the immediate value (nn)
 	cpu.pc += 2
+	cpu.bus.Tick(12)
 	return 12
 }
 
 // 0xD3 - Illegal
 // #0xD3:
 func opcode0xD3(cpu *CPU) int {
+	cpu.bus.Tick(0)
 	return 0
 }
 
@@ -1577,10 +1820,12 @@ func opcode0xD4(cpu *CPU) int {
 		addr := cpu.readImmediateWord()
 		cpu.pushStack(cpu.pc)
 		cpu.pc = addr
+		cpu.bus.Tick(24)
 		return 24
 	}
 
 	cpu.pc += 2
+	cpu.bus.Tick(12)
 	return 12
 }
 
@@ -1588,6 +1833,7 @@ func opcode0xD4(cpu *CPU) int {
 // #0xD5:
 func opcode0xD5(cpu *CPU) int {
 	cpu.pushStack(cpu.getDE())
+	cpu.bus.Tick(16)
 	return 16
 }
 
@@ -1595,6 +1841,7 @@ func opcode0xD5(cpu *CPU) int {
 // #0xD6:
 func opcode0xD6(cpu *CPU) int {
 	cpu.sub(cpu.readImmediate())
+	cpu.bus.Tick(8)
 	return 8
 }
 
@@ -1604,6 +1851,7 @@ func opcode0xD7(cpu *CPU) int {
 	cpu.pushStack(cpu.pc)
 	cpu.pc = 0x10
 
+	cpu.bus.Tick(16)
 	return 16
 }
 
@@ -1612,8 +1860,10 @@ func opcode0xD7(cpu *CPU) int {
 func opcode0xD8(cpu *CPU) int {
 	if cpu.isSetFlag(carryFlag) {
 		cpu.pc = cpu.popStack()
+		cpu.bus.Tick(20)
 		return 20
 	}
+	cpu.bus.Tick(8)
 	return 8
 }
 
@@ -1622,6 +1872,7 @@ func opcode0xD8(cpu *CPU) int {
 func opcode0xD9(cpu *CPU) int {
 	cpu.pc = cpu.popStack()
 	cpu.interruptsEnabled = true
+	cpu.bus.Tick(16)
 	return 16
 }
 
@@ -1630,16 +1881,19 @@ func opcode0xD9(cpu *CPU) int {
 func opcode0xDA(cpu *CPU) int {
 	if cpu.isSetFlag(carryFlag) {
 		cpu.pc = cpu.peekImmediateWord()
+		cpu.bus.Tick(16)
 		return 16
 	}
 	// jump wasn't taken, we need to skip the immediate value (nn)
 	cpu.pc += 2
+	cpu.bus.Tick(12)
 	return 12
 }
 
 // 0xDB - Illegal
 // #0xDB:
 func opcode0xDB(cpu *CPU) int {
+	cpu.bus.Tick(0)
 	return 0
 }
 
@@ -1650,16 +1904,19 @@ func opcode0xDC(cpu *CPU) int {
 		addr := cpu.readImmediateWord()
 		cpu.pushStack(cpu.pc)
 		cpu.pc = addr
+		cpu.bus.Tick(24)
 		return 24
 	}
 
 	cpu.pc += 2
+	cpu.bus.Tick(12)
 	return 12
 }
 
 // 0xDD - Illegal
 // #0xDD:
 func opcode0xDD(cpu *CPU) int {
+	cpu.bus.Tick(0)
 	return 0
 }
 
@@ -1667,6 +1924,7 @@ func opcode0xDD(cpu *CPU) int {
 // #0xDE:
 func opcode0xDE(cpu *CPU) int {
 	cpu.sbc(cpu.readImmediate())
+	cpu.bus.Tick(8)
 	return 8
 }
 
@@ -1675,6 +1933,7 @@ func opcode0xDE(cpu *CPU) int {
 func opcode0xDF(cpu *CPU) int {
 	cpu.pushStack(cpu.pc)
 	cpu.pc = 0x18
+	cpu.bus.Tick(16)
 	return 16
 }
 
@@ -1683,6 +1942,7 @@ func opcode0xDF(cpu *CPU) int {
 func opcode0xE0(cpu *CPU) int {
 	addr := 0xFF00 + uint16(cpu.readImmediate())
 	cpu.bus.Write(addr, cpu.a)
+	cpu.bus.Tick(12)
 	return 12
 }
 
@@ -1690,6 +1950,7 @@ func opcode0xE0(cpu *CPU) int {
 // #0xE1:
 func opcode0xE1(cpu *CPU) int {
 	cpu.setHL(cpu.popStack())
+	cpu.bus.Tick(12)
 	return 12
 }
 
@@ -1698,18 +1959,21 @@ func opcode0xE1(cpu *CPU) int {
 func opcode0xE2(cpu *CPU) int {
 	addr := 0xFF00 + uint16(cpu.c)
 	cpu.bus.Write(addr, cpu.a)
+	cpu.bus.Tick(8)
 	return 8
 }
 
 // 0xE3 - Illegal
 // #0xE3:
 func opcode0xE3(cpu *CPU) int {
+	cpu.bus.Tick(0)
 	return 0
 }
 
 // 0xE4 - Illegal
 // #0xE4:
 func opcode0xE4(cpu *CPU) int {
+	cpu.bus.Tick(0)
 	return 0
 }
 
@@ -1717,6 +1981,7 @@ func opcode0xE4(cpu *CPU) int {
 // #0xE5:
 func opcode0xE5(cpu *CPU) int {
 	cpu.pushStack(cpu.getHL())
+	cpu.bus.Tick(16)
 	return 16
 }
 
@@ -1724,6 +1989,7 @@ func opcode0xE5(cpu *CPU) int {
 // #0xE6:
 func opcode0xE6(cpu *CPU) int {
 	cpu.and(cpu.readImmediate())
+	cpu.bus.Tick(8)
 	return 8
 }
 
@@ -1732,6 +1998,7 @@ func opcode0xE6(cpu *CPU) int {
 func opcode0xE7(cpu *CPU) int {
 	cpu.pushStack(cpu.pc)
 	cpu.pc = 0x20
+	cpu.bus.Tick(16)
 	return 16
 }
 
@@ -1750,6 +2017,7 @@ func opcode0xE8(cpu *CPU) int {
 
 	cpu.sp = uint16(result)
 
+	cpu.bus.Tick(16)
 	return 16
 }
 
@@ -1757,6 +2025,7 @@ func opcode0xE8(cpu *CPU) int {
 // #0xE9:
 func opcode0xE9(cpu *CPU) int {
 	cpu.pc = cpu.getHL()
+	cpu.bus.Tick(4)
 	return 4
 }
 
@@ -1764,24 +2033,28 @@ func opcode0xE9(cpu *CPU) int {
 // #0xEA:
 func opcode0xEA(cpu *CPU) int {
 	cpu.bus.Write(cpu.readImmediateWord(), cpu.a)
+	cpu.bus.Tick(16)
 	return 16
 }
 
 // 0xEB - Illegal
 // #0xEB:
 func opcode0xEB(cpu *CPU) int {
+	cpu.bus.Tick(0)
 	return 0
 }
 
 // 0xEC - Illegal
 // #0xEC:
 func opcode0xEC(cpu *CPU) int {
+	cpu.bus.Tick(0)
 	return 0
 }
 
 // 0xED - Illegal
 // #0xED:
 func opcode0xED(cpu *CPU) int {
+	cpu.bus.Tick(0)
 	return 0
 }
 
@@ -1789,6 +2062,7 @@ func opcode0xED(cpu *CPU) int {
 // #0xEE:
 func opcode0xEE(cpu *CPU) int {
 	cpu.xor(cpu.readImmediate())
+	cpu.bus.Tick(8)
 	return 8
 }
 
@@ -1797,6 +2071,7 @@ func opcode0xEE(cpu *CPU) int {
 func opcode0xEF(cpu *CPU) int {
 	cpu.pushStack(cpu.pc)
 	cpu.pc = 0x28
+	cpu.bus.Tick(16)
 	return 16
 }
 
@@ -1805,6 +2080,8 @@ func opcode0xEF(cpu *CPU) int {
 func opcode0xF0(cpu *CPU) int {
 	addr := 0xFF00 + uint16(cpu.readImmediate())
 	cpu.a = cpu.bus.Read(addr)
+
+	cpu.bus.Tick(12)
 	return 12
 }
 
@@ -1812,6 +2089,7 @@ func opcode0xF0(cpu *CPU) int {
 // #0xF1:
 func opcode0xF1(cpu *CPU) int {
 	cpu.setAF(cpu.popStack())
+	cpu.bus.Tick(12)
 	return 12
 }
 
@@ -1819,6 +2097,7 @@ func opcode0xF1(cpu *CPU) int {
 // #0xF2:
 func opcode0xF2(cpu *CPU) int {
 	cpu.a = cpu.bus.Read(0xFF00 | uint16(cpu.c))
+	cpu.bus.Tick(8)
 	return 8
 }
 
@@ -1826,12 +2105,14 @@ func opcode0xF2(cpu *CPU) int {
 // #0xF3:
 func opcode0xF3(cpu *CPU) int {
 	cpu.interruptsEnabled = false
+	cpu.bus.Tick(4)
 	return 4
 }
 
 // 0xF4 - Illegal
 // #0xF4:
 func opcode0xF4(cpu *CPU) int {
+	cpu.bus.Tick(0)
 	return 0
 }
 
@@ -1839,6 +2120,7 @@ func opcode0xF4(cpu *CPU) int {
 // #0xF5:
 func opcode0xF5(cpu *CPU) int {
 	cpu.pushStack(cpu.getAF())
+	cpu.bus.Tick(16)
 	return 16
 }
 
@@ -1846,6 +2128,7 @@ func opcode0xF5(cpu *CPU) int {
 // #0xF6:
 func opcode0xF6(cpu *CPU) int {
 	cpu.or(cpu.readImmediate())
+	cpu.bus.Tick(8)
 	return 8
 }
 
@@ -1854,6 +2137,7 @@ func opcode0xF6(cpu *CPU) int {
 func opcode0xF7(cpu *CPU) int {
 	cpu.pushStack(cpu.pc)
 	cpu.pc = 0x30
+	cpu.bus.Tick(16)
 	return 16
 }
 
@@ -1870,6 +2154,7 @@ func opcode0xF8(cpu *CPU) int {
 
 	cpu.setHL(result)
 
+	cpu.bus.Tick(12)
 	return 12
 }
 
@@ -1877,13 +2162,24 @@ func opcode0xF8(cpu *CPU) int {
 // #0xF9:
 func opcode0xF9(cpu *CPU) int {
 	cpu.sp = cpu.getHL()
+	cpu.bus.Tick(8)
 	return 8
 }
 
 // LD A, (nn)
 // #0xFA:
 func opcode0xFA(cpu *CPU) int {
-	cpu.a = cpu.bus.Read(cpu.readImmediateWord())
+	// Opcode fetch already happened (4 cycles)
+	cpu.bus.Tick(4)
+
+	// Read immediate word (8 cycles - 2 bytes)
+	addr := cpu.readImmediateWord()
+	cpu.bus.Tick(8)
+
+	// Read from memory (4 cycles)
+	cpu.a = cpu.bus.Read(addr)
+	cpu.bus.Tick(4)
+
 	return 16
 }
 
@@ -1891,18 +2187,21 @@ func opcode0xFA(cpu *CPU) int {
 // #0xFB:
 func opcode0xFB(cpu *CPU) int {
 	cpu.eiPending = true
+	cpu.bus.Tick(4)
 	return 4
 }
 
 // 0xFC - Illegal
 // #0xFC:
 func opcode0xFC(cpu *CPU) int {
+	cpu.bus.Tick(0)
 	return 0
 }
 
 // 0xFD - Illegal
 // #0xFD:
 func opcode0xFD(cpu *CPU) int {
+	cpu.bus.Tick(0)
 	return 0
 }
 
@@ -1910,6 +2209,7 @@ func opcode0xFD(cpu *CPU) int {
 // #0xFE:
 func opcode0xFE(cpu *CPU) int {
 	cpu.cp(cpu.readImmediate())
+	cpu.bus.Tick(8)
 	return 8
 }
 
@@ -1918,5 +2218,6 @@ func opcode0xFE(cpu *CPU) int {
 func opcode0xFF(cpu *CPU) int {
 	cpu.pushStack(cpu.pc)
 	cpu.pc = 0x38
+	cpu.bus.Tick(16)
 	return 16
 }

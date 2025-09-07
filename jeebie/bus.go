@@ -33,13 +33,21 @@ func (b *Bus) Write(address uint16, value byte) {
 	b.MMU.Write(address, value)
 }
 
+// Tick advances components by the given number of cycles
+// Called by opcodes during execution for precise timer/serial timing
+func (b *Bus) Tick(cycles int) {
+	b.MMU.Tick(cycles)
+}
+
 // TickInstruction executes one CPU instruction and ticks all components
 // Returns the number of cycles consumed
 func (b *Bus) TickInstruction() int {
-	cycles := b.CPU.Tick()
-	b.MMU.Tick(cycles)
+	cycles := b.CPU.Exec()
+
+	// Tick GPU and APU with full cycle count
 	b.GPU.Tick(cycles)
 	b.MMU.APU.Tick(cycles)
+
 	return cycles
 }
 
