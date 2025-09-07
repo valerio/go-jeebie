@@ -89,8 +89,9 @@ func opcode0x09(cpu *CPU) int {
 // LD A, (BC)
 // #0x0A:
 func opcode0x0A(cpu *CPU) int {
+	cpu.bus.Tick(4)
 	cpu.a = cpu.bus.Read(cpu.getBC())
-	cpu.bus.Tick(8)
+	cpu.bus.Tick(4)
 	return 8
 }
 
@@ -217,8 +218,9 @@ func opcode0x19(cpu *CPU) int {
 // LD A, (DE)
 // #0x1A:
 func opcode0x1A(cpu *CPU) int {
+	cpu.bus.Tick(4)
 	cpu.a = cpu.bus.Read(cpu.getDE())
-	cpu.bus.Tick(8)
+	cpu.bus.Tick(4)
 	return 8
 }
 
@@ -358,9 +360,10 @@ func opcode0x29(cpu *CPU) int {
 // LDI A, (HL)
 // #0x2A:
 func opcode0x2A(cpu *CPU) int {
+	cpu.bus.Tick(4)
 	cpu.a = cpu.bus.Read(cpu.getHL())
+	cpu.bus.Tick(4)
 	cpu.setHL(cpu.getHL() + 1)
-	cpu.bus.Tick(8)
 	return 8
 }
 
@@ -510,9 +513,10 @@ func opcode0x39(cpu *CPU) int {
 // LDD A, (HL)
 // #0x3A:
 func opcode0x3A(cpu *CPU) int {
+	cpu.bus.Tick(4)
 	cpu.a = cpu.bus.Read(cpu.getHL())
+	cpu.bus.Tick(4)
 	cpu.setHL(cpu.getHL() - 1)
-	cpu.bus.Tick(8)
 	return 8
 }
 
@@ -608,8 +612,9 @@ func opcode0x45(cpu *CPU) int {
 // LD B, (HL)
 // #0x46:
 func opcode0x46(cpu *CPU) int {
+	cpu.bus.Tick(4)
 	cpu.b = cpu.bus.Read(cpu.getHL())
-	cpu.bus.Tick(8)
+	cpu.bus.Tick(4)
 	return 8
 }
 
@@ -671,8 +676,9 @@ func opcode0x4D(cpu *CPU) int {
 // LD C, (HL)
 // #0x4E:
 func opcode0x4E(cpu *CPU) int {
+	cpu.bus.Tick(4)
 	cpu.c = cpu.bus.Read(cpu.getHL())
-	cpu.bus.Tick(8)
+	cpu.bus.Tick(4)
 	return 8
 }
 
@@ -734,8 +740,9 @@ func opcode0x55(cpu *CPU) int {
 // LD D, (HL)
 // #0x56:
 func opcode0x56(cpu *CPU) int {
+	cpu.bus.Tick(4)
 	cpu.d = cpu.bus.Read(cpu.getHL())
-	cpu.bus.Tick(8)
+	cpu.bus.Tick(4)
 	return 8
 }
 
@@ -797,8 +804,9 @@ func opcode0x5D(cpu *CPU) int {
 // LD E, (HL)
 // #0x5E:
 func opcode0x5E(cpu *CPU) int {
+	cpu.bus.Tick(4)
 	cpu.e = cpu.bus.Read(cpu.getHL())
-	cpu.bus.Tick(8)
+	cpu.bus.Tick(4)
 	return 8
 }
 
@@ -860,8 +868,9 @@ func opcode0x65(cpu *CPU) int {
 // LD H, (HL)
 // #0x66:
 func opcode0x66(cpu *CPU) int {
+	cpu.bus.Tick(4)
 	cpu.h = cpu.bus.Read(cpu.getHL())
-	cpu.bus.Tick(8)
+	cpu.bus.Tick(4)
 	return 8
 }
 
@@ -923,8 +932,9 @@ func opcode0x6D(cpu *CPU) int {
 // LD L, (HL)
 // #0x6E:
 func opcode0x6E(cpu *CPU) int {
+	cpu.bus.Tick(4)
 	cpu.l = cpu.bus.Read(cpu.getHL())
-	cpu.bus.Tick(8)
+	cpu.bus.Tick(4)
 	return 8
 }
 
@@ -1063,8 +1073,9 @@ func opcode0x7D(cpu *CPU) int {
 // LD, A, (HL)
 // #0x7E:
 func opcode0x7E(cpu *CPU) int {
+	cpu.bus.Tick(4)
 	cpu.a = cpu.bus.Read(cpu.getHL())
-	cpu.bus.Tick(8)
+	cpu.bus.Tick(4)
 	return 8
 }
 
@@ -1126,8 +1137,9 @@ func opcode0x85(cpu *CPU) int {
 // ADD A, (HL)
 // #0x86:
 func opcode0x86(cpu *CPU) int {
+	cpu.bus.Tick(4)
 	cpu.addToA(cpu.bus.Read(cpu.getHL()))
-	cpu.bus.Tick(8)
+	cpu.bus.Tick(4)
 	return 8
 }
 
@@ -1260,8 +1272,9 @@ func opcode0x95(cpu *CPU) int {
 // SUB A, (HL)
 // #0x96:
 func opcode0x96(cpu *CPU) int {
+	cpu.bus.Tick(4)
 	cpu.sub(cpu.bus.Read(cpu.getHL()))
-	cpu.bus.Tick(8)
+	cpu.bus.Tick(4)
 	return 8
 }
 
@@ -1324,8 +1337,9 @@ func opcode0x9D(cpu *CPU) int {
 // SBC A, (HL)
 // #0x9E:
 func opcode0x9E(cpu *CPU) int {
+	cpu.bus.Tick(4)
 	cpu.sbc(cpu.bus.Read(cpu.getHL()))
-	cpu.bus.Tick(8)
+	cpu.bus.Tick(4)
 	return 8
 }
 
@@ -1388,8 +1402,9 @@ func opcode0xA5(cpu *CPU) int {
 // AND (HL)
 // #0xA6:
 func opcode0xA6(cpu *CPU) int {
+	cpu.bus.Tick(4)
 	cpu.and(cpu.bus.Read(cpu.getHL()))
-	cpu.bus.Tick(8)
+	cpu.bus.Tick(4)
 	return 8
 }
 
@@ -1452,8 +1467,9 @@ func opcode0xAD(cpu *CPU) int {
 // XOR (HL)
 // #0xAE:
 func opcode0xAE(cpu *CPU) int {
+	cpu.bus.Tick(4)
 	cpu.xor(cpu.bus.Read(cpu.getHL()))
-	cpu.bus.Tick(8)
+	cpu.bus.Tick(4)
 	return 8
 }
 
@@ -1940,9 +1956,12 @@ func opcode0xDF(cpu *CPU) int {
 // LDH (0xFF00+n), A
 // #0xE0:
 func opcode0xE0(cpu *CPU) int {
-	addr := 0xFF00 + uint16(cpu.readImmediate())
+	cpu.bus.Tick(4)
+	imm := cpu.readImmediate()
+	addr := 0xFF00 + uint16(imm)
+	cpu.bus.Tick(2)
 	cpu.bus.Write(addr, cpu.a)
-	cpu.bus.Tick(12)
+	cpu.bus.Tick(6)
 	return 12
 }
 
@@ -2078,10 +2097,12 @@ func opcode0xEF(cpu *CPU) int {
 // LDH A, (0xFF00 + n)
 // #0xF0:
 func opcode0xF0(cpu *CPU) int {
-	addr := 0xFF00 + uint16(cpu.readImmediate())
+	cpu.bus.Tick(4)
+	offset := cpu.readImmediate()
+	addr := 0xFF00 + uint16(offset)
+	cpu.bus.Tick(2)
 	cpu.a = cpu.bus.Read(addr)
-
-	cpu.bus.Tick(12)
+	cpu.bus.Tick(6)
 	return 12
 }
 
@@ -2096,8 +2117,9 @@ func opcode0xF1(cpu *CPU) int {
 // LD A, (0xFF00 + C)
 // #0xF2:
 func opcode0xF2(cpu *CPU) int {
+	cpu.bus.Tick(4)
 	cpu.a = cpu.bus.Read(0xFF00 | uint16(cpu.c))
-	cpu.bus.Tick(8)
+	cpu.bus.Tick(4)
 	return 8
 }
 
@@ -2169,12 +2191,9 @@ func opcode0xF9(cpu *CPU) int {
 // LD A, (nn)
 // #0xFA:
 func opcode0xFA(cpu *CPU) int {
-	// Opcode fetch already happened (4 cycles)
-	cpu.bus.Tick(4)
-
-	// Read immediate word (8 cycles - 2 bytes)
-	addr := cpu.readImmediateWord()
 	cpu.bus.Tick(8)
+	addr := cpu.readImmediateWord()
+	cpu.bus.Tick(4)
 
 	// Read from memory (4 cycles)
 	cpu.a = cpu.bus.Read(addr)
