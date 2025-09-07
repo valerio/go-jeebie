@@ -76,6 +76,12 @@ A snapshot of the screen is taken at the end of each test, and compared to a ref
     <td align="center"><img src="test/integration/testdata/snapshots/mem_timing_01-read.png" width="160" /><br><sub>mem_timing_01-read ✅</sub></td>
     <td align="center"><img src="test/integration/testdata/snapshots/mem_timing_02-write.png" width="160" /><br><sub>mem_timing_02-write ✅</sub></td>
   </tr>
+  <tr>
+    <td align="center"><img src="test/integration/testdata/snapshots/mem_timing_03-modify.png" width="160" /><br><sub>mem_timing_03-modify ✅</sub></td>
+    <td></td>
+    <td></td>
+    <td></td>
+  </tr>
 </table>
 
 <!-- SNAPSHOTS:END -->
