@@ -25,7 +25,6 @@ type Timer struct {
 	systemCounter     uint16 // Internal 16-bit counter, DIV is upper 8 bits
 	lastTimerBitIsSet bool   // Previous state of timer bit for edge detection (set == 1)
 	timaOverflow      int    // Cycles remaining in TIMA overflow state
-	timaDelayInt      bool   // Delayed interrupt flag setting (1 M-cycle after TMA load)
 
 	// Timer registers
 	tima byte
@@ -43,13 +42,6 @@ func (t *Timer) SetSeed(seed uint16) {
 
 func (t *Timer) Tick(cycles int) {
 	for range cycles {
-		if t.timaDelayInt {
-			if t.TimerInterruptHandler != nil {
-				t.TimerInterruptHandler()
-			}
-			t.timaDelayInt = false
-		}
-
 		t.systemCounter++
 
 		if t.timaOverflow > 0 {
@@ -57,7 +49,7 @@ func (t *Timer) Tick(cycles int) {
 			t.timaOverflow--
 			if t.timaOverflow == 0 {
 				t.tima = t.tma
-				t.timaDelayInt = true
+				t.TimerInterruptHandler()
 			}
 			continue
 		}
@@ -116,12 +108,9 @@ func (t *Timer) Write(address uint16, value byte) {
 		t.systemCounter = 0
 		t.lastTimerBitIsSet = false
 	case addr.TIMA:
-		// Writing TIMA during overflow cancels the pending interrupt
-		if t.timaOverflow > 0 || t.timaDelayInt {
+		if t.timaOverflow > 0 {
 			t.timaOverflow = 0
-			t.timaDelayInt = false
 		}
-		slog.Debug("TIMA write", "value", value, "old", t.tima, "systemCounter", t.systemCounter)
 		t.tima = value
 	case addr.TMA:
 		t.tma = value
