@@ -473,8 +473,9 @@ func opcode0x35(cpu *CPU) int {
 // LD (HL), n
 // #0x36:
 func opcode0x36(cpu *CPU) int {
+	cpu.bus.Tick(4)
 	cpu.bus.Write(cpu.getHL(), cpu.readImmediate())
-	cpu.bus.Tick(12)
+	cpu.bus.Tick(8)
 	return 12
 }
 
@@ -2051,8 +2052,9 @@ func opcode0xE9(cpu *CPU) int {
 // LD (nn), A
 // #0xEA:
 func opcode0xEA(cpu *CPU) int {
+	cpu.bus.Tick(8)
 	cpu.bus.Write(cpu.readImmediateWord(), cpu.a)
-	cpu.bus.Tick(16)
+	cpu.bus.Tick(8)
 	return 16
 }
 
