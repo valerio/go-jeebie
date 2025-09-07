@@ -26,7 +26,6 @@ type Timer struct {
 	lastTimerBitIsSet bool   // Previous state of timer bit for edge detection (set == 1)
 	timaOverflow      int    // Cycles remaining in TIMA overflow state
 	timaDelayInt      bool   // Delayed interrupt flag setting (1 M-cycle after TMA load)
-	pendingIncrement  bool   // TIMA increment pending from falling edge detection
 
 	// Timer registers
 	tima byte
@@ -51,12 +50,6 @@ func (t *Timer) Tick(cycles int) {
 			t.timaDelayInt = false
 		}
 
-		// Process pending TIMA increment from previous cycle's falling edge
-		if t.pendingIncrement {
-			t.incrementTIMA()
-			t.pendingIncrement = false
-		}
-
 		t.systemCounter++
 
 		if t.timaOverflow > 0 {
@@ -74,12 +67,7 @@ func (t *Timer) Tick(cycles int) {
 		if timerEnabled {
 			currentTimerBitIsSet := bit.IsSet16(tacLookup[t.tac&0x03], t.systemCounter)
 			if t.lastTimerBitIsSet && !currentTimerBitIsSet {
-				// Delay the increment by 1 cycle.
-				// This is just me making a goddamn guess here, because blargg's timing tests can't all pass
-				// otherwise. In this specific case, if I model 01-read_timing.gb correctly, then instr_timing.gb
-				// goes into an infinite loop because the TIMA increment is happening before a read
-				// (affects LDH A (0x05) and LDH (0x05),A) in instr_timing.gb.
-				t.pendingIncrement = true
+				t.incrementTIMA()
 			}
 
 			t.lastTimerBitIsSet = currentTimerBitIsSet
@@ -119,11 +107,11 @@ func (t *Timer) Write(address uint16, value byte) {
 	case addr.DIV:
 		// DIV writes reset the internal counter to 0, this means one of the bits
 		// used for timer input (if enabled) could go from 1 -> 0 (falling edge)
-		// We need to detect this and set pending increment if so.
+		// We need to detect this and increment TIMA.
 		timerEnabled := bit.IsSet(2, t.tac)
 		wasSet := bit.IsSet16(tacLookup[t.tac&0x03], t.systemCounter)
 		if timerEnabled && wasSet {
-			t.pendingIncrement = true
+			t.incrementTIMA()
 		}
 		t.systemCounter = 0
 		t.lastTimerBitIsSet = false
@@ -133,15 +121,13 @@ func (t *Timer) Write(address uint16, value byte) {
 			t.timaOverflow = 0
 			t.timaDelayInt = false
 		}
-		// Writing to TIMA also cancels any pending increment
-		t.pendingIncrement = false
 		slog.Debug("TIMA write", "value", value, "old", t.tima, "systemCounter", t.systemCounter)
 		t.tima = value
 	case addr.TMA:
 		t.tma = value
 	case addr.TAC:
 		// Writing TAC can also cause a falling edge on the timer input.
-		// Similar to DIV, we detect and set pending increment if so.
+		// Similar to DIV, we detect and increment TIMA.
 		oldTac, oldEnabled := t.tac, bit.IsSet(2, t.tac)
 		newTac, newEnabled := value, bit.IsSet(2, value)
 
@@ -149,9 +135,9 @@ func (t *Timer) Write(address uint16, value byte) {
 		newBitIsSet := bit.IsSet16(tacLookup[newTac&0x03], t.systemCounter)
 
 		// If the timer input transitions 1 -> 0 due to this write while it
-		// was previously enabled, set pending increment.
+		// was previously enabled, increment TIMA.
 		if oldEnabled && oldBitWasSet && (!newEnabled || !newBitIsSet) {
-			t.pendingIncrement = true
+			t.incrementTIMA()
 		}
 
 		t.tac = newTac

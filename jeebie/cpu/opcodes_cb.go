@@ -51,11 +51,13 @@ func opcode0xCB05(c *CPU) int {
 // RLC (HL)
 // 0xCB06:
 func opcode0xCB06(c *CPU) int {
+	c.bus.Tick(8)
 	addr := c.getHL()
 	value := c.bus.Read(addr)
+	c.bus.Tick(4)
 	c.rlc(&value)
 	c.bus.Write(addr, value)
-	c.bus.Tick(16)
+	c.bus.Tick(4)
 	return 16
 }
 
@@ -118,11 +120,13 @@ func opcode0xCB0D(c *CPU) int {
 // RRC (HL)
 // 0xCB0E:
 func opcode0xCB0E(c *CPU) int {
+	c.bus.Tick(8)
 	addr := c.getHL()
 	value := c.bus.Read(addr)
 	c.rrc(&value)
+	c.bus.Tick(4)
 	c.bus.Write(addr, value)
-	c.bus.Tick(16)
+	c.bus.Tick(4)
 	return 16
 }
 
@@ -185,11 +189,13 @@ func opcode0xCB15(c *CPU) int {
 // RL (HL)
 // 0xCB16:
 func opcode0xCB16(c *CPU) int {
+	c.bus.Tick(8)
 	addr := c.getHL()
 	value := c.bus.Read(addr)
 	c.rl(&value)
+	c.bus.Tick(4)
 	c.bus.Write(addr, value)
-	c.bus.Tick(16)
+	c.bus.Tick(4)
 	return 16
 }
 
@@ -252,11 +258,13 @@ func opcode0xCB1D(c *CPU) int {
 // RR (HL)
 // 0xCB1E:
 func opcode0xCB1E(c *CPU) int {
+	c.bus.Tick(8)
 	addr := c.getHL()
 	value := c.bus.Read(addr)
 	c.rr(&value)
+	c.bus.Tick(4)
 	c.bus.Write(addr, value)
-	c.bus.Tick(16)
+	c.bus.Tick(4)
 	return 16
 }
 
@@ -319,11 +327,13 @@ func opcode0xCB25(c *CPU) int {
 // SLA (HL)
 // 0xCB26:
 func opcode0xCB26(c *CPU) int {
+	c.bus.Tick(8)
 	addr := c.getHL()
 	value := c.bus.Read(addr)
+	c.bus.Tick(4)
 	c.sla(&value)
 	c.bus.Write(addr, value)
-	c.bus.Tick(16)
+	c.bus.Tick(4)
 	return 16
 }
 
@@ -386,11 +396,13 @@ func opcode0xCB2D(c *CPU) int {
 // SRA (HL)
 // 0xCB2E:
 func opcode0xCB2E(c *CPU) int {
+	c.bus.Tick(8)
 	addr := c.getHL()
 	value := c.bus.Read(addr)
+	c.bus.Tick(4)
 	c.sra(&value)
 	c.bus.Write(addr, value)
-	c.bus.Tick(16)
+	c.bus.Tick(4)
 	return 16
 }
 
@@ -453,11 +465,13 @@ func opcode0xCB35(c *CPU) int {
 // SWAP (HL)
 // 0xCB36":
 func opcode0xCB36(c *CPU) int {
+	c.bus.Tick(8)
 	addr := c.getHL()
 	value := c.bus.Read(addr)
 	c.swap(&value)
+	c.bus.Tick(4)
 	c.bus.Write(addr, value)
-	c.bus.Tick(16)
+	c.bus.Tick(4)
 	return 16
 }
 
@@ -520,11 +534,13 @@ func opcode0xCB3D(c *CPU) int {
 // SRL (HL)
 // 0xCB3E:
 func opcode0xCB3E(c *CPU) int {
+	c.bus.Tick(8)
 	addr := c.getHL()
 	value := c.bus.Read(addr)
 	c.srl(&value)
+	c.bus.Tick(4)
 	c.bus.Write(addr, value)
-	c.bus.Tick(16)
+	c.bus.Tick(4)
 	return 16
 }
 
@@ -1163,11 +1179,13 @@ func opcode0xCB85(c *CPU) int {
 // RES 0 (HL)
 // 0xCB86:
 func opcode0xCB86(c *CPU) int {
+	c.bus.Tick(8)
 	addr := c.getHL()
 	value := c.bus.Read(addr)
 	c.res(0, &value)
+	c.bus.Tick(4)
 	c.bus.Write(addr, value)
-	c.bus.Tick(16)
+	c.bus.Tick(4)
 	return 16
 }
 
@@ -1230,11 +1248,13 @@ func opcode0xCB8D(c *CPU) int {
 // RES 1 (HL)
 // 0xCB8E:
 func opcode0xCB8E(c *CPU) int {
+	c.bus.Tick(8)
 	addr := c.getHL()
 	value := c.bus.Read(addr)
 	c.res(1, &value)
+	c.bus.Tick(4)
 	c.bus.Write(addr, value)
-	c.bus.Tick(16)
+	c.bus.Tick(4)
 	return 16
 }
 
@@ -1297,11 +1317,13 @@ func opcode0xCB95(c *CPU) int {
 // RES 2 (HL)
 // 0xCB96:
 func opcode0xCB96(c *CPU) int {
+	c.bus.Tick(8)
 	addr := c.getHL()
 	value := c.bus.Read(addr)
 	c.res(2, &value)
+	c.bus.Tick(4)
 	c.bus.Write(addr, value)
-	c.bus.Tick(16)
+	c.bus.Tick(4)
 	return 16
 }
 
@@ -1364,11 +1386,13 @@ func opcode0xCB9D(c *CPU) int {
 // RES 3 (HL)
 // 0xCB9E:
 func opcode0xCB9E(c *CPU) int {
+	c.bus.Tick(8)
 	addr := c.getHL()
 	value := c.bus.Read(addr)
 	c.res(3, &value)
+	c.bus.Tick(4)
 	c.bus.Write(addr, value)
-	c.bus.Tick(16)
+	c.bus.Tick(4)
 	return 16
 }
 
@@ -1431,11 +1455,13 @@ func opcode0xCBA5(c *CPU) int {
 // RES 4 (HL)
 // 0xCBA6:
 func opcode0xCBA6(c *CPU) int {
+	c.bus.Tick(8)
 	addr := c.getHL()
 	value := c.bus.Read(addr)
 	c.res(4, &value)
+	c.bus.Tick(4)
 	c.bus.Write(addr, value)
-	c.bus.Tick(16)
+	c.bus.Tick(4)
 	return 16
 }
 
@@ -1498,11 +1524,13 @@ func opcode0xCBAD(c *CPU) int {
 // RES 5 (HL)
 // 0xCBAE:
 func opcode0xCBAE(c *CPU) int {
+	c.bus.Tick(8)
 	addr := c.getHL()
 	value := c.bus.Read(addr)
 	c.res(5, &value)
+	c.bus.Tick(4)
 	c.bus.Write(addr, value)
-	c.bus.Tick(16)
+	c.bus.Tick(4)
 	return 16
 }
 
@@ -1565,11 +1593,13 @@ func opcode0xCBB5(c *CPU) int {
 // RES 6 (HL)
 // 0xCBB6:
 func opcode0xCBB6(c *CPU) int {
+	c.bus.Tick(8)
 	addr := c.getHL()
 	value := c.bus.Read(addr)
 	c.res(6, &value)
+	c.bus.Tick(4)
 	c.bus.Write(addr, value)
-	c.bus.Tick(16)
+	c.bus.Tick(4)
 	return 16
 }
 
@@ -1632,11 +1662,13 @@ func opcode0xCBBD(c *CPU) int {
 // RES 7 (HL)
 // 0xCBBE:
 func opcode0xCBBE(c *CPU) int {
+	c.bus.Tick(8)
 	addr := c.getHL()
 	value := c.bus.Read(addr)
 	c.res(7, &value)
+	c.bus.Tick(4)
 	c.bus.Write(addr, value)
-	c.bus.Tick(16)
+	c.bus.Tick(4)
 	return 16
 }
 
@@ -1699,11 +1731,13 @@ func opcode0xCBC5(c *CPU) int {
 // SET 0 (HL)
 // 0xCBC6:
 func opcode0xCBC6(c *CPU) int {
+	c.bus.Tick(8)
 	addr := c.getHL()
 	value := c.bus.Read(addr)
 	c.set(0, &value)
+	c.bus.Tick(4)
 	c.bus.Write(addr, value)
-	c.bus.Tick(16)
+	c.bus.Tick(4)
 	return 16
 }
 
@@ -1766,11 +1800,13 @@ func opcode0xCBCD(c *CPU) int {
 // SET 1 (HL)
 // 0xCBCE:
 func opcode0xCBCE(c *CPU) int {
+	c.bus.Tick(8)
 	addr := c.getHL()
 	value := c.bus.Read(addr)
 	c.set(1, &value)
+	c.bus.Tick(4)
 	c.bus.Write(addr, value)
-	c.bus.Tick(16)
+	c.bus.Tick(4)
 	return 16
 }
 
@@ -1833,11 +1869,13 @@ func opcode0xCBD5(c *CPU) int {
 // SET 2 (HL)
 // 0xCBD6:
 func opcode0xCBD6(c *CPU) int {
+	c.bus.Tick(8)
 	addr := c.getHL()
 	value := c.bus.Read(addr)
 	c.set(2, &value)
+	c.bus.Tick(4)
 	c.bus.Write(addr, value)
-	c.bus.Tick(16)
+	c.bus.Tick(4)
 	return 16
 }
 
@@ -1900,11 +1938,13 @@ func opcode0xCBDD(c *CPU) int {
 // SET 3 (HL)
 // 0xCBDE:
 func opcode0xCBDE(c *CPU) int {
+	c.bus.Tick(8)
 	addr := c.getHL()
 	value := c.bus.Read(addr)
 	c.set(3, &value)
+	c.bus.Tick(4)
 	c.bus.Write(addr, value)
-	c.bus.Tick(16)
+	c.bus.Tick(4)
 	return 16
 }
 
@@ -1967,11 +2007,13 @@ func opcode0xCBE5(c *CPU) int {
 // SET 4 (HL)
 // 0xCBE6:
 func opcode0xCBE6(c *CPU) int {
+	c.bus.Tick(8)
 	addr := c.getHL()
 	value := c.bus.Read(addr)
 	c.set(4, &value)
+	c.bus.Tick(4)
 	c.bus.Write(addr, value)
-	c.bus.Tick(16)
+	c.bus.Tick(4)
 	return 16
 }
 
@@ -2034,11 +2076,13 @@ func opcode0xCBED(c *CPU) int {
 // SET 5 (HL)
 // 0xCBEE:
 func opcode0xCBEE(c *CPU) int {
+	c.bus.Tick(8)
 	addr := c.getHL()
 	value := c.bus.Read(addr)
 	c.set(5, &value)
+	c.bus.Tick(4)
 	c.bus.Write(addr, value)
-	c.bus.Tick(16)
+	c.bus.Tick(4)
 	return 16
 }
 
@@ -2101,11 +2145,13 @@ func opcode0xCBF5(c *CPU) int {
 // SET 6 (HL)
 // 0xCBF6:
 func opcode0xCBF6(c *CPU) int {
+	c.bus.Tick(8)
 	addr := c.getHL()
 	value := c.bus.Read(addr)
 	c.set(6, &value)
+	c.bus.Tick(4)
 	c.bus.Write(addr, value)
-	c.bus.Tick(16)
+	c.bus.Tick(4)
 	return 16
 }
 
@@ -2168,11 +2214,13 @@ func opcode0xCBFD(c *CPU) int {
 // SET 7 (HL)
 // 0xCBFE:
 func opcode0xCBFE(c *CPU) int {
+	c.bus.Tick(8)
 	addr := c.getHL()
 	value := c.bus.Read(addr)
 	c.set(7, &value)
+	c.bus.Tick(4)
 	c.bus.Write(addr, value)
-	c.bus.Tick(16)
+	c.bus.Tick(4)
 	return 16
 }
 

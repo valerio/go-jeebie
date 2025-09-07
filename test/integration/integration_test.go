@@ -113,10 +113,14 @@ func GetIntegrationTests() []IntegrationTestCase {
 			Name:      "mem_timing_01-read",
 		},
 		{
-			ROMPath:      "../../test-roms/game-boy-test-roms/blargg/mem_timing/individual/02-write_timing.gb",
-			MaxFrames:    500,
-			MinLoopCount: 10,
-			Name:         "mem_timing_02-write",
+			ROMPath:   "../../test-roms/game-boy-test-roms/blargg/mem_timing/individual/02-write_timing.gb",
+			MaxFrames: 60,
+			Name:      "mem_timing_02-write",
+		},
+		{
+			ROMPath:   "../../test-roms/game-boy-test-roms/blargg/mem_timing/individual/03-modify_timing.gb",
+			MaxFrames: 60,
+			Name:      "mem_timing_03-modify",
 		},
 	}
 
