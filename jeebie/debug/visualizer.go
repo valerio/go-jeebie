@@ -97,7 +97,9 @@ func extractSpriteDataInto(reader MemoryReader, currentLine uint8, vis *SpriteVi
 		}
 		s.TileData = vis.TileData[tileIndex]
 
-		s.OnScreen = sprite.Sprite.X < 168 && sprite.Sprite.Y < 152
+		x := int(s.X)
+		y := int(s.Y)
+		s.OnScreen = (x >= 0 && x < 160) && (y >= 0 && y < 144)
 
 		vis.Sprites[i] = s
 	}

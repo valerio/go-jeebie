@@ -179,12 +179,11 @@ func (dw *DebugWindow) renderSpritePanel() {
 	sprites := dw.spriteVis.Sprites
 	const spritesPerColumn = 14
 	const columnWidth = 200
-	const rowHeight = 20
+	const rowHeight = 18
 
 	for i := 0; i < len(sprites) && i < 40; i++ {
 		sprite := sprites[i]
 
-		// Calculate position (2 columns)
 		column := i / spritesPerColumn
 		row := i % spritesPerColumn
 		x := int32(20 + column*columnWidth)
@@ -193,9 +192,8 @@ func (dw *DebugWindow) renderSpritePanel() {
 		// Render the small sprite tile
 		dw.renderSmallSpriteTile(sprite.TileData, x, y)
 
-		// Determine text color based on visibility
 		textR, textG, textB := uint8(200), uint8(200), uint8(200)
-		if !sprite.Info.IsVisible {
+		if !sprite.OnScreen {
 			textR, textG, textB = 100, 100, 100
 		}
 
@@ -230,8 +228,7 @@ func (dw *DebugWindow) renderSpritePanel() {
 		}
 	}
 
-	// Legend at bottom
-	legendY := int32(45 + spritesPerColumn*rowHeight + 5)
+	legendY := panelRect.Y + panelRect.H - 20
 	DrawText(dw.renderer, "Format: ID:Tile (X,Y) | Flags: X=FlipX Y=FlipY B=BG 0/1=Palette",
 		20, legendY, 1, 150, 150, 150)
 }
@@ -644,15 +641,16 @@ func (dw *DebugWindow) renderWaveforms() {
 	}
 
 	waveHeight := int32(30)
+	labelPadding := int32(40)
 	waveY := int32(615)
-	waveStartX := int32(660)
+	waveStartX := int32(660) + labelPadding
 	waveEndX := int32(1260)
 	waveWidth := waveEndX - waveStartX
 
 	channelNames := []string{"CH1", "CH2", "CH3", "CH4", "MIX"}
 
 	for ch := 0; ch < 5; ch++ {
-		DrawText(dw.renderer, channelNames[ch], waveStartX-35, waveY+8, 1, colors[ch][0], colors[ch][1], colors[ch][2])
+		DrawText(dw.renderer, channelNames[ch], waveStartX-labelPadding+5, waveY+8, 1, colors[ch][0], colors[ch][1], colors[ch][2])
 
 		centerY := waveY + waveHeight/2
 
