@@ -79,9 +79,8 @@ var dutyPatterns = [4]uint8{
 	0b01111110, // 75% duty:   -++++++−
 }
 
-// Volume shift amounts for wave channel
-// Maps the 2-bit volume code to right-shift amount
-// 0: 100% (shift 0), 1: 50% (shift 1), 2: 25% (shift 2), 3: mute (shift 4)
+// Volume shift amounts for wave channel (NR32 bits 6-5)
+// 00: mute, 01: 100% (shift 0), 10: 50% (shift 1), 11: 25% (shift 2)
 var waveVolumeShift = [4]uint8{4, 0, 1, 2}
 
 // Register bit masks
