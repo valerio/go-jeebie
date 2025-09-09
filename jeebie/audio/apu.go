@@ -37,11 +37,6 @@ type ChannelState struct {
 // APU implements the Game Boy's Audio Processing Unit
 // Reference: https://gbdev.io/pandocs/Audio.html
 type APU struct {
-	// mu protects APU state during concurrent write operations
-	// Reads don't need protection for simple types (bool, uint8, uint16)
-	// but complex operations (like power-off clearing registers) do
-	mu sync.Mutex
-
 	enabled   bool       // Master audio enable (NR52 bit 7)
 	registers [0x30]byte // Audio registers FF10-FF3F (48 bytes)
 
@@ -154,9 +149,6 @@ func (a *APU) Tick(cycles int) {
 	if !a.enabled {
 		return
 	}
-
-	a.mu.Lock()
-	defer a.mu.Unlock()
 
 	// Track cycles for debugging
 	a.debugStats.cyclesProcessed += uint64(cycles)
@@ -338,14 +330,14 @@ func (a *APU) mixChannelsStereo() (int16, int16) {
 	// Apply panning (NR51) and master volume (NR50)
 	nr51 := a.ReadRegister(addr.NR51)
 	// NR51 bits mapping: left (SO2) bits 7..4 (ch4..ch1), right (SO1) bits 3..0 (ch4..ch1)
-	leftCh1 := (nr51 & (1 << 4)) != 0
-	leftCh2 := (nr51 & (1 << 5)) != 0
-	leftCh3 := (nr51 & (1 << 6)) != 0
-	leftCh4 := (nr51 & (1 << 7)) != 0
-	rightCh1 := (nr51 & (1 << 0)) != 0
-	rightCh2 := (nr51 & (1 << 1)) != 0
-	rightCh3 := (nr51 & (1 << 2)) != 0
-	rightCh4 := (nr51 & (1 << 3)) != 0
+	leftCh1 := bit.IsSet(4, nr51)
+	leftCh2 := bit.IsSet(5, nr51)
+	leftCh3 := bit.IsSet(6, nr51)
+	leftCh4 := bit.IsSet(7, nr51)
+	rightCh1 := bit.IsSet(0, nr51)
+	rightCh2 := bit.IsSet(1, nr51)
+	rightCh3 := bit.IsSet(2, nr51)
+	rightCh4 := bit.IsSet(3, nr51)
 
 	if leftCh1 {
 		leftMix += int32(ch1Val)
@@ -433,8 +425,6 @@ func (a *APU) generateChannel3() int16 {
 		return 0
 	}
 
-	// Remove old sample-count based hold; superseded by ch3FirstFetchPending logic
-
 	// Use fixed-point arithmetic for precise frequency
 	period := uint32(frequencyToTimerOffset-a.channels[2].freq) << fpShift
 	a.channels[2].counter += waveIncrement
@@ -507,14 +497,11 @@ func (a *APU) generateChannel4() int16 {
 	// Period is in fixed-point format (8.8), where 256 = 1 update per sample
 	updatesNeeded := 1
 	if a.channels[3].noisePeriod > 0 && a.channels[3].noisePeriod < highFrequencyThreshold {
-		updatesNeeded = highFrequencyThreshold / int(a.channels[3].noisePeriod)
-		if updatesNeeded > maxLFSRUpdatesPerSample {
-			updatesNeeded = maxLFSRUpdatesPerSample
-		}
+		updatesNeeded = min(highFrequencyThreshold/int(a.channels[3].noisePeriod), maxLFSRUpdatesPerSample)
 	}
 
 	// Update LFSR the required number of times
-	for i := 0; i < updatesNeeded; i++ {
+	for range updatesNeeded {
 		// LFSR feedback calculation
 		feedbackBit := (a.ch4LFSR & 1) ^ ((a.ch4LFSR >> 1) & 1)
 		a.ch4LFSR = (a.ch4LFSR >> 1) | (feedbackBit << 14)
@@ -581,7 +568,7 @@ func (a *APU) ReadRegister(address uint16) uint8 {
 		addr.WaveRAMStart + 12, addr.WaveRAMStart + 13, addr.WaveRAMStart + 14, addr.WaveRAMStart + 15:
 		// If CH3 is active (enabled + DAC on), return the currently accessed byte
 		// irrespective of the addressed offset. Otherwise, return addressed byte.
-		if a.channels[2].enabled && (a.registers[0x0A]&0x80) != 0 {
+		if a.channels[2].enabled && bit.IsSet(waveDACBit, a.registers[0x0A]) {
 			return a.ch3WaveRAM[a.ch3CurrentByteIndex%waveRAMSize]
 		}
 		byteIndex := address - addr.WaveRAMStart
@@ -591,34 +578,35 @@ func (a *APU) ReadRegister(address uint16) uint8 {
 		return 0xFF
 	default:
 		// Apply per-register read masks for NR10–NR51
+		// This is technically for accuracy, but not really necessary?
 		val := a.registers[index]
 		switch address {
 		case addr.NR10:
 			// Bit7 reads as 1
-			return (val & 0x7F) | 0x80
+			return val | 0b1000_0000
 		case addr.NR11:
 			// Duty readable, length (5-0) read as 1s
-			return (val & 0xC0) | 0x3F
+			return val | 0b0011_1111
 		case addr.NR12:
 			return val
 		case addr.NR14:
 			// Keep bits 6 and 2-0; trigger (7) and 5-3 read as 1s
-			return (val & 0x47) | 0xB8
+			return val | 0b1011_1000
 		case addr.NR21:
-			return (val & 0xC0) | 0x3F
+			return val | 0b0011_1111
 		case addr.NR22:
 			return val
 		case addr.NR24:
-			return (val & 0x47) | 0xB8
+			return val | 0b1011_1000
 		case addr.NR30:
 			// Bit7 is DAC enable; other bits read as 1
-			return (val & 0x80) | 0x7F
+			return val | 0b0111_1111
 		case addr.NR31:
 			// Write-only length
 			return 0xFF
 		case addr.NR32:
 			// Keep 6-5, others read as 1
-			return (val & 0x60) | 0x9F
+			return val | 0b1001_1111
 		case addr.NR34:
 			return (val & 0x47) | 0xB8
 		case addr.NR41:
@@ -627,10 +615,10 @@ func (a *APU) ReadRegister(address uint16) uint8 {
 			return val
 		case addr.NR44:
 			// Keep bit6; others read as 1 (trigger reads as 1)
-			return (val & 0x40) | 0xBF
+			return val | 0b1011_1111
 		case addr.NR50:
-			// Bit7 reads as 1; others readable
-			return val | 0x80
+			// Bit7 reads as 1
+			return val | 0b1000_0000
 		case addr.NR51:
 			return val
 		default:
@@ -652,9 +640,6 @@ func updateFrequencyHigh(current uint16, highBits uint8) uint16 {
 // WriteRegister writes to an audio register
 // Needs mutex protection as it modifies shared state
 func (a *APU) WriteRegister(address uint16, value uint8) {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-
 	if address < addr.AudioStart || address > addr.AudioEnd {
 		return
 	}
@@ -976,7 +961,6 @@ func (a *APU) GetSamples(count int) []int16 {
 	defer a.sampleBufferMu.Unlock()
 
 	if len(a.sampleBuffer) < count {
-		// Return only what we have; avoid zero-padding which can hide signal in tests
 		samples := make([]int16, len(a.sampleBuffer))
 		copy(samples, a.sampleBuffer)
 		a.sampleBuffer = a.sampleBuffer[:0]
@@ -989,9 +973,6 @@ func (a *APU) GetSamples(count int) []int16 {
 }
 
 func (a *APU) Reset() {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-
 	a.enabled = true
 	a.frameCounter = 0
 	a.frameCycles = 0
@@ -1009,9 +990,6 @@ func (a *APU) Reset() {
 
 // MuteChannel mutes or unmutes a specific audio channel for debugging
 func (a *APU) MuteChannel(channel int, muted bool) {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-
 	if channel >= 1 && channel <= 4 {
 		a.channels[channel-1].muted = muted
 	}
@@ -1019,9 +997,6 @@ func (a *APU) MuteChannel(channel int, muted bool) {
 
 // ToggleChannel toggles muting for a specific channel
 func (a *APU) ToggleChannel(channel int) {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-
 	if channel >= 1 && channel <= 4 {
 		a.channels[channel-1].muted = !a.channels[channel-1].muted
 	}
@@ -1029,9 +1004,6 @@ func (a *APU) ToggleChannel(channel int) {
 
 // SoloChannel mutes all channels except the specified one
 func (a *APU) SoloChannel(channel int) {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-
 	for i := range a.channels {
 		a.channels[i].muted = (i != channel-1)
 	}
@@ -1039,9 +1011,6 @@ func (a *APU) SoloChannel(channel int) {
 
 // UnmuteAll unmutes all channels
 func (a *APU) UnmuteAll() {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-
 	for i := range a.channels {
 		a.channels[i].muted = false
 	}
@@ -1058,8 +1027,5 @@ func (a *APU) GetChannelStatus() (ch1, ch2, ch3, ch4 bool) {
 // GetChannelVolumes returns the actual current volumes for all channels
 // This reflects the actual volume after envelope processing
 func (a *APU) GetChannelVolumes() (ch1, ch2, ch3, ch4 uint8) {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-
 	return a.channels[0].volume, a.channels[1].volume, a.channels[2].volume, a.channels[3].volume
 }
