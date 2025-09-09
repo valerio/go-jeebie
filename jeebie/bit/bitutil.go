@@ -74,3 +74,12 @@ func Low(value uint16) uint8 {
 func High(value uint16) uint8 {
 	return uint8(value >> 8)
 }
+
+// ExtractBits extracts bits from highBit to lowBit (inclusive)
+// Example: ExtractBits(0b11010110, 6, 4) -> 0b101 (extracts bits 6, 5, 4)
+func ExtractBits(value uint8, highBit, lowBit uint8) uint8 {
+	shift := lowBit
+	width := highBit - lowBit + 1
+	mask := uint8((1 << width) - 1)
+	return (value >> shift) & mask
+}

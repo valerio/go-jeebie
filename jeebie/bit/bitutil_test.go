@@ -206,3 +206,42 @@ func TestHigh(t *testing.T) {
 		}
 	}
 }
+
+func TestExtractBits(t *testing.T) {
+	tests := []struct {
+		name     string
+		value    uint8
+		highBit  uint8
+		lowBit   uint8
+		expected uint8
+	}{
+		{"extract bits 6-4", 0b1101_0110, 6, 4, 0b101},
+		{"extract bits 7-6", 0b1101_0110, 7, 6, 0b11},
+		{"extract bits 3-0", 0b1101_0110, 3, 0, 0b0110},
+		{"extract single bit 7", 0b1000_0000, 7, 7, 0b1},
+		{"extract single bit 0", 0b0000_0001, 0, 0, 0b1},
+		{"all zeros", 0b0000_0000, 7, 0, 0b0000_0000},
+		{"all ones", 0b1111_1111, 7, 0, 0b1111_1111},
+		{"extract middle bits", 0b0111_1110, 6, 1, 0b11_1111},
+		{"extract alternating pattern", 0b1010_1010, 7, 0, 0b1010_1010},
+
+		// Examples from audio registers
+		{"NR11 duty bits 7-6", 0b1101_0110, 7, 6, 0b11},        // duty = 3
+		{"NR11 length bits 5-0", 0b0011_1111, 5, 0, 0b11_1111}, // length = 63
+		{"NR12 volume bits 7-4", 0b1111_0000, 7, 4, 0b1111},    // volume = 15
+		{"NR12 envelope bits 2-0", 0b0000_0111, 2, 0, 0b111},   // pace = 7
+		{"NR10 sweep period 6-4", 0b0111_0000, 6, 4, 0b111},    // period = 7
+		{"NR32 output level 6-5", 0b0110_0000, 6, 5, 0b11},     // level = 3
+		{"NR43 shift bits 7-4", 0b1111_0000, 7, 4, 0b1111},     // shift = 15
+		{"NR43 divider bits 2-0", 0b0000_0111, 2, 0, 0b111},    // divider = 7
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := ExtractBits(tt.value, tt.highBit, tt.lowBit)
+			if result != tt.expected {
+				t.Errorf("ExtractBits(%08b, %d, %d) = %08b; want %08b", tt.value, tt.highBit, tt.lowBit, result, tt.expected)
+			}
+		})
+	}
+}
