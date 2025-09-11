@@ -153,7 +153,125 @@ func TestAPU_SampleGeneration(t *testing.T) {
 	t.Skip("Sample generation not implemented yet")
 }
 
-// TODO: Add tests for trigger behavior
-func TestAPU_TriggerBehavior(t *testing.T) {
-	t.Skip("Trigger behavior not implemented yet")
+func TestAPU_SweepCalculation(t *testing.T) {
+	tests := []struct {
+		name         string
+		shadowFreq   uint16
+		sweepStep    uint8
+		sweepDown    bool
+		wantFreq     uint16
+		wantOverflow bool
+	}{
+		{
+			name:       "no shift returns same frequency",
+			shadowFreq: 1024, sweepStep: 0, sweepDown: false,
+			wantFreq: 1024, wantOverflow: false,
+		},
+		{
+			name:       "sweep up increases period",
+			shadowFreq: 1024, sweepStep: 1, sweepDown: false,
+			wantFreq: 1536, wantOverflow: false, // 1024 + (1024 >> 1)
+		},
+		{
+			name:       "sweep down decreases period",
+			shadowFreq: 1024, sweepStep: 2, sweepDown: true,
+			wantFreq: 768, wantOverflow: false, // 1024 - (1024 >> 2)
+		},
+		{
+			name:       "overflow detection",
+			shadowFreq: 2000, sweepStep: 3, sweepDown: false,
+			wantFreq: 2250, wantOverflow: true, // 2000 + (2000 >> 3) = 2250 > 2047
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ch := &Channel{
+				shadowFreq: tt.shadowFreq,
+				sweepStep:  tt.sweepStep,
+				sweepDown:  tt.sweepDown,
+			}
+			gotFreq, gotOverflow := ch.calculateSweepFrequency()
+			assert.Equal(t, tt.wantFreq, gotFreq)
+			assert.Equal(t, tt.wantOverflow, gotOverflow)
+		})
+	}
+}
+
+func TestAPU_SweepTrigger(t *testing.T) {
+	apu := New()
+	apu.WriteRegister(addr.NR52, 0x80) // Enable APU
+	apu.WriteRegister(addr.NR10, 0x11) // period=1, up, shift=1
+	apu.WriteRegister(addr.NR13, 0x00)
+	apu.WriteRegister(addr.NR14, 0x04) // Frequency = 0x400
+	apu.WriteRegister(addr.NR12, 0xF0) // Enable DAC
+	apu.WriteRegister(addr.NR14, 0x84) // Trigger
+
+	assert.True(t, apu.ch[0].sweepEnabled)
+	assert.Equal(t, uint16(1024), apu.ch[0].shadowFreq)
+	assert.Equal(t, uint8(1), apu.ch[0].sweepTimer)
+	assert.True(t, apu.ch[0].enabled)
+}
+
+func TestAPU_SweepOverflow(t *testing.T) {
+	apu := New()
+	apu.WriteRegister(addr.NR52, 0x80)
+	apu.WriteRegister(addr.NR10, 0x01) // period=0, up, shift=1
+	apu.WriteRegister(addr.NR13, 0xFF)
+	apu.WriteRegister(addr.NR14, 0x07) // Frequency = 0x7FF (2047)
+	apu.WriteRegister(addr.NR12, 0xF0)
+	apu.WriteRegister(addr.NR14, 0x87) // Trigger
+
+	assert.False(t, apu.ch[0].enabled, "Channel should be disabled due to overflow")
+}
+
+func TestAPU_SweepTimer(t *testing.T) {
+	apu := New()
+	apu.WriteRegister(addr.NR52, 0x80)
+	apu.WriteRegister(addr.NR10, 0x21) // period=2, up, shift=1
+	apu.WriteRegister(addr.NR13, 0x00)
+	apu.WriteRegister(addr.NR14, 0x04) // Frequency = 0x400
+	apu.WriteRegister(addr.NR12, 0xF0)
+	apu.WriteRegister(addr.NR14, 0x84) // Trigger
+
+	initialFreq := apu.ch[0].shadowFreq
+
+	apu.tickSweep()
+	assert.Equal(t, initialFreq, apu.ch[0].shadowFreq, "No change on first tick")
+
+	apu.tickSweep()
+	expectedFreq := uint16(1536) // 1024 + 512
+	assert.Equal(t, expectedFreq, apu.ch[0].shadowFreq)
+	assert.Equal(t, expectedFreq, apu.ch[0].period)
+
+	reconstructed := uint16(apu.NR14&0x07)<<8 | uint16(apu.NR13)
+	assert.Equal(t, expectedFreq, reconstructed, "NR13/NR14 should be updated")
+}
+
+func TestAPU_LengthTimer(t *testing.T) {
+	apu := New()
+	apu.WriteRegister(addr.NR52, 0x80)
+	apu.WriteRegister(addr.NR12, 0xF0)
+	apu.WriteRegister(addr.NR11, 0x3F) // Length timer = 63
+	apu.WriteRegister(addr.NR14, 0xC0) // Trigger with length enable
+
+	assert.Equal(t, uint16(1), apu.ch[0].length) // 64 - 63 = 1
+	assert.True(t, apu.ch[0].enabled)
+
+	apu.tickLength()
+	assert.False(t, apu.ch[0].enabled, "Channel should be disabled after length expires")
+}
+
+func TestAPU_CH3LengthTimer(t *testing.T) {
+	apu := New()
+	apu.WriteRegister(addr.NR52, 0x80)
+	apu.WriteRegister(addr.NR30, 0x80) // Enable CH3 DAC
+	apu.WriteRegister(addr.NR31, 0xFF) // Length timer = 255
+	apu.WriteRegister(addr.NR34, 0xC0) // Trigger with length enable
+
+	assert.Equal(t, uint16(1), apu.ch[2].length) // 256 - 255 = 1
+	assert.True(t, apu.ch[2].enabled)
+
+	apu.tickLength()
+	assert.False(t, apu.ch[2].enabled, "CH3 should be disabled after length expires")
 }

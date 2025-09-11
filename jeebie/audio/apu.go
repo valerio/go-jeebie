@@ -185,7 +185,7 @@ func (a *APU) tickSweep() {
 	if !ch.sweepEnabled {
 		return
 	}
-	if ch.sweepPeriod == 0 || ch.sweepStep == 0 {
+	if ch.sweepStep == 0 {
 		return
 	}
 
@@ -433,6 +433,9 @@ func (a *APU) mapRegistersToState() {
 		// On trigger, reset sweep timer and shadow frequency
 		a.ch[0].sweepEnabled = a.ch[0].sweepPeriod > 0 || a.ch[0].sweepStep > 0
 		a.ch[0].sweepTimer = a.ch[0].sweepPeriod
+		if a.ch[0].sweepTimer == 0 {
+			a.ch[0].sweepTimer = 8
+		}
 		a.ch[0].shadowFreq = a.ch[0].period
 
 		// Dummy calculation to immediately disable channel if overflow
