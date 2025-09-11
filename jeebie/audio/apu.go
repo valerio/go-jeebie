@@ -228,10 +228,12 @@ func (a *APU) ReadRegister(address uint16) uint8 {
 // WriteRegister stores the value of the given register/memory, then updates
 // internal state accordingly.
 func (a *APU) WriteRegister(address uint16, value uint8) {
+	isInWaveRAM := address >= addr.WaveRAMStart && address <= addr.WaveRAMEnd
 
-	// TODO: power off logic
-	// if setting NR52 bit7 to 0, disable all channels, clear most registers to known values
-	// and ignore writes to audio regs except NR52/RAM
+	if !a.enabled && address != addr.NR52 && !isInWaveRAM {
+		// and ignore writes to audio regs except NR52/RAM when powered off
+		return
+	}
 
 	switch address {
 	case addr.NR10:
@@ -280,7 +282,7 @@ func (a *APU) WriteRegister(address uint16, value uint8) {
 		// ignore
 	}
 
-	if address >= addr.WaveRAMStart && address <= addr.WaveRAMEnd {
+	if isInWaveRAM {
 		a.waveRAM[address-addr.WaveRAMStart] = value
 	}
 
@@ -292,6 +294,16 @@ func (a *APU) mapRegistersToState() {
 	// 7: Audio on/off | 6-4: Always 1 | 3: CH4 on | 2: CH3 on | 1: CH2 on | 0: CH1 on
 	a.enabled = bit.IsSet(7, a.NR52) // audio on/off
 	// Bits 3-0 are read-only, ignore writes.
+
+	if !a.enabled {
+		// If setting NR52 bit7 to 0, disable all channels,
+		// set all registers to 0x00 except NR52
+		a.NR10, a.NR11, a.NR12, a.NR13, a.NR14 = 0, 0, 0, 0, 0
+		a.NR21, a.NR22, a.NR23, a.NR24 = 0, 0, 0, 0
+		a.NR30, a.NR31, a.NR32, a.NR33, a.NR34 = 0, 0, 0, 0, 0
+		a.NR41, a.NR42, a.NR43, a.NR44 = 0, 0, 0, 0
+		a.NR50, a.NR51 = 0, 0
+	}
 
 	// NR51 - Sound Panning
 	// 7: CH4L | 6: CH3L | 5: CH2L | 4: CH1L | 3: CH4R | 2: CH3R | 1: CH2R | 0: CH1R
