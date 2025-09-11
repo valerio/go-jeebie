@@ -9,12 +9,6 @@ import (
 // CH1 (square+sweep), CH2 (square), CH3 (wave), CH4 (noise), all mixed to stereo output.
 // This is basically a bunch of counters and timers that tick at certain frequency steps!
 //
-// TODO: Implement frame sequencer that runs at 512 Hz with this step table:
-//
-//	Step 0,2,4,6: compute length counters (256 Hz)
-//	Step 2,6: compute sweep for CH1 (128 Hz)
-//	Step 7: compute envelopes for CH1,CH2,CH4 (64 Hz)
-//
 // TODO: Implement sample generation at ~44.1 kHz for audio output.
 //
 // TODO: Implement trigger behavior (NRx4 bit 7) to restart channel state.
@@ -28,13 +22,17 @@ type APU struct {
 	vinLeft, vinRight bool  // from NR50, not used in DMG
 	volLeft, volRight uint8 // volume for left/right, values 0 to 7
 
+	// frame sequencer state
+	step   int // current step (0-7)
+	cycles int // cycles since last frame sequencer tick
+
 	// raw memory + registers
 	NR10, NR11, NR12, NR13, NR14 uint8 // Channel 1
 	NR21, NR22, NR23, NR24       uint8 // Channel 2
 	NR30, NR31, NR32, NR33, NR34 uint8 // Channel 3
 	NR41, NR42, NR43, NR44       uint8 // Channel 4
 	NR50, NR51, NR52             uint8 // Global controls
-	waveRAM                      [16]uint8
+	waveRAM                      [waveRAMSize]uint8
 }
 
 // Channel represents one of the four APU channels.
@@ -55,7 +53,7 @@ type Channel struct {
 	left, right bool
 
 	duty   uint8 // for square waves, values 0 to 3
-	timer  uint8 // initial length timer value, 6 bits for ch1-2-4 -> values 0 to 64, 8 bits for ch3 -> values 0 to 256
+	timer  uint8 // initial length timer value, 6 bits for ch1-2-4 -> values 0 to 63, 8 bits for ch3 -> values 0 to 255
 	length uint8 // current length counter, this is set to timer on a trigger, then it counts down to 0
 	volume uint8 // initial volume, 4 bits -> values 0 to 15
 
@@ -82,17 +80,75 @@ type Channel struct {
 
 func New() *APU { return &APU{} }
 
-// Tick advances the APU by CPU cycles.
+// Tick advances the APU by CPU T-cycles.
 func (a *APU) Tick(cycles int) {
 	if !a.enabled {
 		return
 	}
 
-	// TODO: Implement APU timing with these components:
-	//   - Frame sequencer at 512 Hz (every 8192 CPU cycles)
-	//   - Sample generation at ~44.1 kHz (every ~95 CPU cycles)
-	//   - Call clockLength(), clockSweep(), clockEnvelope() per frame step table above
-	//   - Generate and mix samples from all 4 channels
+	a.cycles += cycles
+
+	// Every 512Hz, advance the frame sequencer
+	for a.cycles >= cyclesPerStep {
+		a.cycles -= cyclesPerStep
+		a.tickSequence()
+	}
+}
+
+// tickSequence advances the sequencer by one step.
+// We advance one step every 512Hz (8192 T-cycles), then
+// depending on the step we tick length, sweep, and/or envelope.
+//
+//	Step | Length (256Hz) | Sweep (128Hz) | Envelope (64Hz)
+//	------------------------------------------------------
+//	0    | yes            | -             | -
+//	1    | -              | -             | -
+//	2    | yes            | yes           | -
+//	3    | -              | -             | -
+//	4    | yes            | -             | -
+//	5    | -              | -             | -
+//	6    | yes            | yes           | -
+//	7    | -              | -             | yes
+func (a *APU) tickSequence() {
+	switch a.step {
+	case 0:
+		a.tickLength()
+	case 2:
+		a.tickLength()
+		a.tickSweep()
+	case 4:
+		a.tickLength()
+	case 6:
+		a.tickLength()
+		a.tickSweep()
+	case 7:
+		a.tickEnvelope()
+	}
+
+	a.step++
+	a.step %= 8
+}
+
+func (a *APU) tickLength() {
+	// Length counters: when enabled, decrement each channel's length counter
+	// When length reaches 0, disable the channel (except for wave channel which has different behavior)
+	// CH1/CH2/CH4: length = (64 - NRx1), counts down from 64 to 0
+	// CH3: length = (256 - NR31), counts down from 256 to 0
+}
+
+func (a *APU) tickSweep() {
+	// CH1 frequency sweep: calculates new frequency based on shadow frequency and sweep parameters
+	// If sweep period > 0 and enabled, decrement period counter
+	// When period reaches 0: calculate new frequency = shadow ± (shadow >> shift)
+	// If new frequency > 2047, disable channel
+	// Reload period counter with sweep period value
+}
+
+func (a *APU) tickEnvelope() {
+	// Volume envelope for CH1/CH2/CH4: when envelope period > 0, decrement period counter
+	// When period reaches 0: adjust volume up/down based on direction
+	// If volume would go outside 0-15 range, stop envelope
+	// Reload period counter with envelope period value
 }
 
 // ReadRegister returns masked register values.
@@ -230,11 +286,7 @@ func (a *APU) mapRegistersToState() {
 	// NR52 - Master Audio Control
 	// 7: Audio on/off | 6-4: Always 1 | 3: CH4 on | 2: CH3 on | 1: CH2 on | 0: CH1 on
 	a.enabled = bit.IsSet(7, a.NR52) // audio on/off
-	for i := range 4 {
-		// TODO: pandocs say these should be read-only.
-		// might just replace this with setting enabled directly for debug/testing
-		a.ch[i].enabled = bit.IsSet(uint8(i), a.NR52)
-	}
+	// Bits 3-0 are read-only, ignore writes.
 
 	// NR51 - Sound Panning
 	// 7: CH4L | 6: CH3L | 5: CH2L | 4: CH1L | 3: CH4R | 2: CH3R | 1: CH2R | 0: CH1R
@@ -278,7 +330,7 @@ func (a *APU) mapRegistersToState() {
 	// TODO: when this is set, handle trigger behavior
 	a.ch[0].trigger = bit.IsSet(7, a.NR14)
 
-	// DAC for a channel is enabled if initial volume > 0 or envelope is increasing
+	// DAC for a channel is enabled if initial volume > 0 or envelope is increasing (i.e. bits 7-3 are not all zero)
 	a.ch[0].dacEnabled = (a.ch[0].volume > 0) || a.ch[0].envelopeUp
 
 	// Channel 2 (Square) - NR21-NR24
