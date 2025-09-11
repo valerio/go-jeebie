@@ -52,15 +52,18 @@ type Channel struct {
 	// can be both or neither, if neither it's effectively muted (we don't mix it)
 	left, right bool
 
-	duty   uint8 // for square waves, values 0 to 3
-	timer  uint8 // initial length timer value, 6 bits for ch1-2-4 -> values 0 to 63, 8 bits for ch3 -> values 0 to 255
-	length uint8 // current length counter, this is set to timer on a trigger, then it counts down to 0
-	volume uint8 // initial volume, 4 bits -> values 0 to 15
+	duty   uint8  // for square waves, values 0 to 3
+	timer  uint8  // initial length timer value, 6 bits for ch1-2-4 -> values 0 to 63, 8 bits for ch3 -> values 0 to 255
+	length uint16 // current length counter, can hold up to 256 for CH3
+	volume uint8  // initial volume, 4 bits -> values 0 to 15
 
 	// Frequency sweep (CH1 only)
-	sweepPeriod uint8 // "pace" per pandocs (NR10 6-4), 3 bits -> values 0 to 7
-	sweepDown   bool  // sweep direction, 0=up, 1=down
-	sweepStep   uint8 // sweep step, 3 bits -> values 0 to 7
+	sweepPeriod  uint8  // "pace" per pandocs (NR10 6-4), 3 bits -> values 0 to 7
+	sweepDown    bool   // sweep direction, 0=up, 1=down
+	sweepStep    uint8  // sweep step, 3 bits -> values 0 to 7
+	sweepEnabled bool   // true if sweep is enabled (either period or step non-zero)
+	sweepTimer   uint8  // timer for sweep calculations
+	shadowFreq   uint16 // shadow frequency for sweep calculations
 
 	envelopePace uint8 // NRx2 bits 7-4, 3 bits -> values 0 to 7
 	envelopeUp   bool  // NRx2 bit 3, 0=down, 1=up
@@ -79,6 +82,28 @@ type Channel struct {
 
 	// Debug state
 	muted bool // separate from enabled/dac
+}
+
+// calculateSweepFrequency performs the sweep frequency calculation.
+func (ch *Channel) calculateSweepFrequency() (newFreq uint16, overflow bool) {
+	if ch.sweepStep == 0 {
+		return ch.shadowFreq, false
+	}
+
+	freqChange := ch.shadowFreq >> ch.sweepStep
+	if ch.sweepDown {
+		// Subtract mode - check for underflow
+		if freqChange > ch.shadowFreq {
+			newFreq = 0
+		} else {
+			newFreq = ch.shadowFreq - freqChange
+		}
+	} else {
+		newFreq = ch.shadowFreq + freqChange
+	}
+
+	overflow = newFreq > 2047
+	return newFreq, overflow
 }
 
 func New() *APU {
@@ -139,14 +164,60 @@ func (a *APU) tickLength() {
 	// When length reaches 0, disable the channel (except for wave channel which has different behavior)
 	// CH1/CH2/CH4: length = (64 - NRx1), counts down from 64 to 0
 	// CH3: length = (256 - NR31), counts down from 256 to 0
+
+	for i := range 4 {
+		if a.ch[i].lengthEnable && a.ch[i].enabled && a.ch[i].length > 0 {
+			a.ch[i].length--
+
+			// if length reaches 0, disable channel
+			if a.ch[i].length == 0 {
+				a.ch[i].enabled = false
+			}
+		}
+	}
+
 }
 
 func (a *APU) tickSweep() {
-	// CH1 frequency sweep: calculates new frequency based on shadow frequency and sweep parameters
-	// If sweep period > 0 and enabled, decrement period counter
-	// When period reaches 0: calculate new frequency = shadow ± (shadow >> shift)
-	// If new frequency > 2047, disable channel
-	// Reload period counter with sweep period value
+	// Frequency sweep only applies to CH1 (channel 0)
+	ch := &a.ch[0]
+
+	if !ch.sweepEnabled {
+		return
+	}
+	if ch.sweepPeriod == 0 || ch.sweepStep == 0 {
+		return
+	}
+
+	// tick down, we continue only if it reaches 0
+	ch.sweepTimer--
+	if ch.sweepTimer > 0 {
+		return
+	}
+
+	ch.sweepTimer = ch.sweepPeriod
+	if ch.sweepTimer == 0 {
+		ch.sweepTimer = 8
+	}
+
+	// Calculate the change amount by shifting the shadow frequency
+	// Turn off on overflow (>2047).
+	newFrequency, overflow := ch.calculateSweepFrequency()
+	if overflow {
+		ch.enabled = false
+		return
+	}
+	// Update the frequency registers (NR13/NR14 11 bits total)
+	ch.shadowFreq = newFrequency
+	ch.period = newFrequency
+	a.NR14 = (a.NR14 & 0b11111000) | uint8((newFrequency>>8)&0b111)
+	a.NR13 = uint8(newFrequency)
+
+	// Do the calculation AGAIN for overflow check only
+	// (This weird behavior is documented in Pan Docs)
+	if _, overflow := ch.calculateSweepFrequency(); overflow {
+		ch.enabled = false
+	}
 }
 
 func (a *APU) tickEnvelope() {
@@ -325,6 +396,11 @@ func (a *APU) mapRegistersToState() {
 	a.ch[0].sweepDown = bit.IsSet(3, a.NR10)
 	a.ch[0].sweepStep = bit.ExtractBits(a.NR10, 2, 0)
 
+	// TODO: Implement "negate mode"
+	// If sweep direction changes from 1 to 0 (sweepDown true -> false) after at least one
+	// sweep calculation has been made in subtract mode since the last trigger,
+	// the channel should be immediately disabled.
+
 	// NR11 - Channel 1 Length Timer & Duty Cycle
 	// 7-6: Duty | 5-0: Length Timer (0-63, actual = 64-value)
 	a.ch[0].duty = bit.ExtractBits(a.NR11, 7, 6)
@@ -336,6 +412,9 @@ func (a *APU) mapRegistersToState() {
 	a.ch[0].envelopeUp = bit.IsSet(3, a.NR12)
 	a.ch[0].envelopePace = bit.ExtractBits(a.NR12, 2, 0)
 
+	// DAC for a channel is enabled if initial volume > 0 or envelope is increasing (i.e. bits 7-3 are not all zero)
+	a.ch[0].dacEnabled = (a.ch[0].volume > 0) || a.ch[0].envelopeUp
+
 	// frequency = 131072/(2048-value) Hz
 	// NR13 - 7-0: low bits of period for Channel 1
 	// NR14 - 2-0: upper 3 bits of period for Channel 1
@@ -344,11 +423,29 @@ func (a *APU) mapRegistersToState() {
 	// NR14 - Channel 1 Frequency High & Control
 	// 7: Trigger | 6: Length Enable | 5-3: - | 2-0: Upper 3 bits of freq
 	a.ch[0].lengthEnable = bit.IsSet(6, a.NR14)
-	// TODO: when this is set, handle trigger behavior
 	a.ch[0].trigger = bit.IsSet(7, a.NR14)
+	if a.ch[0].trigger {
+		if a.ch[0].dacEnabled {
+			a.ch[0].enabled = true
+			a.ch[0].length = 64 - uint16(a.ch[0].timer)
+		}
 
-	// DAC for a channel is enabled if initial volume > 0 or envelope is increasing (i.e. bits 7-3 are not all zero)
-	a.ch[0].dacEnabled = (a.ch[0].volume > 0) || a.ch[0].envelopeUp
+		// On trigger, reset sweep timer and shadow frequency
+		a.ch[0].sweepEnabled = a.ch[0].sweepPeriod > 0 || a.ch[0].sweepStep > 0
+		a.ch[0].sweepTimer = a.ch[0].sweepPeriod
+		a.ch[0].shadowFreq = a.ch[0].period
+
+		// Dummy calculation to immediately disable channel if overflow
+		if a.ch[0].sweepStep != 0 {
+			if _, overflow := a.ch[0].calculateSweepFrequency(); overflow {
+				a.ch[0].enabled = false
+			}
+		}
+
+		// reset the bit, since it's write-only this effectively gets triggered only on a write from 0 to 1
+		a.NR14 = bit.Reset(7, a.NR14)
+		a.ch[0].trigger = false
+	}
 
 	// Channel 2 (Square) - NR21-NR24
 
@@ -363,6 +460,9 @@ func (a *APU) mapRegistersToState() {
 	a.ch[1].envelopeUp = bit.IsSet(3, a.NR22)
 	a.ch[1].envelopePace = bit.ExtractBits(a.NR22, 2, 0)
 
+	// DAC for a channel is enabled if initial volume > 0 or envelope is increasing
+	a.ch[1].dacEnabled = (a.ch[1].volume > 0) || a.ch[1].envelopeUp
+
 	// frequency = 131072/(2048-value) Hz
 	// NR23 - 7-0: low bits of period for Channel 2
 	// NR24 - 2-0: upper 3 bits of period for Channel 2
@@ -371,10 +471,16 @@ func (a *APU) mapRegistersToState() {
 	// NR24 - Channel 2 Frequency High & Control
 	// 7: Trigger | 6: Length Enable | 5-3: - | 2-0: Upper 3 bits of freq
 	a.ch[1].lengthEnable = bit.IsSet(6, a.NR24)
-	a.ch[1].trigger = bit.IsSet(7, a.NR24) // TODO: handle trigger behavior
-
-	// DAC for a channel is enabled if initial volume > 0 or envelope is increasing
-	a.ch[1].dacEnabled = (a.ch[1].volume > 0) || a.ch[1].envelopeUp
+	a.ch[1].trigger = bit.IsSet(7, a.NR24)
+	if a.ch[1].trigger {
+		if a.ch[1].dacEnabled {
+			a.ch[1].enabled = true
+			a.ch[1].length = 64 - uint16(a.ch[1].timer)
+		}
+		// reset the bit, since it's write-only this effectively gets triggered only on a write from 0 to 1
+		a.NR24 = bit.Reset(7, a.NR24)
+		a.ch[1].trigger = false
+	}
 
 	// Channel 3 (Wave) - NR30-NR34
 
@@ -399,7 +505,16 @@ func (a *APU) mapRegistersToState() {
 	// NR34 - Channel 3 Frequency High & Control
 	// 7: Trigger | 6: Length Enable | 5-3: - | 2-0: Upper 3 bits of freq
 	a.ch[2].lengthEnable = bit.IsSet(6, a.NR34)
-	a.ch[2].trigger = bit.IsSet(7, a.NR34) // TODO: handle trigger behavior
+	a.ch[2].trigger = bit.IsSet(7, a.NR34)
+	if a.ch[2].trigger {
+		if a.ch[2].dacEnabled {
+			a.ch[2].enabled = true
+			a.ch[2].length = 256 - uint16(a.ch[2].timer)
+		}
+		// reset the bit, since it's write-only this effectively gets triggered only on a write from 0 to 1
+		a.NR34 = bit.Reset(7, a.NR34)
+		a.ch[2].trigger = false
+	}
 
 	// Channel 4 (Noise) - NR41-NR44
 
@@ -420,13 +535,22 @@ func (a *APU) mapRegistersToState() {
 	a.ch[3].use7bitLFSR = bit.IsSet(3, a.NR43)
 	a.ch[3].divider = bit.ExtractBits(a.NR43, 2, 0)
 
+	// DAC for a channel is enabled if initial volume > 0 or envelope is increasing
+	a.ch[3].dacEnabled = (a.ch[3].volume > 0) || a.ch[3].envelopeUp
+
 	// NR44 - Channel 4 Control
 	// 7: Trigger | 6: Length Enable | 5-0: -
 	a.ch[3].lengthEnable = bit.IsSet(6, a.NR44)
-	a.ch[3].trigger = bit.IsSet(7, a.NR44) // TODO: handle trigger behavior
-
-	// DAC for a channel is enabled if initial volume > 0 or envelope is increasing
-	a.ch[3].dacEnabled = (a.ch[3].volume > 0) || a.ch[3].envelopeUp
+	a.ch[3].trigger = bit.IsSet(7, a.NR44)
+	if a.ch[3].trigger {
+		if a.ch[3].dacEnabled {
+			a.ch[3].enabled = true
+			a.ch[3].length = 64 - uint16(a.ch[3].timer)
+		}
+		// reset the bit, since it's write-only this effectively gets triggered only on a write from 0 to 1
+		a.NR44 = bit.Reset(7, a.NR44)
+		a.ch[3].trigger = false
+	}
 }
 
 // GetSamples returns interleaved stereo samples.
