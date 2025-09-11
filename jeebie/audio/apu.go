@@ -76,9 +76,14 @@ type Channel struct {
 	divider     uint8  // from NR43, 3 bits -> values 0 to 7
 
 	dacEnabled bool // for channel 3, DAC enable flag
+
+	// Debug state
+	muted bool // separate from enabled/dac
 }
 
-func New() *APU { return &APU{} }
+func New() *APU {
+	return &APU{}
+}
 
 // Tick advances the APU by CPU T-cycles.
 func (a *APU) Tick(cycles int) {
@@ -416,11 +421,48 @@ func (a *APU) mapRegistersToState() {
 func (a *APU) GetSamples(count int) []int16 { return nil }
 
 // Debug helpers required by Provider.
-func (a *APU) MuteChannel(channel int, muted bool)        {}
-func (a *APU) ToggleChannel(channel int)                  {}
-func (a *APU) SoloChannel(channel int)                    {}
-func (a *APU) UnmuteAll()                                 {}
-func (a *APU) GetChannelStatus() (bool, bool, bool, bool) { return false, false, false, false }
+
+// ToggleChannel toggles the mute state of a channel.
+func (a *APU) ToggleChannel(idx int) {
+	if idx < 0 || idx >= 4 {
+		return
+	}
+	a.ch[idx].muted = !a.ch[idx].muted
+}
+
+// SoloChannel sets a channel to solo mode (only that channel is heard).
+// Calling with the same channel again disables solo.
+func (a *APU) SoloChannel(channel int) {
+	if channel < 0 || channel >= 4 {
+		return
+	}
+
+	// if the channel is already soloed, unmute all channels
+	if !a.ch[channel].muted {
+		for i := range a.ch {
+			a.ch[i].muted = false
+		}
+	}
+
+	for i := range a.ch {
+		if i == channel {
+			a.ch[i].muted = false
+		} else {
+			a.ch[i].muted = true
+		}
+	}
+}
+
+// GetChannelStatus returns the enabled status of each channel.
+// This reflects whether the channel is currently producing sound,
+// not whether it's muted/soloed for debug purposes.
+func (a *APU) GetChannelStatus() (bool, bool, bool, bool) {
+	return a.ch[0].enabled, a.ch[1].enabled, a.ch[2].enabled, a.ch[3].enabled
+}
 
 // GetChannelVolumes returns actual post-envelope volumes per channel.
-func (a *APU) GetChannelVolumes() (ch1, ch2, ch3, ch4 uint8) { return 0, 0, 0, 0 }
+// For now returns the initial volumes; will be updated when envelope is implemented.
+func (a *APU) GetChannelVolumes() (ch1, ch2, ch3, ch4 uint8) {
+	// TODO: return actual post-envelope volumes
+	return a.ch[0].volume, a.ch[1].volume, a.ch[2].volume, a.ch[3].volume
+}
