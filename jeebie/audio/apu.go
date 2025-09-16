@@ -240,7 +240,7 @@ func (a *APU) ReadRegister(address uint16) uint8 {
 	case addr.NR13:
 		return 0xFF // write-only reg
 	case addr.NR14:
-		return a.NR14 | 0b1011_1000
+		return a.NR14 | 0b1011_1111
 	case addr.NR21:
 		return a.NR21 | 0b0011_1111
 	case addr.NR22:
@@ -248,7 +248,7 @@ func (a *APU) ReadRegister(address uint16) uint8 {
 	case addr.NR23:
 		return 0xFF // write-only reg
 	case addr.NR24:
-		return a.NR24 | 0b1011_1000
+		return a.NR24 | 0b1011_1111
 	case addr.NR30:
 		return a.NR30 | 0b0111_1111
 	case addr.NR31:
@@ -258,7 +258,7 @@ func (a *APU) ReadRegister(address uint16) uint8 {
 	case addr.NR33:
 		return 0xFF // write-only reg
 	case addr.NR34:
-		return a.NR34 | 0b1011_1000
+		return a.NR34 | 0b1011_1111
 	case addr.NR41:
 		return 0xFF // write-only reg
 	case addr.NR42:
@@ -268,7 +268,7 @@ func (a *APU) ReadRegister(address uint16) uint8 {
 	case addr.NR44:
 		return a.NR44 | 0b1011_1111
 	case addr.NR50:
-		return a.NR50 | 0b1000_0000
+		return a.NR50
 	case addr.NR51:
 		return a.NR51
 	case addr.NR52:
@@ -374,6 +374,9 @@ func (a *APU) mapRegistersToState() {
 		a.NR30, a.NR31, a.NR32, a.NR33, a.NR34 = 0, 0, 0, 0, 0
 		a.NR41, a.NR42, a.NR43, a.NR44 = 0, 0, 0, 0
 		a.NR50, a.NR51 = 0, 0
+		for i := range a.ch {
+			a.ch[i].enabled = false
+		}
 	}
 
 	// NR51 - Sound Panning

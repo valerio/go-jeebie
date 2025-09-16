@@ -81,6 +81,8 @@ func TestAPU_RegisterMapping(t *testing.T) {
 func TestAPU_ReadMasks(t *testing.T) {
 	apu := New()
 
+	apu.WriteRegister(addr.NR52, 0x80)
+
 	// Write-only registers should return 0xFF
 	for _, addr := range []uint16{addr.NR13, addr.NR23, addr.NR33, addr.NR41} {
 		apu.WriteRegister(addr, 0x00)
