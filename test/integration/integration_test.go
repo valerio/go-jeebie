@@ -123,12 +123,12 @@ func GetIntegrationTests() []IntegrationTestCase {
 			Name:      "mem_timing_03-modify",
 		},
 		{
-			ROMPath:   "../../external/gb-test-roms/dmg_sound/rom_singles/01-registers.gb",
+			ROMPath:   "../../test-roms/gb-test-roms/dmg_sound/rom_singles/01-registers.gb",
 			MaxFrames: 60,
 			Name:      "dmg_sound_01-registers",
 		},
 		{
-			ROMPath:   "../../external/gb-test-roms/dmg_sound/rom_singles/02-len ctr.gb",
+			ROMPath:   "../../test-roms/gb-test-roms/dmg_sound/rom_singles/02-len ctr.gb",
 			MaxFrames: 600,
 			Name:      "dmg_sound_02-len_ctr",
 		},
