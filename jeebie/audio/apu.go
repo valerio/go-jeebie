@@ -317,7 +317,9 @@ func (a *APU) WriteRegister(address uint16, value uint8) {
 	case addr.NR13:
 		a.NR13 = value
 	case addr.NR14:
+		oldNR14 := a.NR14
 		a.NR14 = value
+		a.extraLengthClocking(oldNR14, value, 0)
 	case addr.NR21:
 		a.NR21 = value
 		a.ch[1].length = 64 - uint16(bit.ExtractBits(value, 5, 0))
@@ -326,7 +328,9 @@ func (a *APU) WriteRegister(address uint16, value uint8) {
 	case addr.NR23:
 		a.NR23 = value
 	case addr.NR24:
+		oldNR24 := a.NR24
 		a.NR24 = value
+		a.extraLengthClocking(oldNR24, value, 1)
 	case addr.NR30:
 		a.NR30 = value
 	case addr.NR31:
@@ -337,7 +341,9 @@ func (a *APU) WriteRegister(address uint16, value uint8) {
 	case addr.NR33:
 		a.NR33 = value
 	case addr.NR34:
+		oldNR34 := a.NR34
 		a.NR34 = value
+		a.extraLengthClocking(oldNR34, value, 2)
 	case addr.NR41:
 		a.NR41 = value
 		a.ch[3].length = 64 - uint16(bit.ExtractBits(value, 5, 0))
@@ -346,7 +352,9 @@ func (a *APU) WriteRegister(address uint16, value uint8) {
 	case addr.NR43:
 		a.NR43 = value
 	case addr.NR44:
+		oldNR44 := a.NR44
 		a.NR44 = value
+		a.extraLengthClocking(oldNR44, value, 3)
 	case addr.NR50:
 		a.NR50 = value
 	case addr.NR51:
@@ -362,6 +370,22 @@ func (a *APU) WriteRegister(address uint16, value uint8) {
 	}
 
 	a.mapRegistersToState()
+}
+
+// extraLengthClocking checks if there's a 0 to 1 transition on length enable bit (bit 6),
+// then decrements length once if we are in a step that doesn't normally clock length.
+// This implements "Extra length clocking occurs when writing to NRx4" as detailed
+// in https://gbdev.io/pandocs/Audio_details.html#obscure-behavior
+func (a *APU) extraLengthClocking(prev, curr uint8, chIdx int) {
+	if !bit.IsSet(6, prev) && bit.IsSet(6, curr) {
+		if a.step%2 == 1 && a.ch[chIdx].length > 0 {
+			a.ch[chIdx].length--
+
+			if a.ch[chIdx].length == 0 {
+				a.ch[chIdx].enabled = false
+			}
+		}
+	}
 }
 
 func (a *APU) mapRegistersToState() {

@@ -277,3 +277,66 @@ func TestAPU_CH3LengthTimer(t *testing.T) {
 	apu.tickLength()
 	assert.False(t, apu.ch[2].enabled, "CH3 should be disabled after length expires")
 }
+
+// Reproduces the behavior from dmg_sound test 3: "Enabling in first half of length period should clock length"
+func TestAPU_LengthEnableClocking(t *testing.T) {
+	tests := []struct {
+		name          string
+		channelIndex  int
+		lengthAddr    uint16
+		controlAddr   uint16
+		lengthWrite   uint8
+		initialLen    uint16
+		sequencerStep int
+		wantLen       uint16
+	}{
+		{
+			name:          "ch1_first_half_should_clock",
+			channelIndex:  0,
+			lengthAddr:    addr.NR11,
+			controlAddr:   addr.NR14,
+			lengthWrite:   64 - 2, // length = 2
+			initialLen:    2,
+			sequencerStep: 1, // step that doesn't clock length
+			wantLen:       1, // should be clocked when enabling
+		},
+		{
+			name:          "ch1_second_half_should_not_clock",
+			channelIndex:  0,
+			lengthAddr:    addr.NR11,
+			controlAddr:   addr.NR14,
+			lengthWrite:   64 - 2, // length = 2
+			initialLen:    2,
+			sequencerStep: 0, // step that clocks length
+			wantLen:       2, // should not be clocked when enabling
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			a := New()
+			a.WriteRegister(addr.NR52, 0x80) // Enable APU
+
+			// Set up sequencer step
+			a.step = tc.sequencerStep
+			a.cycles = 0
+
+			// Initialize channel with length but length disabled
+			a.WriteRegister(tc.controlAddr, 0x00)
+			a.WriteRegister(tc.lengthAddr, tc.lengthWrite)
+
+			// Verify initial length
+			if got := a.ch[tc.channelIndex].length; got != tc.initialLen {
+				t.Fatalf("length setup mismatch: got %d want %d", got, tc.initialLen)
+			}
+
+			// Enable length counter (write 0x40 to set bit 6)
+			a.WriteRegister(tc.controlAddr, 0x40)
+
+			// Check if length was clocked
+			if got := a.ch[tc.channelIndex].length; got != tc.wantLen {
+				t.Errorf("length after enable = %d, want %d", got, tc.wantLen)
+			}
+		})
+	}
+}
