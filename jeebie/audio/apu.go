@@ -166,7 +166,7 @@ func (a *APU) tickLength() {
 	// CH3: length = (256 - NR31), counts down from 256 to 0
 
 	for i := range 4 {
-		if a.ch[i].lengthEnable && a.ch[i].enabled && a.ch[i].length > 0 {
+		if a.ch[i].lengthEnable && a.ch[i].length > 0 {
 			a.ch[i].length--
 
 			// if length reaches 0, disable channel
@@ -311,6 +311,7 @@ func (a *APU) WriteRegister(address uint16, value uint8) {
 		a.NR10 = value
 	case addr.NR11:
 		a.NR11 = value
+		a.ch[0].length = 64 - uint16(bit.ExtractBits(value, 5, 0))
 	case addr.NR12:
 		a.NR12 = value
 	case addr.NR13:
@@ -319,6 +320,7 @@ func (a *APU) WriteRegister(address uint16, value uint8) {
 		a.NR14 = value
 	case addr.NR21:
 		a.NR21 = value
+		a.ch[1].length = 64 - uint16(bit.ExtractBits(value, 5, 0))
 	case addr.NR22:
 		a.NR22 = value
 	case addr.NR23:
@@ -329,6 +331,7 @@ func (a *APU) WriteRegister(address uint16, value uint8) {
 		a.NR30 = value
 	case addr.NR31:
 		a.NR31 = value
+		a.ch[2].length = 256 - uint16(value)
 	case addr.NR32:
 		a.NR32 = value
 	case addr.NR33:
@@ -337,6 +340,7 @@ func (a *APU) WriteRegister(address uint16, value uint8) {
 		a.NR34 = value
 	case addr.NR41:
 		a.NR41 = value
+		a.ch[3].length = 64 - uint16(bit.ExtractBits(value, 5, 0))
 	case addr.NR42:
 		a.NR42 = value
 	case addr.NR43:
@@ -430,7 +434,9 @@ func (a *APU) mapRegistersToState() {
 	if a.ch[0].trigger {
 		if a.ch[0].dacEnabled {
 			a.ch[0].enabled = true
-			a.ch[0].length = 64 - uint16(a.ch[0].timer)
+			if a.ch[0].length == 0 {
+				a.ch[0].length = 64
+			}
 		}
 
 		// On trigger, reset sweep timer and shadow frequency
@@ -481,7 +487,9 @@ func (a *APU) mapRegistersToState() {
 	if a.ch[1].trigger {
 		if a.ch[1].dacEnabled {
 			a.ch[1].enabled = true
-			a.ch[1].length = 64 - uint16(a.ch[1].timer)
+			if a.ch[1].length == 0 {
+				a.ch[1].length = 64
+			}
 		}
 		// reset the bit, since it's write-only this effectively gets triggered only on a write from 0 to 1
 		a.NR24 = bit.Reset(7, a.NR24)
@@ -515,7 +523,9 @@ func (a *APU) mapRegistersToState() {
 	if a.ch[2].trigger {
 		if a.ch[2].dacEnabled {
 			a.ch[2].enabled = true
-			a.ch[2].length = 256 - uint16(a.ch[2].timer)
+			if a.ch[2].length == 0 {
+				a.ch[2].length = 256
+			}
 		}
 		// reset the bit, since it's write-only this effectively gets triggered only on a write from 0 to 1
 		a.NR34 = bit.Reset(7, a.NR34)
@@ -551,11 +561,20 @@ func (a *APU) mapRegistersToState() {
 	if a.ch[3].trigger {
 		if a.ch[3].dacEnabled {
 			a.ch[3].enabled = true
-			a.ch[3].length = 64 - uint16(a.ch[3].timer)
+			if a.ch[3].length == 0 {
+				a.ch[3].length = 64
+			}
 		}
 		// reset the bit, since it's write-only this effectively gets triggered only on a write from 0 to 1
 		a.NR44 = bit.Reset(7, a.NR44)
 		a.ch[3].trigger = false
+	}
+
+	// disable channel immediately if DAC is off
+	for i := range a.ch {
+		if !a.ch[i].dacEnabled {
+			a.ch[i].enabled = false
+		}
 	}
 }
 
