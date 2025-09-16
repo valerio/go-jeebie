@@ -448,3 +448,105 @@ func TestAPU_TriggerUnfreezesEnabledLength(t *testing.T) {
 		}
 	}
 }
+
+func TestAPU_TriggerEffectsWithDisabledDAC(t *testing.T) {
+	channelCases := []struct {
+		name        string
+		index       int
+		lengthAddr  uint16
+		controlAddr uint16
+		lengthWrite uint8
+		maxLen      uint16
+		disableDAC  func(a *APU)
+		enableDAC   func(a *APU)
+	}{
+		{
+			name:        "ch1",
+			index:       0,
+			lengthAddr:  addr.NR11,
+			controlAddr: addr.NR14,
+			lengthWrite: 0x3F,
+			maxLen:      64,
+			disableDAC: func(a *APU) {
+				a.WriteRegister(addr.NR12, 0x07)
+			},
+			enableDAC: func(a *APU) {
+				a.WriteRegister(addr.NR12, 0xF0)
+			},
+		},
+		{
+			name:        "ch2",
+			index:       1,
+			lengthAddr:  addr.NR21,
+			controlAddr: addr.NR24,
+			lengthWrite: 0x3F,
+			maxLen:      64,
+			disableDAC: func(a *APU) {
+				a.WriteRegister(addr.NR22, 0x07)
+			},
+			enableDAC: func(a *APU) {
+				a.WriteRegister(addr.NR22, 0xF0)
+			},
+		},
+		{
+			name:        "ch3",
+			index:       2,
+			lengthAddr:  addr.NR31,
+			controlAddr: addr.NR34,
+			lengthWrite: 0xFF,
+			maxLen:      256,
+			disableDAC: func(a *APU) {
+				a.WriteRegister(addr.NR30, 0x00)
+			},
+			enableDAC: func(a *APU) {
+				a.WriteRegister(addr.NR30, 0x80)
+			},
+		},
+		{
+			name:        "ch4",
+			index:       3,
+			lengthAddr:  addr.NR41,
+			controlAddr: addr.NR44,
+			lengthWrite: 0x3F,
+			maxLen:      64,
+			disableDAC: func(a *APU) {
+				a.WriteRegister(addr.NR42, 0x07)
+			},
+			enableDAC: func(a *APU) {
+				a.WriteRegister(addr.NR42, 0xF0)
+			},
+		},
+	}
+
+	for _, cc := range channelCases {
+		t.Run(cc.name, func(t *testing.T) {
+			a := New()
+			a.WriteRegister(addr.NR52, 0x80)
+			cc.disableDAC(a)
+
+			a.WriteRegister(cc.controlAddr, 0x00)
+			a.WriteRegister(cc.lengthAddr, cc.lengthWrite)
+			a.step = 1
+			a.cycles = 0
+
+			a.WriteRegister(cc.controlAddr, 0xC0)
+			if got := a.ch[cc.index].length; got != cc.maxLen-1 {
+				t.Fatalf("after trigger with DAC disabled: length=%d want %d", got, cc.maxLen-1)
+			}
+			if a.ch[cc.index].enabled {
+				t.Fatalf("channel %s should stay disabled when DAC off", cc.name)
+			}
+
+			cc.enableDAC(a)
+			a.WriteRegister(cc.controlAddr, 0x80)
+
+			want := cc.maxLen - 1
+			if got := a.ch[cc.index].length; got != want {
+				t.Fatalf("after re-enabling DAC trigger: length=%d want %d", got, want)
+			}
+			if !a.ch[cc.index].enabled {
+				t.Fatalf("channel %s should be enabled after DAC reenabled trigger", cc.name)
+			}
+		})
+	}
+}

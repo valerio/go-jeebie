@@ -453,18 +453,19 @@ func (a *APU) mapRegistersToState() {
 	// NR14 - Channel 1 Frequency High & Control
 	// 7: Trigger | 6: Length Enable | 5-3: - | 2-0: Upper 3 bits of freq
 	prevLenEnable := a.ch[0].lengthEnable
-	lengthWasZero := a.ch[0].length == 0
+	lengthBefore := a.ch[0].length
+	lengthWasZero := lengthBefore == 0
 	triggered := bit.IsSet(7, a.NR14)
 	a.ch[0].lengthEnable = bit.IsSet(6, a.NR14)
+	clockOnEnable := !prevLenEnable && a.ch[0].lengthEnable && a.step%2 == 1 && lengthBefore > 0
 	a.ch[0].trigger = triggered
 	if a.ch[0].trigger {
+		if triggered && (lengthWasZero || (clockOnEnable && lengthBefore == 1)) {
+			a.ch[0].length = 64
+		}
 		if a.ch[0].dacEnabled {
 			a.ch[0].enabled = true
-			if a.ch[0].length == 0 {
-				a.ch[0].length = 64
-			}
 		}
-
 		// On trigger, reset sweep timer and shadow frequency
 		a.ch[0].sweepEnabled = a.ch[0].sweepPeriod > 0 || a.ch[0].sweepStep > 0
 		a.ch[0].sweepTimer = a.ch[0].sweepPeriod
@@ -510,16 +511,18 @@ func (a *APU) mapRegistersToState() {
 	// NR24 - Channel 2 Frequency High & Control
 	// 7: Trigger | 6: Length Enable | 5-3: - | 2-0: Upper 3 bits of freq
 	prevLenEnable = a.ch[1].lengthEnable
-	lengthWasZero = a.ch[1].length == 0
+	lengthBefore = a.ch[1].length
+	lengthWasZero = lengthBefore == 0
 	triggered = bit.IsSet(7, a.NR24)
 	a.ch[1].lengthEnable = bit.IsSet(6, a.NR24)
+	clockOnEnable = !prevLenEnable && a.ch[1].lengthEnable && a.step%2 == 1 && lengthBefore > 0
 	a.ch[1].trigger = triggered
 	if a.ch[1].trigger {
+		if triggered && (lengthWasZero || (clockOnEnable && lengthBefore == 1)) {
+			a.ch[1].length = 64
+		}
 		if a.ch[1].dacEnabled {
 			a.ch[1].enabled = true
-			if a.ch[1].length == 0 {
-				a.ch[1].length = 64
-			}
 		}
 		// reset the bit, since it's write-only this effectively gets triggered only on a write from 0 to 1
 		a.NR24 = bit.Reset(7, a.NR24)
@@ -550,16 +553,18 @@ func (a *APU) mapRegistersToState() {
 	// NR34 - Channel 3 Frequency High & Control
 	// 7: Trigger | 6: Length Enable | 5-3: - | 2-0: Upper 3 bits of freq
 	prevLenEnable = a.ch[2].lengthEnable
-	lengthWasZero = a.ch[2].length == 0
+	lengthBefore = a.ch[2].length
+	lengthWasZero = lengthBefore == 0
 	triggered = bit.IsSet(7, a.NR34)
 	a.ch[2].lengthEnable = bit.IsSet(6, a.NR34)
+	clockOnEnable = !prevLenEnable && a.ch[2].lengthEnable && a.step%2 == 1 && lengthBefore > 0
 	a.ch[2].trigger = triggered
 	if a.ch[2].trigger {
+		if triggered && (lengthWasZero || (clockOnEnable && lengthBefore == 1)) {
+			a.ch[2].length = 256
+		}
 		if a.ch[2].dacEnabled {
 			a.ch[2].enabled = true
-			if a.ch[2].length == 0 {
-				a.ch[2].length = 256
-			}
 		}
 		// reset the bit, since it's write-only this effectively gets triggered only on a write from 0 to 1
 		a.NR34 = bit.Reset(7, a.NR34)
@@ -592,16 +597,18 @@ func (a *APU) mapRegistersToState() {
 	// NR44 - Channel 4 Control
 	// 7: Trigger | 6: Length Enable | 5-0: -
 	prevLenEnable = a.ch[3].lengthEnable
-	lengthWasZero = a.ch[3].length == 0
+	lengthBefore = a.ch[3].length
+	lengthWasZero = lengthBefore == 0
 	triggered = bit.IsSet(7, a.NR44)
 	a.ch[3].lengthEnable = bit.IsSet(6, a.NR44)
+	clockOnEnable = !prevLenEnable && a.ch[3].lengthEnable && a.step%2 == 1 && lengthBefore > 0
 	a.ch[3].trigger = triggered
 	if a.ch[3].trigger {
+		if triggered && (lengthWasZero || (clockOnEnable && lengthBefore == 1)) {
+			a.ch[3].length = 64
+		}
 		if a.ch[3].dacEnabled {
 			a.ch[3].enabled = true
-			if a.ch[3].length == 0 {
-				a.ch[3].length = 64
-			}
 		}
 		// reset the bit, since it's write-only this effectively gets triggered only on a write from 0 to 1
 		a.NR44 = bit.Reset(7, a.NR44)
