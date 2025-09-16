@@ -71,15 +71,15 @@ A snapshot of the screen is taken at the end of each test, and compared to a ref
     <td align="center"><img src="test/integration/testdata/snapshots/dmg-acid2.png" width="160" /><br><sub>dmg-acid2 ✅</sub></td>
   </tr>
   <tr>
+    <td align="center"><img src="test/integration/testdata/snapshots/dmg_sound_01-registers.png" width="160" /><br><sub>dmg_sound_01-registers ✅</sub></td>
+    <td align="center"><img src="test/integration/testdata/snapshots/dmg_sound_02-len_ctr.png" width="160" /><br><sub>dmg_sound_02-len_ctr ✅</sub></td>
     <td align="center"><img src="test/integration/testdata/snapshots/halt_bug.png" width="160" /><br><sub>halt_bug ✅</sub></td>
     <td align="center"><img src="test/integration/testdata/snapshots/instr_timing.png" width="160" /><br><sub>instr_timing ✅</sub></td>
-    <td align="center"><img src="test/integration/testdata/snapshots/mem_timing_01-read.png" width="160" /><br><sub>mem_timing_01-read ✅</sub></td>
-    <td align="center"><img src="test/integration/testdata/snapshots/mem_timing_02-write.png" width="160" /><br><sub>mem_timing_02-write ✅</sub></td>
   </tr>
   <tr>
+    <td align="center"><img src="test/integration/testdata/snapshots/mem_timing_01-read.png" width="160" /><br><sub>mem_timing_01-read ✅</sub></td>
+    <td align="center"><img src="test/integration/testdata/snapshots/mem_timing_02-write.png" width="160" /><br><sub>mem_timing_02-write ✅</sub></td>
     <td align="center"><img src="test/integration/testdata/snapshots/mem_timing_03-modify.png" width="160" /><br><sub>mem_timing_03-modify ✅</sub></td>
-    <td></td>
-    <td></td>
     <td></td>
   </tr>
 </table>
