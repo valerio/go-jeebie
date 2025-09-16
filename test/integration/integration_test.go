@@ -122,6 +122,11 @@ func GetIntegrationTests() []IntegrationTestCase {
 			MaxFrames: 60,
 			Name:      "mem_timing_03-modify",
 		},
+		{
+			ROMPath:   "../../external/gb-test-roms/dmg_sound/rom_singles/01-registers.gb",
+			MaxFrames: 60,
+			Name:      "dmg_sound_01-registers",
+		},
 	}
 
 	return tests
