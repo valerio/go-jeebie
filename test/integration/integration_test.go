@@ -127,6 +127,11 @@ func GetIntegrationTests() []IntegrationTestCase {
 			MaxFrames: 60,
 			Name:      "dmg_sound_01-registers",
 		},
+		{
+			ROMPath:   "../../external/gb-test-roms/dmg_sound/rom_singles/02-len ctr.gb",
+			MaxFrames: 600,
+			Name:      "dmg_sound_02-len_ctr",
+		},
 	}
 
 	return tests
