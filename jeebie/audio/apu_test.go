@@ -340,3 +340,111 @@ func TestAPU_LengthEnableClocking(t *testing.T) {
 		})
 	}
 }
+
+func TestAPU_TriggerUnfreezesEnabledLength(t *testing.T) {
+	channelCases := []struct {
+		name        string
+		index       int
+		lengthAddr  uint16
+		controlAddr uint16
+		lengthWrite uint8
+		maxLen      uint16
+		init        func(a *APU)
+	}{
+		{
+			name:        "ch1",
+			index:       0,
+			lengthAddr:  addr.NR11,
+			controlAddr: addr.NR14,
+			lengthWrite: 0x3F, // length = 1
+			maxLen:      64,
+			init: func(a *APU) {
+				a.WriteRegister(addr.NR12, 0xF0) // enable DAC
+			},
+		},
+		{
+			name:        "ch2",
+			index:       1,
+			lengthAddr:  addr.NR21,
+			controlAddr: addr.NR24,
+			lengthWrite: 0x3F, // length = 1
+			maxLen:      64,
+			init: func(a *APU) {
+				a.WriteRegister(addr.NR22, 0xF0)
+			},
+		},
+		{
+			name:        "ch3",
+			index:       2,
+			lengthAddr:  addr.NR31,
+			controlAddr: addr.NR34,
+			lengthWrite: 0xFF, // length = 1
+			maxLen:      256,
+			init: func(a *APU) {
+				a.WriteRegister(addr.NR30, 0x80)
+			},
+		},
+		{
+			name:        "ch4",
+			index:       3,
+			lengthAddr:  addr.NR41,
+			controlAddr: addr.NR44,
+			lengthWrite: 0x3F, // length = 1
+			maxLen:      64,
+			init: func(a *APU) {
+				a.WriteRegister(addr.NR42, 0xF0)
+			},
+		},
+	}
+
+	variants := []struct {
+		name        string
+		disableStep bool
+	}{
+		{name: "with_disable", disableStep: true},
+		{name: "without_disable", disableStep: false},
+	}
+
+	for _, cc := range channelCases {
+		for _, variant := range variants {
+			cc := cc
+			variant := variant
+			t.Run(cc.name+"_"+variant.name, func(t *testing.T) {
+				a := New()
+				a.WriteRegister(addr.NR52, 0x80) // power on APU
+				cc.init(a)
+
+				// ensure known state
+				a.WriteRegister(cc.controlAddr, 0x00)
+				a.WriteRegister(cc.lengthAddr, cc.lengthWrite)
+				if got := a.ch[cc.index].length; got != 1 {
+					t.Fatalf("length setup mismatch: got %d want 1", got)
+				}
+
+				a.step = 1 // first half of length period
+				a.cycles = 0
+
+				a.WriteRegister(cc.controlAddr, 0x40)
+				if got := a.ch[cc.index].length; got != 0 {
+					t.Fatalf("enable clock mismatch: got %d want 0", got)
+				}
+				if a.ch[cc.index].enabled {
+					t.Fatalf("channel %s should be disabled when length hits zero", cc.name)
+				}
+
+				if variant.disableStep {
+					a.WriteRegister(cc.controlAddr, 0x00)
+				}
+
+				a.WriteRegister(cc.controlAddr, 0xC0)
+				wantLen := cc.maxLen - 1
+				if got := a.ch[cc.index].length; got != wantLen {
+					t.Fatalf("trigger clock mismatch: got %d want %d", got, wantLen)
+				}
+				if !a.ch[cc.index].enabled {
+					t.Fatalf("channel %s should be enabled after trigger", cc.name)
+				}
+			})
+		}
+	}
+}
