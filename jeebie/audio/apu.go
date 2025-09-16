@@ -364,21 +364,33 @@ func (a *APU) WriteRegister(address uint16, value uint8) {
 	a.mapRegistersToState()
 }
 
-// handleLengthEnableTransition applies the "extra length clocking" rule when
-// length enable transitions from 0->1 during the first half of the sequencer
-// period. If a trigger just reloaded the length counter from zero, the
-// lengthWasZero+triggered combination forces an extra clock even if the bit
-// was already enabled.
-// See https://gbdev.io/pandocs/Audio_details.html#obscure-behavior.
-func (a *APU) handleLengthEnableTransition(prevEnabled, lengthWasZero, triggered bool, chIdx int) {
+// handleLengthEnableTransition centralizes the oddities around enabling length
+// and triggering channels:
+//   - enabling length in the second half of a sequencer period clocks once
+//   - triggers reload length from zero before that clock
+//   - a trigger after a clocked-to-zero reloads before the forced extra clock
+//   - the extra clock also occurs while already enabled when a trigger reloads
+//     from zero (the "force" path)
+//
+// Reference: https://gbdev.io/pandocs/Audio_details.html#obscure-behavior.
+func (a *APU) handleLengthEnableTransition(prevEnabled bool, lengthBefore uint16, triggered bool, maxLength uint16, chIdx int) {
 	ch := &a.ch[chIdx]
+	lengthWasZero := lengthBefore == 0
+	clockOnEnable := !prevEnabled && ch.lengthEnable && a.step%2 == 1 && lengthBefore > 0
+
+	if triggered && (lengthWasZero || (clockOnEnable && lengthBefore == 1)) {
+		ch.length = maxLength
+	}
+
 	if !ch.lengthEnable {
 		return
 	}
+
 	forceClock := lengthWasZero && triggered && ch.length > 0
 	if !forceClock && prevEnabled {
 		return
 	}
+
 	if a.step%2 == 1 && ch.length > 0 {
 		ch.length--
 		if ch.length == 0 {
@@ -454,15 +466,10 @@ func (a *APU) mapRegistersToState() {
 	// 7: Trigger | 6: Length Enable | 5-3: - | 2-0: Upper 3 bits of freq
 	prevLenEnable := a.ch[0].lengthEnable
 	lengthBefore := a.ch[0].length
-	lengthWasZero := lengthBefore == 0
 	triggered := bit.IsSet(7, a.NR14)
 	a.ch[0].lengthEnable = bit.IsSet(6, a.NR14)
-	clockOnEnable := !prevLenEnable && a.ch[0].lengthEnable && a.step%2 == 1 && lengthBefore > 0
 	a.ch[0].trigger = triggered
 	if a.ch[0].trigger {
-		if triggered && (lengthWasZero || (clockOnEnable && lengthBefore == 1)) {
-			a.ch[0].length = 64
-		}
 		if a.ch[0].dacEnabled {
 			a.ch[0].enabled = true
 		}
@@ -485,7 +492,7 @@ func (a *APU) mapRegistersToState() {
 		a.NR14 = bit.Reset(7, a.NR14)
 		a.ch[0].trigger = false
 	}
-	a.handleLengthEnableTransition(prevLenEnable, lengthWasZero, triggered, 0)
+	a.handleLengthEnableTransition(prevLenEnable, lengthBefore, triggered, 64, 0)
 
 	// Channel 2 (Square) - NR21-NR24
 
@@ -512,15 +519,10 @@ func (a *APU) mapRegistersToState() {
 	// 7: Trigger | 6: Length Enable | 5-3: - | 2-0: Upper 3 bits of freq
 	prevLenEnable = a.ch[1].lengthEnable
 	lengthBefore = a.ch[1].length
-	lengthWasZero = lengthBefore == 0
 	triggered = bit.IsSet(7, a.NR24)
 	a.ch[1].lengthEnable = bit.IsSet(6, a.NR24)
-	clockOnEnable = !prevLenEnable && a.ch[1].lengthEnable && a.step%2 == 1 && lengthBefore > 0
 	a.ch[1].trigger = triggered
 	if a.ch[1].trigger {
-		if triggered && (lengthWasZero || (clockOnEnable && lengthBefore == 1)) {
-			a.ch[1].length = 64
-		}
 		if a.ch[1].dacEnabled {
 			a.ch[1].enabled = true
 		}
@@ -528,7 +530,7 @@ func (a *APU) mapRegistersToState() {
 		a.NR24 = bit.Reset(7, a.NR24)
 		a.ch[1].trigger = false
 	}
-	a.handleLengthEnableTransition(prevLenEnable, lengthWasZero, triggered, 1)
+	a.handleLengthEnableTransition(prevLenEnable, lengthBefore, triggered, 64, 1)
 
 	// Channel 3 (Wave) - NR30-NR34
 
@@ -554,15 +556,10 @@ func (a *APU) mapRegistersToState() {
 	// 7: Trigger | 6: Length Enable | 5-3: - | 2-0: Upper 3 bits of freq
 	prevLenEnable = a.ch[2].lengthEnable
 	lengthBefore = a.ch[2].length
-	lengthWasZero = lengthBefore == 0
 	triggered = bit.IsSet(7, a.NR34)
 	a.ch[2].lengthEnable = bit.IsSet(6, a.NR34)
-	clockOnEnable = !prevLenEnable && a.ch[2].lengthEnable && a.step%2 == 1 && lengthBefore > 0
 	a.ch[2].trigger = triggered
 	if a.ch[2].trigger {
-		if triggered && (lengthWasZero || (clockOnEnable && lengthBefore == 1)) {
-			a.ch[2].length = 256
-		}
 		if a.ch[2].dacEnabled {
 			a.ch[2].enabled = true
 		}
@@ -570,7 +567,7 @@ func (a *APU) mapRegistersToState() {
 		a.NR34 = bit.Reset(7, a.NR34)
 		a.ch[2].trigger = false
 	}
-	a.handleLengthEnableTransition(prevLenEnable, lengthWasZero, triggered, 2)
+	a.handleLengthEnableTransition(prevLenEnable, lengthBefore, triggered, 256, 2)
 
 	// Channel 4 (Noise) - NR41-NR44
 
@@ -598,15 +595,10 @@ func (a *APU) mapRegistersToState() {
 	// 7: Trigger | 6: Length Enable | 5-0: -
 	prevLenEnable = a.ch[3].lengthEnable
 	lengthBefore = a.ch[3].length
-	lengthWasZero = lengthBefore == 0
 	triggered = bit.IsSet(7, a.NR44)
 	a.ch[3].lengthEnable = bit.IsSet(6, a.NR44)
-	clockOnEnable = !prevLenEnable && a.ch[3].lengthEnable && a.step%2 == 1 && lengthBefore > 0
 	a.ch[3].trigger = triggered
 	if a.ch[3].trigger {
-		if triggered && (lengthWasZero || (clockOnEnable && lengthBefore == 1)) {
-			a.ch[3].length = 64
-		}
 		if a.ch[3].dacEnabled {
 			a.ch[3].enabled = true
 		}
@@ -614,7 +606,7 @@ func (a *APU) mapRegistersToState() {
 		a.NR44 = bit.Reset(7, a.NR44)
 		a.ch[3].trigger = false
 	}
-	a.handleLengthEnableTransition(prevLenEnable, lengthWasZero, triggered, 3)
+	a.handleLengthEnableTransition(prevLenEnable, lengthBefore, triggered, 64, 3)
 
 	// disable channel immediately if DAC is off
 	for i := range a.ch {
