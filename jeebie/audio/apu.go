@@ -471,13 +471,13 @@ func (a *APU) tickSweep() {
 		ch.enabled = false
 		return
 	}
+	// Mark negate-used on any subtract-mode calculation tick, even if shift==0.
+	if ch.sweepDown {
+		ch.sweepNegUsed = true
+	}
 	// If shift==0, do not update frequency on tick
 	if ch.sweepStep == 0 {
 		return
-	}
-	if ch.sweepDown {
-		// Per Pan Docs: Performing a subtract sweep marks the negate flag
-		ch.sweepNegUsed = true
 	}
 	// Update the frequency registers (NR13/NR14 11 bits total)
 	ch.shadowFreq = newFrequency
@@ -837,6 +837,9 @@ func (a *APU) mapRegistersToState() {
 
 		// Dummy calculation to immediately disable channel if overflow
 		if a.ch[0].sweepStep != 0 {
+			if a.ch[0].sweepDown {
+				a.ch[0].sweepNegUsed = true
+			}
 			if _, overflow := a.ch[0].calculateSweepFrequency(); overflow {
 				a.ch[0].enabled = false
 			}
