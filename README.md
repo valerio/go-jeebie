@@ -73,6 +73,12 @@ A snapshot of the screen is taken at the end of each test, and compared to a ref
   <tr>
     <td align="center"><img src="test/integration/testdata/snapshots/dmg_sound_01-registers.png" width="160" /><br><sub>dmg_sound_01-registers ✅</sub></td>
     <td align="center"><img src="test/integration/testdata/snapshots/dmg_sound_02-len_ctr.png" width="160" /><br><sub>dmg_sound_02-len_ctr ✅</sub></td>
+    <td align="center"><img src="test/integration/testdata/snapshots/dmg_sound_03-trigger.png" width="160" /><br><sub>dmg_sound_03-trigger ✅</sub></td>
+    <td align="center"><img src="test/integration/testdata/snapshots/dmg_sound_04-sweep.png" width="160" /><br><sub>dmg_sound_04-sweep ✅</sub></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="test/integration/testdata/snapshots/dmg_sound_05-sweep_details.png" width="160" /><br><sub>dmg_sound_05-sweep_details ✅</sub></td>
+    <td align="center"><img src="test/integration/testdata/snapshots/dmg_sound_06-overflow_trigger.png" width="160" /><br><sub>dmg_sound_06-overflow_trigger ✅</sub></td>
     <td align="center"><img src="test/integration/testdata/snapshots/halt_bug.png" width="160" /><br><sub>halt_bug ✅</sub></td>
     <td align="center"><img src="test/integration/testdata/snapshots/instr_timing.png" width="160" /><br><sub>instr_timing ✅</sub></td>
   </tr>
