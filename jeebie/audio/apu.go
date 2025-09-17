@@ -103,10 +103,15 @@ func (ch *Channel) calculateSweepFrequency() (newFreq uint16, overflow bool) {
 	if ch.sweepStep == 0 {
 		return ch.shadowFreq, false
 	}
+	return ch.checkSweepOverflow()
+}
 
+// checkSweepOverflow computes the sweep target regardless of
+// sweepStep being zero. This is used for the periodic overflow check that occurs
+// even when shift==0. It does NOT mutate channel state.
+func (ch *Channel) checkSweepOverflow() (newFreq uint16, overflow bool) {
 	freqChange := ch.shadowFreq >> ch.sweepStep
 	if ch.sweepDown {
-		// Subtract mode - check for underflow
 		if freqChange > ch.shadowFreq {
 			newFreq = 0
 		} else {
@@ -115,9 +120,7 @@ func (ch *Channel) calculateSweepFrequency() (newFreq uint16, overflow bool) {
 	} else {
 		newFreq = ch.shadowFreq + freqChange
 	}
-
-	overflow = newFreq > 2047
-	return newFreq, overflow
+	return newFreq, newFreq > 2047
 }
 
 func New() *APU {
@@ -445,9 +448,6 @@ func (a *APU) tickSweep() {
 	if !ch.sweepEnabled {
 		return
 	}
-	if ch.sweepStep == 0 {
-		return
-	}
 
 	// tick down, we continue only if it reaches 0
 	ch.sweepTimer--
@@ -460,11 +460,19 @@ func (a *APU) tickSweep() {
 		ch.sweepTimer = 8
 	}
 
-	// Calculate the change amount by shifting the shadow frequency
-	// Turn off on overflow (>2047).
-	newFrequency, overflow := ch.calculateSweepFrequency()
+	// Per dmg_sound tests: if period==0, do not perform calculations on ticks
+	if ch.sweepPeriod == 0 {
+		return
+	}
+
+	// First: perform overflow check.
+	newFrequency, overflow := ch.checkSweepOverflow()
 	if overflow {
 		ch.enabled = false
+		return
+	}
+	// If shift==0, do not update frequency on tick
+	if ch.sweepStep == 0 {
 		return
 	}
 	if ch.sweepDown {
@@ -479,7 +487,7 @@ func (a *APU) tickSweep() {
 
 	// Do the calculation AGAIN for overflow check only
 	// (This weird behavior is documented in Pan Docs)
-	if _, overflow := ch.calculateSweepFrequency(); overflow {
+	if _, overflow := ch.checkSweepOverflow(); overflow {
 		ch.enabled = false
 	}
 }
