@@ -14,8 +14,9 @@ type APU struct {
 	// state, this is information derived from registers/memory.
 	enabled           bool
 	ch                [4]Channel
-	vinLeft, vinRight bool  // from NR50, not used in DMG
+	vinLeft, vinRight bool  // from NR50
 	volLeft, volRight uint8 // volume for left/right, values 0 to 7
+	vinSample         int16 // external VIN input sample (Pan Docs: Audio mixing - VIN)
 
 	// accumulators for mixing samples
 	mixLeftAcc         int64
@@ -69,6 +70,7 @@ type Channel struct {
 	sweepEnabled bool   // true if sweep is enabled (either period or step non-zero)
 	sweepTimer   uint8  // timer for sweep calculations
 	shadowFreq   uint16 // shadow frequency for sweep calculations
+	sweepNegUsed bool   // flag for subtract-mode calculations (Pan Docs: Audio details - sweep negate bug)
 
 	envelopePace    uint8 // NRx2 bits 7-4, 3 bits -> values 0 to 7
 	envelopeUp      bool  // NRx2 bit 3, 0=down, 1=up
@@ -81,6 +83,7 @@ type Channel struct {
 	freqTimer    int
 	dutyStep     uint8
 	waveIndex    uint8
+	waveSample   uint8
 	noiseTimer   int
 
 	// CH4 Noise channel specific
@@ -182,6 +185,13 @@ func (a *APU) tickGenerators(cycles int) {
 			rightLevel += level
 		}
 	}
+	// VIN pin is optional, it feeds each mixer lane
+	if a.vinLeft {
+		leftLevel += int64(a.vinSample)
+	}
+	if a.vinRight {
+		rightLevel += int64(a.vinSample)
+	}
 
 	a.mixLeftAcc += leftLevel * int64(cycles)
 	a.mixRightAcc += rightLevel * int64(cycles)
@@ -237,11 +247,16 @@ func (a *APU) stepSquare(ch *Channel, cycles int) int64 {
 	}
 
 	pattern := dutyPatterns[ch.duty&0x3][ch.dutyStep]
-	if pattern == 0 {
-		return -int64(ch.volume)
+	if ch.volume == 0 {
+		return 0
 	}
-	// TODO: Replace raw envelope volume with actual DAC level (Pan Docs mixes against 15) and master volume scaling.
-	return int64(ch.volume)
+	level := int64(ch.volume)
+	if pattern == 0 {
+		// Per Pan Docs: if the duty cycle is 0, the output is 0
+		// so we mirror the level to have a DC-free signal.
+		return -level
+	}
+	return level
 }
 
 func (a *APU) stepWave(ch *Channel, cycles int) int64 {
@@ -296,11 +311,15 @@ func (a *APU) stepNoise(ch *Channel, cycles int) int64 {
 		}
 	}
 
-	if ch.lfsr&1 == 0 {
-		// TODO: Pan Docs inverts the noise output before mixing
-		return int64(ch.volume)
+	if ch.volume == 0 {
+		return 0
 	}
-	return -int64(ch.volume)
+	level := int64(ch.volume)
+	if bit.IsSet(0, uint8(ch.lfsr)) {
+		// Per Pan Docs: Noise output bit is inverted before it hits the DAC
+		return -level
+	}
+	return level
 }
 
 func (a *APU) squarePeriodCycles(ch *Channel) int {
@@ -333,11 +352,17 @@ func (a *APU) noisePeriodCycles(ch *Channel) int {
 func (a *APU) readWaveSample(index uint8) uint8 {
 	byteIdx := index >> 1
 	value := a.waveRAM[byteIdx]
+	a.ch[2].waveSample = value
 	if index&1 == 0 {
 		return value >> 4
 	}
-	// TODO: Account for wave RAM lockout while the channel plays (reads return current sample).
 	return value & 0x0F
+}
+
+// Per Pan Docs: Wave RAM is locked to the CPU while
+// CH3 is enabled with the DAC on (Wave channel).
+func (a *APU) waveRAMLocked() bool {
+	return a.enabled && a.ch[2].enabled && a.ch[2].dacEnabled
 }
 
 var dutyPatterns = [4][8]int64{
@@ -442,6 +467,10 @@ func (a *APU) tickSweep() {
 		ch.enabled = false
 		return
 	}
+	if ch.sweepDown {
+		// Per Pan Docs: Performing a subtract sweep marks the negate flag
+		ch.sweepNegUsed = true
+	}
 	// Update the frequency registers (NR13/NR14 11 bits total)
 	ch.shadowFreq = newFrequency
 	ch.period = newFrequency
@@ -458,8 +487,9 @@ func (a *APU) tickSweep() {
 func (a *APU) tickEnvelope() {
 	for _, idx := range []int{0, 1, 3} {
 		ch := &a.ch[idx]
-		if !ch.enabled || !ch.dacEnabled {
-			// TODO: keep envelope state even when disabled
+		// Per Pan Docs: Envelope timer continues running even if the channel is currently silent
+		// so we avoid checking ch.enabled here.
+		if !ch.dacEnabled {
 			continue
 		}
 		if ch.envelopeLatched {
@@ -558,10 +588,11 @@ func (a *APU) ReadRegister(address uint16) uint8 {
 		return status
 	}
 	if address >= addr.WaveRAMStart && address <= addr.WaveRAMEnd {
-		// TODO: wave RAM read behavior changes when channel 3 is playing
-		// if ch3_enabled and ch3_dac_on:
-		//   return wave_ram[current_wave_byte_index]
-		// else:
+		if a.waveRAMLocked() {
+			// Per Pan Docs: When wave channel is active the CPU
+			// sees the current sample buffer instead of RAM.
+			return a.ch[2].waveSample
+		}
 		return a.waveRAM[address-addr.WaveRAMStart]
 	}
 	// unmapped - panic?
@@ -654,7 +685,16 @@ func (a *APU) WriteRegister(address uint16, value uint8) {
 	}
 
 	if isInWaveRAM {
-		a.waveRAM[address-addr.WaveRAMStart] = value
+		offset := address - addr.WaveRAMStart
+		if a.waveRAMLocked() {
+			// Per Pan Docs: Writes during playback update
+			// the currently buffered sample instead of RAM.
+			idx := a.ch[2].waveIndex >> 1
+			a.waveRAM[idx] = value
+			a.ch[2].waveSample = value
+		} else {
+			a.waveRAM[offset] = value
+		}
 	}
 
 	a.mapRegistersToState()
@@ -730,14 +770,15 @@ func (a *APU) mapRegistersToState() {
 
 	// NR10 - Channel 1 Sweep Control
 	// 7: - | 6-4: Period | 3: Direction | 2-0: Shift
+	prevSweepDown := a.ch[0].sweepDown
 	a.ch[0].sweepPeriod = bit.ExtractBits(a.NR10, 6, 4)
 	a.ch[0].sweepDown = bit.IsSet(3, a.NR10)
 	a.ch[0].sweepStep = bit.ExtractBits(a.NR10, 2, 0)
-
-	// TODO: Implement "negate mode"
-	// If sweep direction changes from 1 to 0 (sweepDown true -> false) after at least one
-	// sweep calculation has been made in subtract mode since the last trigger,
-	// the channel should be immediately disabled.
+	if !a.ch[0].sweepDown && prevSweepDown && a.ch[0].sweepNegUsed && (a.ch[0].sweepPeriod > 0 || a.ch[0].sweepStep > 0) {
+		// Per Pan Docs: Switching sweep from subtract to add
+		// after a subtract calc disables CH1 immediately.
+		a.ch[0].enabled = false
+	}
 
 	// NR11 - Channel 1 Length Timer & Duty Cycle
 	// 7-6: Duty | 5-0: Length Timer (0-63, actual = 64-value)
@@ -784,6 +825,7 @@ func (a *APU) mapRegistersToState() {
 			a.ch[0].sweepTimer = 8
 		}
 		a.ch[0].shadowFreq = a.ch[0].period
+		a.ch[0].sweepNegUsed = false
 
 		// Dummy calculation to immediately disable channel if overflow
 		if a.ch[0].sweepStep != 0 {
@@ -877,6 +919,7 @@ func (a *APU) mapRegistersToState() {
 		}
 		a.ch[2].freqTimer = a.wavePeriodCycles(&a.ch[2])
 		a.ch[2].waveIndex = 0
+		a.ch[2].waveSample = a.waveRAM[0]
 		// reset the bit, since it's write-only this effectively gets triggered only on a write from 0 to 1
 		a.NR34 = bit.Reset(7, a.NR34)
 		a.ch[2].trigger = false
