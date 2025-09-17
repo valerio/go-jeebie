@@ -3,17 +3,12 @@ package audio
 import (
 	"github.com/valerio/go-jeebie/jeebie/addr"
 	"github.com/valerio/go-jeebie/jeebie/bit"
+	"github.com/valerio/go-jeebie/jeebie/timing"
 )
 
 // APU is the Audio Processing Unit of a DMG Game Boy. It generates 4-channel audio:
 // CH1 (square+sweep), CH2 (square), CH3 (wave), CH4 (noise), all mixed to stereo output.
 // This is basically a bunch of counters and timers that tick at certain frequency steps!
-//
-// TODO: Implement sample generation at ~44.1 kHz for audio output.
-//
-// TODO: Implement trigger behavior (NRx4 bit 7) to restart channel state.
-//
-// TODO: Implement power-off logic (NR52 bit 7=0) to disable channels and ignore register writes.
 type APU struct {
 
 	// state, this is information derived from registers/memory.
@@ -21,6 +16,16 @@ type APU struct {
 	ch                [4]Channel
 	vinLeft, vinRight bool  // from NR50, not used in DMG
 	volLeft, volRight uint8 // volume for left/right, values 0 to 7
+
+	// accumulators for mixing samples
+	mixLeftAcc         int64
+	mixRightAcc        int64
+	mixAccumCycles     int
+	pcmBuffer          []int16
+	pcmCursor          int
+	pcmCycleAcc        float64
+	pcmCyclesPerSample float64
+	hostSampleRate     int
 
 	// frame sequencer state
 	step   int // current step (0-7)
@@ -65,12 +70,18 @@ type Channel struct {
 	sweepTimer   uint8  // timer for sweep calculations
 	shadowFreq   uint16 // shadow frequency for sweep calculations
 
-	envelopePace uint8 // NRx2 bits 7-4, 3 bits -> values 0 to 7
-	envelopeUp   bool  // NRx2 bit 3, 0=down, 1=up
+	envelopePace    uint8 // NRx2 bits 7-4, 3 bits -> values 0 to 7
+	envelopeUp      bool  // NRx2 bit 3, 0=down, 1=up
+	envelopeCounter uint8
+	envelopeLatched bool
 
 	period       uint16 // frequency period, 11 bits -> values 0 to 2047
 	trigger      bool   // trigger flag, write-only, when written it "triggers" the channel
 	lengthEnable bool   // length enable flag
+	freqTimer    int
+	dutyStep     uint8
+	waveIndex    uint8
+	noiseTimer   int
 
 	// CH4 Noise channel specific
 	lfsr        uint16 // 15-bit LFSR for noise generation
@@ -107,7 +118,9 @@ func (ch *Channel) calculateSweepFrequency() (newFreq uint16, overflow bool) {
 }
 
 func New() *APU {
-	return &APU{}
+	apu := &APU{hostSampleRate: 44100} // 44100Hz
+	apu.pcmCyclesPerSample = float64(timing.CPUFrequency) / float64(apu.hostSampleRate)
+	return apu
 }
 
 // Tick advances the APU by CPU T-cycles.
@@ -116,13 +129,235 @@ func (a *APU) Tick(cycles int) {
 		return
 	}
 
+	a.tickGenerators(cycles)
+
 	a.cycles += cycles
+
+	// Audio stepping plan during Tick:
+	//  1. Consume CPU cycles into per-channel timers and generate raw amplitude ticks.
+	//  2. Push each raw tick into an intermediate mix accumulator at the hardware rate.
+	//  3. When the accumulator spans the host sample period, average and store it for GetSamples.
 
 	// Every 512Hz, advance the frame sequencer
 	for a.cycles >= cyclesPerStep {
 		a.cycles -= cyclesPerStep
 		a.tickSequence()
 	}
+}
+
+func (a *APU) tickGenerators(cycles int) {
+	// Channel generator plan:
+	//  1. Add CPU cycles to each channel's timer and reload when the period elapses.
+	//  2. Update the duty/wave/LFSR position to produce the next raw amplitude for that channel.
+	//  3. Gate the amplitude by the channel's DAC/envelope state to get the audible level.
+	//  4. Mix the level into left/right accumulators according to NR51 so GetSamples can downsample later.
+	if cycles <= 0 {
+		return
+	}
+
+	var leftLevel, rightLevel int64
+	for i := range 4 {
+		ch := &a.ch[i]
+		if !ch.enabled || !ch.dacEnabled || ch.muted {
+			continue
+		}
+
+		var level int64
+		switch i {
+		case 0, 1:
+			level = a.stepSquare(ch, cycles)
+		case 2:
+			level = a.stepWave(ch, cycles)
+		case 3:
+			level = a.stepNoise(ch, cycles)
+		}
+		if level == 0 {
+			continue
+		}
+
+		if ch.left {
+			leftLevel += level
+		}
+		if ch.right {
+			rightLevel += level
+		}
+	}
+
+	a.mixLeftAcc += leftLevel * int64(cycles)
+	a.mixRightAcc += rightLevel * int64(cycles)
+	a.mixAccumCycles += cycles
+	a.flushMix(cycles)
+}
+
+func (a *APU) flushMix(cycles int) {
+	if a.hostSampleRate <= 0 || a.pcmCyclesPerSample == 0 {
+		return
+	}
+
+	a.pcmCycleAcc += float64(cycles)
+	if a.pcmCycleAcc < a.pcmCyclesPerSample {
+		return
+	}
+	a.pcmCycleAcc -= a.pcmCyclesPerSample
+
+	left, right := a.exportMixedSample()
+	a.pcmBuffer = append(a.pcmBuffer, left, right)
+}
+
+func (a *APU) exportMixedSample() (int16, int16) {
+	if a.mixAccumCycles == 0 {
+		return 0, 0
+	}
+
+	leftAvg := float64(a.mixLeftAcc) / float64(a.mixAccumCycles)
+	rightAvg := float64(a.mixRightAcc) / float64(a.mixAccumCycles)
+
+	left, right := scaleToPCM(leftAvg, a.volLeft), scaleToPCM(rightAvg, a.volRight)
+
+	a.mixLeftAcc = 0
+	a.mixRightAcc = 0
+	a.mixAccumCycles = 0
+
+	return left, right
+}
+
+func (a *APU) stepSquare(ch *Channel, cycles int) int64 {
+	period := a.squarePeriodCycles(ch)
+	if period == 0 {
+		return 0
+	}
+	if ch.freqTimer <= 0 {
+		ch.freqTimer = period
+	}
+
+	ch.freqTimer -= cycles
+	for ch.freqTimer <= 0 {
+		ch.freqTimer += period
+		ch.dutyStep = (ch.dutyStep + 1) & 0x7
+	}
+
+	pattern := dutyPatterns[ch.duty&0x3][ch.dutyStep]
+	if pattern == 0 {
+		return -int64(ch.volume)
+	}
+	// TODO: Replace raw envelope volume with actual DAC level (Pan Docs mixes against 15) and master volume scaling.
+	return int64(ch.volume)
+}
+
+func (a *APU) stepWave(ch *Channel, cycles int) int64 {
+	period := a.wavePeriodCycles(ch)
+	if period == 0 {
+		return 0
+	}
+	if ch.freqTimer <= 0 {
+		ch.freqTimer = period
+	}
+
+	ch.freqTimer -= cycles
+	for ch.freqTimer <= 0 {
+		ch.freqTimer += period
+		ch.waveIndex = (ch.waveIndex + 1) & 0x1F
+	}
+
+	sample := int64(a.readWaveSample(ch.waveIndex)) - 8
+	switch ch.volume & 0b11 {
+	case 0:
+		return 0
+	case 1:
+		return sample
+	case 2:
+		return sample / 2
+	case 3:
+		return sample / 4
+	default:
+		return sample
+	}
+}
+
+func (a *APU) stepNoise(ch *Channel, cycles int) int64 {
+	period := a.noisePeriodCycles(ch)
+	if period == 0 {
+		return 0
+	}
+	if ch.lfsr == 0 {
+		ch.lfsr = 0x7FFF
+	}
+	if ch.noiseTimer <= 0 {
+		ch.noiseTimer = period
+	}
+
+	ch.noiseTimer -= cycles
+	for ch.noiseTimer <= 0 {
+		ch.noiseTimer += period
+		bit := (ch.lfsr & 1) ^ ((ch.lfsr >> 1) & 1)
+		ch.lfsr = (ch.lfsr >> 1) | (bit << 14)
+		if ch.use7bitLFSR {
+			ch.lfsr = (ch.lfsr &^ (1 << 6)) | (bit << 6)
+		}
+	}
+
+	if ch.lfsr&1 == 0 {
+		// TODO: Pan Docs inverts the noise output before mixing
+		return int64(ch.volume)
+	}
+	return -int64(ch.volume)
+}
+
+func (a *APU) squarePeriodCycles(ch *Channel) int {
+	period := 2048 - int(ch.period&0x7FF)
+	if period <= 0 {
+		return 0
+	}
+	return period * 4
+}
+
+func (a *APU) wavePeriodCycles(ch *Channel) int {
+	period := 2048 - int(ch.period&0x7FF)
+	if period <= 0 {
+		return 0
+	}
+	return period * 2
+}
+
+var noiseDividers = [8]int{8, 16, 32, 48, 64, 80, 96, 112}
+
+func (a *APU) noisePeriodCycles(ch *Channel) int {
+	div := noiseDividers[ch.divider&0x7]
+	period := div << ch.shift
+	if period <= 0 {
+		return 0
+	}
+	return period
+}
+
+func (a *APU) readWaveSample(index uint8) uint8 {
+	byteIdx := index >> 1
+	value := a.waveRAM[byteIdx]
+	if index&1 == 0 {
+		return value >> 4
+	}
+	// TODO: Account for wave RAM lockout while the channel plays (reads return current sample).
+	return value & 0x0F
+}
+
+var dutyPatterns = [4][8]int64{
+	{0, 1, 0, 0, 0, 0, 0, 0},
+	{0, 1, 1, 0, 0, 0, 0, 0},
+	{0, 1, 1, 1, 1, 0, 0, 0},
+	{1, 0, 0, 1, 1, 1, 1, 1},
+}
+
+const sampleScale = 32767.0 / 15.0
+
+func scaleToPCM(avg float64, masterVol uint8) int16 {
+	gain := float64(masterVol+1) / 8.0
+	value := avg * gain * sampleScale
+	if value > 32767 {
+		value = 32767
+	} else if value < -32768 {
+		value = -32768
+	}
+	return int16(value)
 }
 
 // tickSequence advances the sequencer by one step.
@@ -221,10 +456,47 @@ func (a *APU) tickSweep() {
 }
 
 func (a *APU) tickEnvelope() {
-	// Volume envelope for CH1/CH2/CH4: when envelope period > 0, decrement period counter
-	// When period reaches 0: adjust volume up/down based on direction
-	// If volume would go outside 0-15 range, stop envelope
-	// Reload period counter with envelope period value
+	for _, idx := range []int{0, 1, 3} {
+		ch := &a.ch[idx]
+		if !ch.enabled || !ch.dacEnabled {
+			// TODO: keep envelope state even when disabled
+			continue
+		}
+		if ch.envelopeLatched {
+			continue
+		}
+
+		pace := ch.envelopePace
+		if pace == 0 {
+			pace = 8
+		}
+
+		if ch.envelopeCounter == 0 {
+			ch.envelopeCounter = pace
+		}
+		ch.envelopeCounter--
+		if ch.envelopeCounter > 0 {
+			continue
+		}
+
+		if ch.envelopeUp {
+			if ch.volume < 15 {
+				ch.volume++
+				ch.envelopeCounter = pace
+			} else {
+				ch.envelopeLatched = true
+				ch.envelopeCounter = 0
+			}
+		} else {
+			if ch.volume > 0 {
+				ch.volume--
+				ch.envelopeCounter = pace
+			} else {
+				ch.envelopeLatched = true
+				ch.envelopeCounter = 0
+			}
+		}
+	}
 }
 
 // ReadRegister returns masked register values.
@@ -314,6 +586,14 @@ func (a *APU) WriteRegister(address uint16, value uint8) {
 		a.ch[0].length = 64 - uint16(bit.ExtractBits(value, 5, 0))
 	case addr.NR12:
 		a.NR12 = value
+		ch := &a.ch[0]
+		pace := bit.ExtractBits(value, 2, 0)
+		if pace == 0 {
+			ch.envelopeCounter = 8
+		} else {
+			ch.envelopeCounter = pace
+		}
+		ch.envelopeLatched = false
 	case addr.NR13:
 		a.NR13 = value
 	case addr.NR14:
@@ -323,6 +603,14 @@ func (a *APU) WriteRegister(address uint16, value uint8) {
 		a.ch[1].length = 64 - uint16(bit.ExtractBits(value, 5, 0))
 	case addr.NR22:
 		a.NR22 = value
+		ch := &a.ch[1]
+		pace := bit.ExtractBits(value, 2, 0)
+		if pace == 0 {
+			ch.envelopeCounter = 8
+		} else {
+			ch.envelopeCounter = pace
+		}
+		ch.envelopeLatched = false
 	case addr.NR23:
 		a.NR23 = value
 	case addr.NR24:
@@ -343,6 +631,14 @@ func (a *APU) WriteRegister(address uint16, value uint8) {
 		a.ch[3].length = 64 - uint16(bit.ExtractBits(value, 5, 0))
 	case addr.NR42:
 		a.NR42 = value
+		ch := &a.ch[3]
+		pace := bit.ExtractBits(value, 2, 0)
+		if pace == 0 {
+			ch.envelopeCounter = 8
+		} else {
+			ch.envelopeCounter = pace
+		}
+		ch.envelopeLatched = false
 	case addr.NR43:
 		a.NR43 = value
 	case addr.NR44:
@@ -473,6 +769,14 @@ func (a *APU) mapRegistersToState() {
 		if a.ch[0].dacEnabled {
 			a.ch[0].enabled = true
 		}
+		a.ch[0].envelopeLatched = false
+		if a.ch[0].envelopePace == 0 {
+			a.ch[0].envelopeCounter = 8
+		} else {
+			a.ch[0].envelopeCounter = a.ch[0].envelopePace
+		}
+		a.ch[0].dutyStep = 0
+		a.ch[0].freqTimer = a.squarePeriodCycles(&a.ch[0])
 		// On trigger, reset sweep timer and shadow frequency
 		a.ch[0].sweepEnabled = a.ch[0].sweepPeriod > 0 || a.ch[0].sweepStep > 0
 		a.ch[0].sweepTimer = a.ch[0].sweepPeriod
@@ -526,6 +830,14 @@ func (a *APU) mapRegistersToState() {
 		if a.ch[1].dacEnabled {
 			a.ch[1].enabled = true
 		}
+		a.ch[1].envelopeLatched = false
+		if a.ch[1].envelopePace == 0 {
+			a.ch[1].envelopeCounter = 8
+		} else {
+			a.ch[1].envelopeCounter = a.ch[1].envelopePace
+		}
+		a.ch[1].dutyStep = 0
+		a.ch[1].freqTimer = a.squarePeriodCycles(&a.ch[1])
 		// reset the bit, since it's write-only this effectively gets triggered only on a write from 0 to 1
 		a.NR24 = bit.Reset(7, a.NR24)
 		a.ch[1].trigger = false
@@ -563,6 +875,8 @@ func (a *APU) mapRegistersToState() {
 		if a.ch[2].dacEnabled {
 			a.ch[2].enabled = true
 		}
+		a.ch[2].freqTimer = a.wavePeriodCycles(&a.ch[2])
+		a.ch[2].waveIndex = 0
 		// reset the bit, since it's write-only this effectively gets triggered only on a write from 0 to 1
 		a.NR34 = bit.Reset(7, a.NR34)
 		a.ch[2].trigger = false
@@ -602,6 +916,14 @@ func (a *APU) mapRegistersToState() {
 		if a.ch[3].dacEnabled {
 			a.ch[3].enabled = true
 		}
+		a.ch[3].envelopeLatched = false
+		if a.ch[3].envelopePace == 0 {
+			a.ch[3].envelopeCounter = 8
+		} else {
+			a.ch[3].envelopeCounter = a.ch[3].envelopePace
+		}
+		a.ch[3].lfsr = 0x7FFF
+		a.ch[3].noiseTimer = a.noisePeriodCycles(&a.ch[3])
 		// reset the bit, since it's write-only this effectively gets triggered only on a write from 0 to 1
 		a.NR44 = bit.Reset(7, a.NR44)
 		a.ch[3].trigger = false
@@ -617,7 +939,34 @@ func (a *APU) mapRegistersToState() {
 }
 
 // GetSamples returns interleaved stereo samples.
-func (a *APU) GetSamples(count int) []int16 { return nil }
+// Mixing plan:
+//  1. Pull per-channel sample buffers produced by Tick (or generate lazily here).
+//  2. Scale channel outputs by NR50/NR51 panning/volume and sum into left/right lanes.
+//  3. Clamp the mixed values to int16 and write them interleaved into the output slice.
+//  4. Expose/reserve any remainder so subsequent calls continue seamlessly.
+func (a *APU) GetSamples(count int) []int16 {
+	if count <= 0 {
+		return nil
+	}
+
+	needed := count * 2
+	available := len(a.pcmBuffer) - a.pcmCursor
+	if available <= 0 {
+		return make([]int16, needed)
+	}
+
+	out := make([]int16, needed)
+	toCopy := min(available, needed)
+	copy(out, a.pcmBuffer[a.pcmCursor:a.pcmCursor+toCopy])
+	a.pcmCursor += toCopy
+
+	if a.pcmCursor >= len(a.pcmBuffer) {
+		a.pcmBuffer = a.pcmBuffer[:0]
+		a.pcmCursor = 0
+	}
+
+	return out
+}
 
 // Debug helpers required by Provider.
 
