@@ -611,6 +611,22 @@ func (a *APU) ReadRegister(address uint16) uint8 {
 // internal state accordingly.
 func (a *APU) WriteRegister(address uint16, value uint8) {
 	isInWaveRAM := address >= addr.WaveRAMStart && address <= addr.WaveRAMEnd
+	// TODO: this is DMG only behavior, for CGB we don't allow length writes while powered off.
+	allowLengthWhileOff := address == addr.NR11 || address == addr.NR21 || address == addr.NR31 || address == addr.NR41
+	if !a.enabled && allowLengthWhileOff {
+		// Hacky hack, we just write internally the length values but don't touch the actual registers.
+		switch address {
+		case addr.NR11:
+			a.ch[0].length = 64 - uint16(bit.ExtractBits(value, 5, 0))
+		case addr.NR21:
+			a.ch[1].length = 64 - uint16(bit.ExtractBits(value, 5, 0))
+		case addr.NR31:
+			a.ch[2].length = 256 - uint16(value)
+		case addr.NR41:
+			a.ch[3].length = 64 - uint16(bit.ExtractBits(value, 5, 0))
+		}
+		return
+	}
 
 	if !a.enabled && address != addr.NR52 && !isInWaveRAM {
 		// and ignore writes to audio regs except NR52/RAM when powered off

@@ -161,6 +161,11 @@ func GetIntegrationTests() []IntegrationTestCase {
 			MaxFrames: 60,
 			Name:      "dmg_sound_07-len_sweep_period_sync",
 		},
+		{
+			ROMPath:   filepath.Join(dmgSoundDir, "08-len ctr during power.gb"),
+			MaxFrames: 120,
+			Name:      "dmg_sound_08-len_ctr_during_power",
+		},
 	}
 
 	return tests
