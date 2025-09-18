@@ -746,10 +746,13 @@ func (a *APU) handleLengthEnableTransition(prevEnabled bool, lengthBefore uint16
 func (a *APU) mapRegistersToState() {
 	// NR52 - Master Audio Control
 	// 7: Audio on/off | 6-4: Always 1 | 3: CH4 on | 2: CH3 on | 1: CH2 on | 0: CH1 on
-	a.enabled = bit.IsSet(7, a.NR52) // audio on/off
 	// Bits 3-0 are read-only, ignore writes.
+	prevEnabled := a.enabled
+	newEnabled := bit.IsSet(7, a.NR52)
+	a.enabled = newEnabled
 
-	if !a.enabled {
+	// On power-off: reset all registers and disable all channels
+	if prevEnabled && !newEnabled {
 		// If setting NR52 bit7 to 0, disable all channels,
 		// set all registers to 0x00 except NR52
 		a.NR10, a.NR11, a.NR12, a.NR13, a.NR14 = 0, 0, 0, 0, 0
@@ -760,6 +763,11 @@ func (a *APU) mapRegistersToState() {
 		for i := range a.ch {
 			a.ch[i].enabled = false
 		}
+	}
+	// On power-on: reset the frame sequencer and 8192-cycle divider
+	if !prevEnabled && newEnabled {
+		a.step = 0
+		a.cycles = 0
 	}
 
 	// NR51 - Sound Panning

@@ -156,6 +156,11 @@ func GetIntegrationTests() []IntegrationTestCase {
 			MaxFrames: 60,
 			Name:      "dmg_sound_06-overflow_trigger",
 		},
+		{
+			ROMPath:   filepath.Join(dmgSoundDir, "07-len sweep period sync.gb"),
+			MaxFrames: 60,
+			Name:      "dmg_sound_07-len_sweep_period_sync",
+		},
 	}
 
 	return tests
