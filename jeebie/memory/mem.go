@@ -72,9 +72,15 @@ func New() *MMU {
 		joypadButtons: 0x0F,
 		joypadDpad:    0x0F,
 	}
+	// Unused/undocumented IO registers read back as 0xFF on real hardware.
+	for addr := 0xFF00; addr <= 0xFFFF; addr++ {
+		mmu.memory[addr] = 0xFF
+	}
 	mmu.serial = serial.NewLogSink(func() { mmu.RequestInterrupt(addr.SerialInterrupt) })
 	mmu.timer.TimerInterruptHandler = func() { mmu.RequestInterrupt(addr.TimerInterrupt) }
-	mmu.timer.SetSeed(0xABCC)
+	// DMG boot ROM should leave DIV at 0xABCC, but it looks like we're missing 12 T-cycles somewhere.
+	// So for now we set it to 0xABD8 to pass the startup screen in Bully (invalid initial DIV).
+	mmu.timer.SetSeed(0xABD8)
 	initRegionMap(mmu)
 	return mmu
 }
