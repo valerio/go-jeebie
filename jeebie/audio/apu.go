@@ -10,6 +10,7 @@ import (
 // CH1 (square+sweep), CH2 (square), CH3 (wave), CH4 (noise), all mixed to stereo output.
 // This is basically a bunch of counters and timers that tick at certain frequency steps!
 type APU struct {
+	isCGB bool // TODO: CGB behaves differently in some cases
 
 	// state, this is information derived from registers/memory.
 	enabled           bool
@@ -63,15 +64,6 @@ type Channel struct {
 	length uint16 // current length counter, can hold up to 256 for CH3
 	volume uint8  // initial volume, 4 bits -> values 0 to 15
 
-	// Frequency sweep (CH1 only)
-	sweepPeriod  uint8  // "pace" per pandocs (NR10 6-4), 3 bits -> values 0 to 7
-	sweepDown    bool   // sweep direction, 0=up, 1=down
-	sweepStep    uint8  // sweep step, 3 bits -> values 0 to 7
-	sweepEnabled bool   // true if sweep is enabled (either period or step non-zero)
-	sweepTimer   uint8  // timer for sweep calculations
-	shadowFreq   uint16 // shadow frequency for sweep calculations
-	sweepNegUsed bool   // flag for subtract-mode calculations (Pan Docs: Audio details - sweep negate bug)
-
 	envelopePace    uint8 // NRx2 bits 7-4, 3 bits -> values 0 to 7
 	envelopeUp      bool  // NRx2 bit 3, 0=down, 1=up
 	envelopeCounter uint8
@@ -82,17 +74,30 @@ type Channel struct {
 	lengthEnable bool   // length enable flag
 	freqTimer    int
 	dutyStep     uint8
-	waveIndex    uint8
-	waveSample   uint8
-	noiseTimer   int
+
+	// CH 1 frequency sweep specific
+	sweepPeriod  uint8  // "pace" per pandocs (NR10 6-4), 3 bits -> values 0 to 7
+	sweepDown    bool   // sweep direction, 0=up, 1=down
+	sweepStep    uint8  // sweep step, 3 bits -> values 0 to 7
+	sweepEnabled bool   // true if sweep is enabled (either period or step non-zero)
+	sweepTimer   uint8  // timer for sweep calculations
+	shadowFreq   uint16 // shadow frequency for sweep calculations
+	sweepNegUsed bool   // flag for subtract-mode calculations (Pan Docs: Audio details - sweep negate bug)
+
+	// CH3 Wave channel specific
+	waveIndex       uint8
+	waveSample      uint8
+	waveReadable    bool // DMG-only, if true, the wave RAM can be read
+	waveReadDelayed bool // DMG-only, set to true on trigger, prevents the first read, then turns false
+	noiseTimer      int
+
+	dacEnabled bool // for channel 3, DAC enable flag
 
 	// CH4 Noise channel specific
 	lfsr        uint16 // 15-bit LFSR for noise generation
 	use7bitLFSR bool   // from NR43 bit 3, when set use 7-bit LFSR, otherwise 15-bit
 	shift       uint8  // from NR43, 4 bits -> values 0 to 15
 	divider     uint8  // from NR43, 3 bits -> values 0 to 7
-
-	dacEnabled bool // for channel 3, DAC enable flag
 
 	// Debug state
 	muted bool // separate from enabled/dac
@@ -126,6 +131,7 @@ func (ch *Channel) checkSweepOverflow() (newFreq uint16, overflow bool) {
 func New() *APU {
 	apu := &APU{hostSampleRate: 44100} // 44100Hz
 	apu.pcmCyclesPerSample = float64(timing.CPUFrequency) / float64(apu.hostSampleRate)
+	apu.ch[2].waveReadDelayed = true
 	return apu
 }
 
@@ -275,6 +281,9 @@ func (a *APU) stepWave(ch *Channel, cycles int) int64 {
 	for ch.freqTimer <= 0 {
 		ch.freqTimer += period
 		ch.waveIndex = (ch.waveIndex + 1) & 0x1F
+		byteIdx := ch.waveIndex >> 1
+		ch.waveSample = a.waveRAM[byteIdx]
+		ch.waveReadable = true
 	}
 
 	sample := int64(a.readWaveSample(ch.waveIndex)) - 8
@@ -596,12 +605,40 @@ func (a *APU) ReadRegister(address uint16) uint8 {
 		return status
 	}
 	if address >= addr.WaveRAMStart && address <= addr.WaveRAMEnd {
-		if a.waveRAMLocked() {
-			// Per Pan Docs: When wave channel is active the CPU
-			// sees the current sample buffer instead of RAM.
-			return a.ch[2].waveSample
+		if a.isCGB {
+			if a.waveRAMLocked() {
+				// Per Pan Docs: When wave channel is active the CPU
+				// sees the current sample buffer instead of RAM.
+				return a.ch[2].waveSample
+			}
+			return a.waveRAM[address-addr.WaveRAMStart]
+		} else {
+			// Pan Docs (FF30–FF3F — Wave pattern RAM) notes that on DMG models the CPU can
+			// read wave RAM only on the same cycles the channel controller performs its fetch,
+			// and the byte exposed is the one from the previous sample position. Outside that
+			// window the reads return $FF, with an additional first-read delay after power-on
+			// described under NR34. This matches blargg's dmg_sound test 09 ("wave read while on").
+			ramValue := a.waveRAM[address-addr.WaveRAMStart]
+
+			if a.waveRAMLocked() {
+				ch := &a.ch[2]
+
+				prevIdx := (ch.waveIndex - 1) & 0x1F
+				prevByteIdx := prevIdx >> 1
+				accessibleSample := a.waveRAM[prevByteIdx]
+				result := uint8(0xFF)
+				if ch.waveReadable && ch.freqTimer <= 2 {
+					if ch.waveReadDelayed {
+						ch.waveReadDelayed = false
+					} else {
+						result = accessibleSample
+					}
+				}
+
+				return result
+			}
+			return ramValue
 		}
-		return a.waveRAM[address-addr.WaveRAMStart]
 	}
 	// unmapped - panic?
 	return 0xFF
@@ -784,6 +821,8 @@ func (a *APU) mapRegistersToState() {
 	if !prevEnabled && newEnabled {
 		a.step = 0
 		a.cycles = 0
+		a.ch[2].waveReadDelayed = true
+		a.ch[2].waveReadable = false
 	}
 
 	// NR51 - Sound Panning
@@ -955,6 +994,7 @@ func (a *APU) mapRegistersToState() {
 		a.ch[2].freqTimer = a.wavePeriodCycles(&a.ch[2])
 		a.ch[2].waveIndex = 0
 		a.ch[2].waveSample = a.waveRAM[0]
+		a.ch[2].waveReadable = false
 		// reset the bit, since it's write-only this effectively gets triggered only on a write from 0 to 1
 		a.NR34 = bit.Reset(7, a.NR34)
 		a.ch[2].trigger = false

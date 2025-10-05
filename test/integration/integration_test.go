@@ -166,6 +166,11 @@ func GetIntegrationTests() []IntegrationTestCase {
 			MaxFrames: 120,
 			Name:      "dmg_sound_08-len_ctr_during_power",
 		},
+		{
+			ROMPath:   filepath.Join(dmgSoundDir, "09-wave read while on.gb"),
+			MaxFrames: 200,
+			Name:      "dmg_sound_09-wave_read_while_on",
+		},
 	}
 
 	return tests
