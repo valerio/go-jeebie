@@ -21,10 +21,12 @@ func main() {
 		readme    string
 		snapshots string
 		cols      int
+		width     int
 	)
 	flag.StringVar(&readme, "readme", "README.md", "Path to README file to update in place")
 	flag.StringVar(&snapshots, "snapshots", filepath.Join("test", "integration", "testdata", "snapshots"), "Snapshots directory")
-	flag.IntVar(&cols, "cols", 3, "Number of columns per row")
+	flag.IntVar(&cols, "cols", 4, "Number of columns per row")
+	flag.IntVar(&width, "width", 80, "Image width in pixels")
 	flag.Parse()
 
 	entries, err := os.ReadDir(snapshots)
@@ -65,7 +67,7 @@ func main() {
 			if i+c < len(items) {
 				it := items[i+c]
 				src := filepath.ToSlash(filepath.Join("test", "integration", "testdata", "snapshots", it.Encoded))
-				fmt.Fprintf(&buf, "    <td align=\"center\"><img src=\"%s\" width=\"160\" /><br><sub>%s ✅</sub></td>\n", src, it.Name)
+				fmt.Fprintf(&buf, "    <td align=\"center\"><div style=\"position:relative;display:inline-block;\"><img src=\"%s\" width=\"%d\" style=\"display:block;transition:transform 0.2s;\" onmouseover=\"this.style.transform='scale(2)';this.style.zIndex='999';\" onmouseout=\"this.style.transform='scale(1)';this.style.zIndex='1';\" /><br><sub>%s ✅</sub></div></td>\n", src, width, it.Name)
 			} else {
 				buf.WriteString("    <td></td>\n")
 			}
