@@ -67,7 +67,7 @@ func main() {
 			if i+c < len(items) {
 				it := items[i+c]
 				src := filepath.ToSlash(filepath.Join("test", "integration", "testdata", "snapshots", it.Encoded))
-				fmt.Fprintf(&buf, "    <td align=\"center\"><div style=\"position:relative;display:inline-block;\"><img src=\"%s\" width=\"%d\" style=\"display:block;transition:transform 0.2s;\" onmouseover=\"this.style.transform='scale(2)';this.style.zIndex='999';\" onmouseout=\"this.style.transform='scale(1)';this.style.zIndex='1';\" /><br><sub>%s ✅</sub></div></td>\n", src, width, it.Name)
+				fmt.Fprintf(&buf, "    <td align=\"center\"><a href=\"%s\"><img src=\"%s\" width=\"%d\" /></a><br><sub>%s ✅</sub></td>\n", src, src, width, it.Name)
 			} else {
 				buf.WriteString("    <td></td>\n")
 			}
