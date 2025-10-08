@@ -1,6 +1,9 @@
 package audio
 
 import (
+	"fmt"
+	"log/slog"
+
 	"github.com/valerio/go-jeebie/jeebie/addr"
 	"github.com/valerio/go-jeebie/jeebie/bit"
 	"github.com/valerio/go-jeebie/jeebie/timing"
@@ -609,9 +612,25 @@ func (a *APU) ReadRegister(address uint16) uint8 {
 			if a.waveRAMLocked() {
 				// Per Pan Docs: When wave channel is active the CPU
 				// sees the current sample buffer instead of RAM.
-				return a.ch[2].waveSample
+				result := a.ch[2].waveSample
+				slog.Debug(
+					"apu.ch3 wave read",
+					"addr", fmt.Sprintf("0x%04X", address),
+					"locked", true,
+					"cgb", true,
+					"result", fmt.Sprintf("0x%02X", result),
+				)
+				return result
 			}
-			return a.waveRAM[address-addr.WaveRAMStart]
+			result := a.waveRAM[address-addr.WaveRAMStart]
+			slog.Debug(
+				"apu.ch3 wave read",
+				"addr", fmt.Sprintf("0x%04X", address),
+				"locked", false,
+				"cgb", true,
+				"result", fmt.Sprintf("0x%02X", result),
+			)
+			return result
 		} else {
 			// Pan Docs (FF30–FF3F — Wave pattern RAM) notes that on DMG models the CPU can
 			// read wave RAM only on the same cycles the channel controller performs its fetch,
@@ -634,9 +653,29 @@ func (a *APU) ReadRegister(address uint16) uint8 {
 						result = accessibleSample
 					}
 				}
+				slog.Debug(
+					"apu.ch3 wave read",
+					"addr", fmt.Sprintf("0x%04X", address),
+					"locked", true,
+					"cgb", false,
+					"freqTimer", ch.freqTimer,
+					"waveIndex", ch.waveIndex,
+					"waveReadable", ch.waveReadable,
+					"readDelayed", ch.waveReadDelayed,
+					"prevIdx", prevIdx,
+					"prevByte", fmt.Sprintf("0x%02X", accessibleSample),
+					"result", fmt.Sprintf("0x%02X", result),
+				)
 
 				return result
 			}
+			slog.Debug(
+				"apu.ch3 wave read",
+				"addr", fmt.Sprintf("0x%04X", address),
+				"locked", false,
+				"cgb", false,
+				"result", fmt.Sprintf("0x%02X", ramValue),
+			)
 			return ramValue
 		}
 	}
@@ -987,17 +1026,63 @@ func (a *APU) mapRegistersToState() {
 	triggered = bit.IsSet(7, a.NR34)
 	a.ch[2].lengthEnable = bit.IsSet(6, a.NR34)
 	a.ch[2].trigger = triggered
-	if a.ch[2].trigger {
+	waveCh := &a.ch[2]
+	wasLocked := !a.isCGB && a.waveRAMLocked()
+	if waveCh.trigger {
+		slog.Debug(
+			"apu.ch3 trigger",
+			"wasLocked", wasLocked,
+			"waveReadable", waveCh.waveReadable,
+			"readDelayed", waveCh.waveReadDelayed,
+			"freqTimer", waveCh.freqTimer,
+			"sample", fmt.Sprintf("0x%02X", waveCh.waveSample),
+			"wave0", fmt.Sprintf("0x%02X", a.waveRAM[0]),
+		)
 		if a.ch[2].dacEnabled {
-			a.ch[2].enabled = true
+			waveCh.enabled = true
 		}
-		a.ch[2].freqTimer = a.wavePeriodCycles(&a.ch[2])
-		a.ch[2].waveIndex = 0
-		a.ch[2].waveSample = a.waveRAM[0]
-		a.ch[2].waveReadable = false
+		periodCountdown := waveCh.freqTimer
+		if wasLocked && waveCh.waveReadable && periodCountdown <= 2 {
+			// DMG quirk: retriggering just before a fetch copies future wave data into $FF30-$FF33.
+			nextIdx := (waveCh.waveIndex + 1) & 0x1F
+			nextByteIdx := nextIdx >> 1
+			if nextByteIdx < 4 {
+				prev := a.waveRAM[0]
+				a.waveRAM[0] = a.waveRAM[nextByteIdx]
+				slog.Debug(
+					"apu.ch3 retrigger smear",
+					"mode", "byte",
+					"nextIdx", nextIdx,
+					"nextByteIdx", nextByteIdx,
+					"copied", fmt.Sprintf("0x%02X", a.waveRAM[0]),
+					"prev", fmt.Sprintf("0x%02X", prev),
+					"readDelayed", waveCh.waveReadDelayed,
+					"freqTimer", periodCountdown,
+				)
+			} else {
+				base := nextByteIdx &^ 0x3
+				prev := append([]uint8(nil), a.waveRAM[0:4]...)
+				copy(a.waveRAM[0:4], a.waveRAM[base:base+4])
+				slog.Debug(
+					"apu.ch3 retrigger smear",
+					"mode", "block",
+					"nextIdx", nextIdx,
+					"nextByteIdx", nextByteIdx,
+					"base", base,
+					"copied", fmt.Sprintf("%#v", a.waveRAM[0:4]),
+					"prev", fmt.Sprintf("%#v", prev),
+					"readDelayed", waveCh.waveReadDelayed,
+					"freqTimer", periodCountdown,
+				)
+			}
+			waveCh.waveSample = a.waveRAM[0]
+		}
+		waveCh.freqTimer = a.wavePeriodCycles(waveCh) + 3
+		waveCh.waveIndex = 0
+		waveCh.waveReadable = false
 		// reset the bit, since it's write-only this effectively gets triggered only on a write from 0 to 1
 		a.NR34 = bit.Reset(7, a.NR34)
-		a.ch[2].trigger = false
+		waveCh.trigger = false
 	}
 	a.handleLengthEnableTransition(prevLenEnable, lengthBefore, triggered, 256, 2)
 
